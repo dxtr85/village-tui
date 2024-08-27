@@ -3,7 +3,6 @@ use async_std::task::sleep;
 use async_std::task::spawn;
 use dapp_lib::prelude::*;
 use std::collections::HashMap;
-// use std::borrow::Borrow;
 use std::env::args;
 use std::sync::mpsc::channel;
 // use std::fs;
@@ -14,14 +13,12 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
 
 fn manifest() -> ApplicationManifest {
-    let mut header: [u8;511]=[0;511];
-    let mut i = 0;
-    for byte in "Catalog".bytes(){
-        header[i]=byte;
-        i+=1;
+    let mut header: [u8; 495] = [0; 495];
+    for (i, byte) in "Catalog".bytes().enumerate() {
+        header[i] = byte;
     }
-    
-    ApplicationManifest::new(header,HashMap::new())
+
+    ApplicationManifest::new(header, HashMap::new())
 }
 
 #[async_std::main]
@@ -29,18 +26,20 @@ async fn main() {
     let mut app_data = Application::empty();
     let dir: String = args().nth(1).unwrap().parse().unwrap();
     let (key_send, key_recv) = channel();
-    spawn(serve_tui_mgr(key_send));
+
+    let mgr = instantiate_tui_mgr();
+    spawn(serve_tui_mgr(mgr, key_send));
     let (gmgr_send, gmgr_recv) = init(dir, app_data.root_hash());
     let mut next_val = 1;
     let man_resp_result = gmgr_recv.recv();
     let service_request;
     let (app_send, app_recv) = channel();
-    let mut swarm_id = SwarmID(0);
-    if let Ok(ManagerResponse::SwarmJoined(s_id, _s_name, service_req, service_resp)) =
+    // let mut swarm_id = SwarmID(0);
+    if let Ok(ManagerResponse::SwarmJoined(_s_id, _s_name, service_req, service_resp)) =
         man_resp_result
     {
         service_request = service_req;
-        swarm_id = s_id;
+        // swarm_id = s_id;
         spawn(serve_user_responses(
             Duration::from_millis(30),
             service_resp,
@@ -54,17 +53,94 @@ async fn main() {
         if let Ok(resp) = app_recv.try_recv() {
             match resp {
                 Response::Block(_id, data) => {
-                    let b_type = data.first_byte();
-                    println!("Received block type: {}", b_type);
-                    if b_type == 0 {
-                        let manifest = ApplicationManifest::from(data);
-                        app_data = Application::new(manifest);
-                        let hash = app_data.root_hash();
-                        println!("Sending updated hash: {}", hash);
-                        // let res = gmgr_send.send(ManagerRequest::UpdateAppRootHash(swarm_id, hash));
-                        let res = service_request.send(Request::UpdateAppRootHash(hash));
-                        println!("Send res: {:?}", res);
-                        // }else if b_type == 1{
+                    // println!("Processing data...");
+                    let process_result = app_data.process(data);
+                    if process_result.is_none() {
+                        continue;
+                    }
+                    // println!("Process response: {:?}", process_result);
+                    // println!("Process response");
+                    let SyncMessage {
+                        m_type,
+                        requirements,
+                        data,
+                    } = process_result.unwrap();
+
+                    // let b_type = data.first_byte();
+                    // println!("Received block type: {}", b_type);
+                    match m_type {
+                        SyncMessageType::SetManifest => {
+                            let old_manifest = app_data.get_all_data(0);
+                            if !requirements.pre_validate(&app_data) {
+                                println!("PRE validation failed");
+                            } else {
+                                let content = Content::Data(0, ContentTree::Filled(data));
+                                let _ = app_data.update(0, content);
+                                if !requirements.post_validate(&app_data) {
+                                    println!("POST validation failed");
+                                    if let Ok(data_vec) = old_manifest {
+                                        let c_tree = ContentTree::from(data_vec);
+                                        let old_content = Content::Data(0, c_tree);
+                                        let res = app_data.update(0, old_content);
+                                        println!("Restored old manifest {:?}", res.is_ok());
+                                    } else {
+                                        let content = Content::Data(0, ContentTree::Empty(0));
+                                        let _ = app_data.update(0, content);
+                                        println!("Zeroed manifest");
+                                    }
+                                }
+                                let hash = app_data.root_hash();
+                                println!("Sending updated hash: {}", hash);
+                                let res = service_request.send(Request::UpdateAppRootHash(hash));
+                                println!("Send res: {:?}", res);
+                            }
+                        }
+                        SyncMessageType::AddContent => {
+                            if !requirements.pre_validate(&app_data) {
+                                println!("PRE validation failed for AddContent");
+                            } else if let Some(next_id) = app_data.next_c_id() {
+                                if requirements.post.len() != 1 {
+                                    println!("POST validation failed for AddContent");
+                                    continue;
+                                }
+                                let content = Content::from(data).unwrap();
+                                let (recv_id, recv_hash) = requirements.post[0];
+                                if recv_id == next_id && recv_hash == content.hash() {
+                                    let res = app_data.append(content);
+                                    println!("Content added: {:?}", res);
+                                } else {
+                                    println!("POST validation failed for AddContent");
+                                }
+                            }
+                        }
+                        SyncMessageType::ChangeContent => {
+                            //TODO
+                            println!("SyncMessageType::ChangeContent ");
+                        }
+                        SyncMessageType::AppendData => {
+                            //TODO
+                            println!("SyncMessageType::AppendData ");
+                        }
+                        SyncMessageType::RemoveData => {
+                            //TODO
+                            println!("SyncMessageType::RemoveData ");
+                        }
+                        SyncMessageType::UpdateData => {
+                            //TODO
+                            println!("SyncMessageType::UpdateData ");
+                        }
+                        SyncMessageType::InsertData => {
+                            //TODO
+                            println!("SyncMessageType::InsertData ");
+                        }
+                        SyncMessageType::ExtendData => {
+                            //TODO
+                            println!("SyncMessageType::ExtendData ");
+                        }
+                        SyncMessageType::UserDefined(_value) => {
+                            //TODO
+                            println!("SyncMessageType::UserDefined({})", _value);
+                        }
                     }
                 }
                 Response::AppDataSynced(is_synced) => {
@@ -107,7 +183,7 @@ async fn main() {
                 }
                 Response::AppSyncInquiry(gnome_id, sync_type, _data) => {
                     println!("Got AppSync inquiry");
-                    let hashes = app_data.datastore_bottom_hashes();
+                    let hashes = app_data.all_content_root_hashes();
                     let mut byte_hashes = vec![];
                     for hash in hashes.iter() {
                         for byte in hash.to_be_bytes() {
@@ -167,16 +243,54 @@ async fn main() {
                     let _ = service_request.send(Request::StartBroadcast);
                 }
                 Key::M => {
-                    let _ = service_request
-                        .send(Request::AddData(manifest().to_data(Some(0))));
+                    let mut prebytes = vec![0];
+                    if let Ok(hash) = app_data.content_root_hash(0) {
+                        for byte in hash.to_be_bytes() {
+                            prebytes.push(byte);
+                        }
+                    } else {
+                        for _i in 0..8 {
+                            prebytes.push(0);
+                        }
+                    };
+                    // println!("Prebytes: {:?}", prebytes);
+                    let mani = manifest();
+                    let pre: Vec<(ContentID, u64)> = vec![(0, 0)];
+                    let post: Vec<(ContentID, u64)> = vec![(0, mani.hash())];
+                    let reqs = SyncRequirements { pre, post };
+                    let msg =
+                        SyncMessage::new(SyncMessageType::SetManifest, reqs, mani.to_data(None));
+                    let parts = msg.into_parts();
+                    // println!(
+                    //     "to_data len: {}, hash: {:?}",
+                    //     mani.to_data(None).len(),
+                    //     mani.to_data(None).hash().to_be_bytes()
+                    // );
+                    // let manifest_hash = mani.hash();
+                    // prebytes.append(&mut Vec::from(manifest_hash.to_be_bytes()));
+                    // println!("Prebytes: {:?}", prebytes);
+
+                    for part in parts {
+                        let _ = service_request.send(Request::AddData(part));
+                    }
                 }
                 Key::N => {
                     let _ = service_request.send(Request::ListNeighbors);
                 }
                 Key::S => {
-                    let _ =
-                        service_request.send(Request::AddData(Data::new(vec![next_val]).unwrap()));
-                    next_val += 1;
+                    if let Some(next_id) = app_data.next_c_id() {
+                        let pre: Vec<(ContentID, u64)> = vec![(next_id, 0)];
+                        let data = Data::new(vec![next_val]).unwrap();
+                        let post: Vec<(ContentID, u64)> = vec![(next_id, data.hash())];
+                        let data = Data::new(vec![0, next_val]).unwrap();
+                        let reqs = SyncRequirements { pre, post };
+                        let msg = SyncMessage::new(SyncMessageType::AddContent, reqs, data);
+                        let parts = msg.into_parts();
+                        for part in parts {
+                            let _ = service_request.send(Request::AddData(part));
+                        }
+                        next_val += 1;
+                    }
                 }
                 Key::ShiftS => {
                     let data = vec![next_val; 1024];
@@ -258,14 +372,16 @@ async fn serve_unicast(c_id: CastID, sleep_time: Duration, user_res: Receiver<Da
         sleep(sleep_time).await;
     }
 }
-async fn serve_tui_mgr(to_app: Sender<Key>) {
-    println!("Serving TUI Manager");
+fn instantiate_tui_mgr() -> Manager {
     let capture_keyboard = true;
     let cols = Some(40);
     let rows = None; // use all rows available
     let glyph = Some(Glyph::default());
     let refresh_timeout = Some(Duration::from_millis(10));
-    let mut mgr = Manager::new(capture_keyboard, cols, rows, glyph, refresh_timeout);
+    Manager::new(capture_keyboard, cols, rows, glyph, refresh_timeout)
+}
+async fn serve_tui_mgr(mut mgr: Manager, to_app: Sender<Key>) {
+    println!("Serving TUI Manager");
     loop {
         let recv_res = mgr.read_key();
         if let Some(key) = recv_res {
