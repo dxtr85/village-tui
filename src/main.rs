@@ -75,7 +75,13 @@ async fn main() {
                                 println!("PRE validation failed");
                             } else {
                                 let content = Content::Data(0, ContentTree::Filled(data));
-                                let _ = app_data.update(0, content);
+                                let next_id = app_data.next_c_id().unwrap();
+                                let res = if next_id == 0 {
+                                    app_data.append(content).is_ok()
+                                } else {
+                                    app_data.update(0, content).is_ok()
+                                };
+                                println!("Manifest result: {:?}", res);
                                 if !requirements.post_validate(&app_data) {
                                     println!("POST validation failed");
                                     if let Ok(data_vec) = old_manifest {
@@ -96,6 +102,10 @@ async fn main() {
                             }
                         }
                         SyncMessageType::AddContent => {
+                            // TODO: potentially for AddContent & ChangeContent
+                            // post requirements could be empty
+                            // pre requirements can not be empty since we need
+                            // ContentID
                             if !requirements.pre_validate(&app_data) {
                                 println!("PRE validation failed for AddContent");
                             } else if let Some(next_id) = app_data.next_c_id() {
@@ -116,6 +126,27 @@ async fn main() {
                         SyncMessageType::ChangeContent => {
                             //TODO
                             println!("SyncMessageType::ChangeContent ");
+                            if !requirements.pre_validate(&app_data) {
+                                println!("PRE validation failed for ChangeContent");
+                                continue;
+                            }
+                            let (pre_recv_id, _hash) = requirements.pre[0];
+                            let (post_recv_id, recv_hash) = requirements.post[0];
+                            if pre_recv_id != post_recv_id {
+                                println!("POST validation failed for ChangeContent 1");
+                                continue;
+                            }
+                            if requirements.post.len() != 1 {
+                                println!("POST validation failed for ChangeContent 2");
+                                continue;
+                            }
+                            let content = Content::from(data).unwrap();
+                            if recv_hash == content.hash() {
+                                let res = app_data.update(post_recv_id, content);
+                                println!("Content changed: {:?}", res);
+                            } else {
+                                println!("POST validation failed for ChangeContent");
+                            }
                         }
                         SyncMessageType::AppendData => {
                             //TODO
@@ -276,6 +307,23 @@ async fn main() {
                 }
                 Key::N => {
                     let _ = service_request.send(Request::ListNeighbors);
+                }
+                Key::C => {
+                    let pre_hash_result = app_data.content_root_hash(1);
+                    println!("About to change content {:?}", pre_hash_result);
+                    let pre_hash = pre_hash_result.unwrap();
+                    let pre: Vec<(ContentID, u64)> = vec![(1, pre_hash)];
+                    let data = Data::new(vec![next_val]).unwrap();
+                    let post: Vec<(ContentID, u64)> = vec![(1, data.hash())];
+                    // We prepend 0 to indicate it is not a Link
+                    let data = Data::new(vec![0, next_val]).unwrap();
+                    let reqs = SyncRequirements { pre, post };
+                    let msg = SyncMessage::new(SyncMessageType::ChangeContent, reqs, data);
+                    let parts = msg.into_parts();
+                    for part in parts {
+                        let _ = service_request.send(Request::AddData(part));
+                    }
+                    next_val += 1;
                 }
                 Key::S => {
                     if let Some(next_id) = app_data.next_c_id() {
