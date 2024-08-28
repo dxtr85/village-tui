@@ -67,11 +67,11 @@ async fn main() {
                     } = process_result.unwrap();
 
                     // let b_type = data.first_byte();
-                    // println!("Received block type: {}", b_type);
+                    println!("Received m_type: {:?}", m_type);
                     match m_type {
                         SyncMessageType::SetManifest => {
                             let old_manifest = app_data.get_all_data(0);
-                            if !requirements.pre_validate(&app_data) {
+                            if !requirements.pre_validate(0, &app_data) {
                                 println!("PRE validation failed");
                             } else {
                                 let content = Content::Data(0, ContentTree::Filled(data));
@@ -82,7 +82,7 @@ async fn main() {
                                     app_data.update(0, content).is_ok()
                                 };
                                 println!("Manifest result: {:?}", res);
-                                if !requirements.post_validate(&app_data) {
+                                if !requirements.post_validate(0, &app_data) {
                                     println!("POST validation failed");
                                     if let Ok(data_vec) = old_manifest {
                                         let c_tree = ContentTree::from(data_vec);
@@ -106,7 +106,8 @@ async fn main() {
                             // post requirements could be empty
                             // pre requirements can not be empty since we need
                             // ContentID
-                            if !requirements.pre_validate(&app_data) {
+                            let c_id = app_data.next_c_id().unwrap();
+                            if !requirements.pre_validate(c_id, &app_data) {
                                 println!("PRE validation failed for AddContent");
                             } else if let Some(next_id) = app_data.next_c_id() {
                                 if requirements.post.len() != 1 {
@@ -123,48 +124,130 @@ async fn main() {
                                 }
                             }
                         }
-                        SyncMessageType::ChangeContent => {
-                            //TODO
-                            println!("SyncMessageType::ChangeContent ");
-                            if !requirements.pre_validate(&app_data) {
+                        SyncMessageType::ChangeContent(c_id) => {
+                            println!("ChangeContent");
+                            if !requirements.pre_validate(c_id, &app_data) {
                                 println!("PRE validation failed for ChangeContent");
                                 continue;
                             }
-                            let (pre_recv_id, _hash) = requirements.pre[0];
-                            let (post_recv_id, recv_hash) = requirements.post[0];
-                            if pre_recv_id != post_recv_id {
-                                println!("POST validation failed for ChangeContent 1");
-                                continue;
-                            }
-                            if requirements.post.len() != 1 {
-                                println!("POST validation failed for ChangeContent 2");
-                                continue;
-                            }
+                            // let (pre_recv_id, _hash) = requirements.pre[0];
+                            // let (post_recv_id, recv_hash) = requirements.post[0];
+                            // if pre_recv_id != post_recv_id {
+                            //     println!("POST validation failed for ChangeContent 1");
+                            //     continue;
+                            // }
+                            // if requirements.post.len() != 1 {
+                            //     println!("POST validation failed for ChangeContent 2");
+                            //     continue;
+                            // }
                             let content = Content::from(data).unwrap();
-                            if recv_hash == content.hash() {
-                                let res = app_data.update(post_recv_id, content);
-                                println!("Content changed: {:?}", res);
+                            let res = app_data.update(c_id, content);
+                            if let Ok(old_content) = res {
+                                if !requirements.post_validate(c_id, &app_data) {
+                                    let restore_res = app_data.update(c_id, old_content);
+                                    println!("POST validation failed on ChangeContent");
+                                    println!("Restore result: {:?}", restore_res);
+                                } else {
+                                    println!("ChangeContent completed successfully");
+                                }
                             } else {
-                                println!("POST validation failed for ChangeContent");
+                                println!("Update procedure failed: {:?}", res);
                             }
+                            // if recv_hash == content.hash() {
+                            //     println!("Content changed: {:?}", res);
+                            // } else {
+                            //     println!("POST validation failed for ChangeContent");
+                            // }
                         }
-                        SyncMessageType::AppendData => {
+                        SyncMessageType::AppendData(c_id) => {
                             //TODO
                             println!("SyncMessageType::AppendData ");
+                            if !requirements.pre_validate(c_id, &app_data) {
+                                println!("PRE validation failed for AppendData");
+                                continue;
+                            }
+                            // let (pre_recv_id, _hash) = requirements.pre[0];
+                            // let (post_recv_id, _recv_hash) = requirements.post[0];
+                            // if pre_recv_id != post_recv_id {
+                            //     println!("POST validation failed for ChangeContent 1");
+                            //     continue;
+                            // }
+                            // TODO
+                            let res = app_data.append_data(c_id, data);
+                            if res.is_ok() {
+                                if !requirements.post_validate(c_id, &app_data) {
+                                    println!("POST validation failed for AppendData");
+                                    // TODO: restore previous order
+                                    let res = app_data.pop_data(c_id);
+                                    println!("Restore result: {:?}", res);
+                                } else {
+                                    println!("Data appended successfully");
+                                }
+                            }
                         }
-                        SyncMessageType::RemoveData => {
+                        SyncMessageType::RemoveData(c_id, d_id) => {
                             //TODO
                             println!("SyncMessageType::RemoveData ");
+                            if !requirements.pre_validate(c_id, &app_data) {
+                                println!("PRE validation failed for RemoveData");
+                                continue;
+                            }
+                            // let (pre_recv_id, _hash) = requirements.pre[0];
+                            // let (post_recv_id, _recv_hash) = requirements.post[0];
+                            // if pre_recv_id != post_recv_id {
+                            //     println!("POST validation failed for RemoveData 1");
+                            //     continue;
+                            // }
+                            // TODO
+                            // let mut bytes = data.bytes();
+                            // let data_idx =
+                            //     u16::from_be_bytes([data.first_byte(), data.second_byte()]);
+                            let res = app_data.remove_data(c_id, d_id);
+                            if let Ok(removed_data) = res {
+                                if !requirements.post_validate(c_id, &app_data) {
+                                    println!("POST validation failed for RemoveData");
+                                    // TODO: restore previous order
+                                    let res = app_data.insert_data(c_id, d_id, removed_data, false);
+                                    println!("Restore result: {:?}", res);
+                                } else {
+                                    println!("Data appended successfully");
+                                }
+                            }
                         }
-                        SyncMessageType::UpdateData => {
+                        SyncMessageType::UpdateData(c_id, d_id) => {
                             //TODO
                             println!("SyncMessageType::UpdateData ");
+                            if !requirements.pre_validate(c_id, &app_data) {
+                                println!("PRE validation failed for UpdateData");
+                                continue;
+                            }
+                            // let (pre_recv_id, _hash) = requirements.pre[0];
+                            // let (post_recv_id, _recv_hash) = requirements.post[0];
+                            // if pre_recv_id != post_recv_id {
+                            //     println!("POST validation failed for UpdateData 1");
+                            //     continue;
+                            // }
+                            // TODO
+                            // let mut bytes = data.bytes();
+                            // let data_idx =
+                            //     u16::from_be_bytes([data.first_byte(), data.second_byte()]);
+                            let res = app_data.remove_data(c_id, d_id);
+                            if let Ok(removed_data) = res {
+                                if !requirements.post_validate(c_id, &app_data) {
+                                    println!("POST validation failed for RemoveData");
+                                    // TODO: restore previous order
+                                    let res = app_data.insert_data(c_id, d_id, removed_data, false);
+                                    println!("Restore result: {:?}", res);
+                                } else {
+                                    println!("Data appended successfully");
+                                }
+                            }
                         }
-                        SyncMessageType::InsertData => {
+                        SyncMessageType::InsertData(c_id, d_id) => {
                             //TODO
                             println!("SyncMessageType::InsertData ");
                         }
-                        SyncMessageType::ExtendData => {
+                        SyncMessageType::ExtendData(c_id, d_id) => {
                             //TODO
                             println!("SyncMessageType::ExtendData ");
                         }
@@ -309,16 +392,17 @@ async fn main() {
                     let _ = service_request.send(Request::ListNeighbors);
                 }
                 Key::C => {
-                    let pre_hash_result = app_data.content_root_hash(1);
-                    println!("About to change content {:?}", pre_hash_result);
+                    let c_id: u16 = 1;
+                    let pre_hash_result = app_data.content_root_hash(c_id);
+                    // println!("About to change content {:?}", pre_hash_result);
                     let pre_hash = pre_hash_result.unwrap();
-                    let pre: Vec<(ContentID, u64)> = vec![(1, pre_hash)];
+                    let pre: Vec<(ContentID, u64)> = vec![(c_id, pre_hash)];
                     let data = Data::new(vec![next_val]).unwrap();
-                    let post: Vec<(ContentID, u64)> = vec![(1, data.hash())];
+                    let post: Vec<(ContentID, u64)> = vec![(c_id, data.hash())];
                     // We prepend 0 to indicate it is not a Link
                     let data = Data::new(vec![0, next_val]).unwrap();
                     let reqs = SyncRequirements { pre, post };
-                    let msg = SyncMessage::new(SyncMessageType::ChangeContent, reqs, data);
+                    let msg = SyncMessage::new(SyncMessageType::ChangeContent(c_id), reqs, data);
                     let parts = msg.into_parts();
                     for part in parts {
                         let _ = service_request.send(Request::AddData(part));
