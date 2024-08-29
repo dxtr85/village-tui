@@ -99,6 +99,7 @@ async fn main() {
                                 println!("Sending updated hash: {}", hash);
                                 let res = service_request.send(Request::UpdateAppRootHash(hash));
                                 println!("Send res: {:?}", res);
+                                // println!("Root hash: {}", app_data.root_hash());
                             }
                         }
                         SyncMessageType::AddContent => {
@@ -122,6 +123,7 @@ async fn main() {
                                 } else {
                                     println!("POST validation failed for AddContent");
                                 }
+                                // println!("Root hash: {}", app_data.root_hash());
                             }
                         }
                         SyncMessageType::ChangeContent(c_id) => {
@@ -148,7 +150,10 @@ async fn main() {
                                     println!("POST validation failed on ChangeContent");
                                     println!("Restore result: {:?}", restore_res);
                                 } else {
-                                    println!("ChangeContent completed successfully");
+                                    println!(
+                                        "ChangeContent completed successfully ({})",
+                                        app_data.root_hash()
+                                    );
                                 }
                             } else {
                                 println!("Update procedure failed: {:?}", res);
@@ -181,7 +186,10 @@ async fn main() {
                                     let res = app_data.pop_data(c_id);
                                     println!("Restore result: {:?}", res);
                                 } else {
-                                    println!("Data appended successfully");
+                                    println!(
+                                        "Data appended successfully ({})",
+                                        app_data.root_hash()
+                                    );
                                 }
                             }
                         }
@@ -207,10 +215,13 @@ async fn main() {
                                 if !requirements.post_validate(c_id, &app_data) {
                                     println!("POST validation failed for RemoveData");
                                     // TODO: restore previous order
-                                    let res = app_data.insert_data(c_id, d_id, removed_data, false);
+                                    let res = app_data.insert_data(c_id, d_id, removed_data);
                                     println!("Restore result: {:?}", res);
                                 } else {
-                                    println!("Data appended successfully");
+                                    println!(
+                                        "Data appended successfully ({})",
+                                        app_data.root_hash()
+                                    );
                                 }
                             }
                         }
@@ -236,10 +247,13 @@ async fn main() {
                                 if !requirements.post_validate(c_id, &app_data) {
                                     println!("POST validation failed for RemoveData");
                                     // TODO: restore previous order
-                                    let res = app_data.insert_data(c_id, d_id, removed_data, false);
+                                    let res = app_data.insert_data(c_id, d_id, removed_data);
                                     println!("Restore result: {:?}", res);
                                 } else {
-                                    println!("Data appended successfully");
+                                    println!(
+                                        "Data appended successfully ({})",
+                                        app_data.root_hash()
+                                    );
                                 }
                             }
                         }
@@ -265,7 +279,14 @@ async fn main() {
                     );
                 }
                 Response::AppSync(sync_type, c_id, part_no, total, data) => {
-                    println!("Got AppSync response {}", sync_type);
+                    println!(
+                        "Got AppSync response {} for {} [{}/{}]:\n{:?}",
+                        sync_type,
+                        c_id,
+                        part_no,
+                        total,
+                        data.len()
+                    );
 
                     match sync_type {
                         0 => {
@@ -395,19 +416,22 @@ async fn main() {
                     let c_id: u16 = 1;
                     let pre_hash_result = app_data.content_root_hash(c_id);
                     // println!("About to change content {:?}", pre_hash_result);
-                    let pre_hash = pre_hash_result.unwrap();
-                    let pre: Vec<(ContentID, u64)> = vec![(c_id, pre_hash)];
-                    let data = Data::new(vec![next_val]).unwrap();
-                    let post: Vec<(ContentID, u64)> = vec![(c_id, data.hash())];
-                    // We prepend 0 to indicate it is not a Link
-                    let data = Data::new(vec![0, next_val]).unwrap();
-                    let reqs = SyncRequirements { pre, post };
-                    let msg = SyncMessage::new(SyncMessageType::ChangeContent(c_id), reqs, data);
-                    let parts = msg.into_parts();
-                    for part in parts {
-                        let _ = service_request.send(Request::AddData(part));
+                    if let Ok(pre_hash) = pre_hash_result {
+                        // let pre_hash = pre_hash_result.unwrap();
+                        let pre: Vec<(ContentID, u64)> = vec![(c_id, pre_hash)];
+                        let data = Data::new(vec![next_val]).unwrap();
+                        let post: Vec<(ContentID, u64)> = vec![(c_id, data.hash())];
+                        // We prepend 0 to indicate it is not a Link
+                        let data = Data::new(vec![0, next_val]).unwrap();
+                        let reqs = SyncRequirements { pre, post };
+                        let msg =
+                            SyncMessage::new(SyncMessageType::ChangeContent(c_id), reqs, data);
+                        let parts = msg.into_parts();
+                        for part in parts {
+                            let _ = service_request.send(Request::AddData(part));
+                        }
+                        next_val += 1;
                     }
-                    next_val += 1;
                 }
                 Key::S => {
                     if let Some(next_id) = app_data.next_c_id() {
