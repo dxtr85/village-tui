@@ -319,25 +319,26 @@ async fn main() {
                 Response::AppSyncInquiry(gnome_id, sync_type, _data) => {
                     println!("Got AppSync inquiry");
                     let hashes = app_data.all_content_root_hashes();
-                    let mut byte_hashes = vec![];
-                    for hash in hashes.iter() {
-                        for byte in hash.to_be_bytes() {
-                            byte_hashes.push(byte);
-                        }
-                    }
                     let c_id = 0;
-                    let part_no = 0;
-                    let total = 0;
-                    let _ = service_request.send(Request::SendData(
-                        gnome_id,
-                        NeighborResponse::AppSync(
-                            sync_type,
-                            c_id,
-                            part_no,
-                            total,
-                            Data::new(byte_hashes).unwrap(),
-                        ),
-                    ));
+                    let total = hashes.len() as u16 - 1;
+                    for (part_no, group) in hashes.into_iter().enumerate() {
+                        let mut byte_hashes = vec![];
+                        for hash in group.iter() {
+                            for byte in hash.to_be_bytes() {
+                                byte_hashes.push(byte);
+                            }
+                        }
+                        let _ = service_request.send(Request::SendData(
+                            gnome_id,
+                            NeighborResponse::AppSync(
+                                sync_type,
+                                c_id,
+                                part_no as u16,
+                                total,
+                                Data::new(byte_hashes).unwrap(),
+                            ),
+                        ));
+                    }
                     println!("Sent Datastore response");
 
                     if let Ok(data_vec) = app_data.get_all_data(0) {
@@ -534,18 +535,23 @@ fn instantiate_tui_mgr() -> Manager {
     let rows = None; // use all rows available
     let glyph = Some(Glyph::default());
     let refresh_timeout = Some(Duration::from_millis(10));
-    Manager::new(capture_keyboard, cols, rows, glyph, refresh_timeout)
+    Manager::new(
+        capture_keyboard,
+        cols,
+        rows,
+        glyph,
+        refresh_timeout,
+        Some(vec![(Key::AltM, MacroSequence::empty())]),
+    )
 }
 async fn serve_tui_mgr(mut mgr: Manager, to_app: Sender<Key>) {
     println!("Serving TUI Manager");
     loop {
-        let recv_res = mgr.read_key();
-        if let Some(key) = recv_res {
-            let terminate = key == Key::Q || key == Key::ShiftQ;
-            let res = to_app.send(key);
-            if res.is_err() || terminate {
-                break;
-            }
+        let key = mgr.read_key();
+        let terminate = key == Key::Q || key == Key::ShiftQ;
+        let res = to_app.send(key);
+        if res.is_err() || terminate {
+            break;
         }
     }
     mgr.terminate();
