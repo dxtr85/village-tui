@@ -39,9 +39,9 @@ dependencies = [
 
 [[package]]
 name = "animaterm"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57a52c80cc6c1a9dda53da05202ff0e77e625dfc8e907236649b4ca74be43490"
+checksum = "f5c0334b870e48712a283d0428f9225995b4188089dbf7bb6da8e158c4b1684a"
 dependencies = [
  "termios",
 ]
