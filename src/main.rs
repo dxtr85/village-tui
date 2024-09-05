@@ -36,7 +36,7 @@ impl BigChunk {
 #[async_std::main]
 async fn main() {
     let mut app_data = Application::empty();
-    let mut b_cast_origin: Option<(CastID, Sender<Data>)> = None;
+    let mut b_cast_origin: Option<(CastID, Sender<CastData>)> = None;
     let mut b_req_sent = false;
     let dir: String = args().nth(1).unwrap().parse().unwrap();
     let (key_send, key_recv) = channel();
@@ -326,7 +326,10 @@ async fn main() {
                             println!("Content {} add part {} of {}", c_id, part_no, total);
                             if c_id == 0 {
                                 println!("App manifest to add");
-                                let content = Content::Data(0, ContentTree::Filled(data));
+                                let content = Content::Data(
+                                    0,
+                                    ContentTree::Filled(Data::new(data.bytes()).unwrap()),
+                                );
                                 let res = app_data.update(0, content);
                                 println!("App manifest add result: {:?}", res);
                             }
@@ -355,7 +358,7 @@ async fn main() {
                                 c_id,
                                 part_no as u16,
                                 total,
-                                Data::new(byte_hashes).unwrap(),
+                                SyncData::new(byte_hashes).unwrap(),
                             ),
                         ));
                     }
@@ -371,7 +374,7 @@ async fn main() {
                                     0,
                                     part_no as u16,
                                     total as u16 - 1,
-                                    data,
+                                    data.to_sync(),
                                 ),
                             ));
                         }
@@ -416,7 +419,8 @@ async fn main() {
                         while let Some(small_chunk) = big_chunk.next() {
                             // 4. Compute hash for each small-chunk
                             hashes.push(small_chunk.hash());
-                            data_vec.push(small_chunk);
+                            // TODO: build proper CastData from Data
+                            data_vec.push(small_chunk.to_cast());
                         }
                         println!("// 5. Compute root hash from previous hashes.");
                         let root_hash = get_root_hash(&hashes);
@@ -462,7 +466,7 @@ async fn main() {
                                     outgoing_bytes.push(byte)
                                 }
                             }
-                            hash_bytes.push(Data::new(outgoing_bytes).unwrap());
+                            hash_bytes.push(CastData::new(outgoing_bytes).unwrap());
                         }
                         spawn(serve_broadcast_origin(
                             broadcast_id,
@@ -574,7 +578,7 @@ async fn main() {
                 Key::ShiftS => {
                     let data = vec![next_val; 1024];
 
-                    let _ = service_request.send(Request::AddData(Data::new(data).unwrap()));
+                    let _ = service_request.send(Request::AddData(SyncData::new(data).unwrap()));
                     next_val += 1;
                 }
                 Key::ShiftU => {
@@ -642,7 +646,7 @@ async fn serve_user_responses(
         sleep(sleep_time).await;
     }
 }
-async fn serve_unicast(c_id: CastID, sleep_time: Duration, user_res: Receiver<Data>) {
+async fn serve_unicast(c_id: CastID, sleep_time: Duration, user_res: Receiver<CastData>) {
     println!("Serving unicast {:?}", c_id);
     loop {
         let recv_res = user_res.try_recv();
@@ -679,7 +683,7 @@ async fn serve_tui_mgr(mut mgr: Manager, to_app: Sender<Key>) {
     }
     mgr.terminate();
 }
-async fn serve_broadcast(c_id: CastID, sleep_time: Duration, user_res: Receiver<Data>) {
+async fn serve_broadcast(c_id: CastID, sleep_time: Duration, user_res: Receiver<CastData>) {
     println!("Serving broadcast {:?}", c_id);
     loop {
         let recv_res = user_res.try_recv();
@@ -689,11 +693,11 @@ async fn serve_broadcast(c_id: CastID, sleep_time: Duration, user_res: Receiver<
         sleep(sleep_time).await;
     }
 }
-async fn serve_unicast_origin(c_id: CastID, sleep_time: Duration, user_res: Sender<Data>) {
+async fn serve_unicast_origin(c_id: CastID, sleep_time: Duration, user_res: Sender<CastData>) {
     println!("Originating unicast {:?}", c_id);
     let mut i: u8 = 0;
     loop {
-        let send_res = user_res.send(Data::new(vec![i]).unwrap());
+        let send_res = user_res.send(CastData::new(vec![i]).unwrap());
         if send_res.is_ok() {
             println!("Unicasted {}", i);
         } else {
@@ -710,8 +714,8 @@ async fn serve_unicast_origin(c_id: CastID, sleep_time: Duration, user_res: Send
 async fn serve_broadcast_origin(
     c_id: CastID,
     sleep_time: Duration,
-    user_res: Sender<Data>,
-    data_vec: Vec<Data>,
+    user_res: Sender<CastData>,
+    data_vec: Vec<CastData>,
     done: Sender<()>,
 ) {
     println!("Originating broadcast {:?}", c_id);
