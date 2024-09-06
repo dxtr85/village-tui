@@ -3,6 +3,7 @@ use async_std::task::sleep;
 use async_std::task::spawn;
 use dapp_lib::prelude::*;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::env::args;
 use std::sync::mpsc::channel;
 // use std::fs;
@@ -33,6 +34,97 @@ impl BigChunk {
         Some(data)
     }
 }
+
+#[derive(Debug)]
+struct AppMessage {
+    pub is_hash: bool,
+    pub content_id: ContentID,
+    pub part_no: u16,
+    pub total_parts: u16,
+    pub data: Data,
+}
+impl AppMessage {
+    pub fn new(
+        content_id: ContentID,
+        is_hash: bool,
+        part_no: u16,
+        total_parts: u16,
+        data: Data,
+    ) -> Self {
+        AppMessage {
+            is_hash,
+            content_id,
+            part_no,
+            total_parts,
+            data,
+        }
+    }
+    pub fn to_sync(self) -> SyncData {
+        SyncData::new(self.bytes(0)).unwrap()
+    }
+    pub fn to_cast(self) -> CastData {
+        CastData::new(self.bytes(0)).unwrap()
+    }
+    fn bytes(self, header_byte: u8) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(7 + self.data.len());
+        bytes.push(header_byte);
+        if self.is_hash {
+            bytes.push(255);
+        } else {
+            bytes.push(0);
+        }
+        for byte in self.content_id.to_be_bytes() {
+            bytes.push(byte);
+        }
+        for byte in self.part_no.to_be_bytes() {
+            bytes.push(byte);
+        }
+        for byte in self.total_parts.to_be_bytes() {
+            bytes.push(byte);
+        }
+        bytes.append(&mut self.data.bytes());
+        bytes
+    }
+}
+
+fn parse_cast(cast_data: CastData) -> Result<AppMessage, Data> {
+    // println!("Parse cast: {:?}", cast_data);
+    let mut bytes_iter = cast_data.bytes().into_iter();
+    match bytes_iter.next().unwrap() {
+        0 => {
+            let is_hash = match bytes_iter.next() {
+                Some(0) => false,
+                Some(255) => true,
+                _other => return Err(Data::empty()),
+            };
+            let b1 = bytes_iter.next().unwrap();
+            let b2 = bytes_iter.next().unwrap();
+            let content_id: ContentID = u16::from_be_bytes([b1, b2]);
+            // println!("Decoded content ID: {}", content_id);
+            let b1 = bytes_iter.next().unwrap();
+            let b2 = bytes_iter.next().unwrap();
+            let part_no: u16 = u16::from_be_bytes([b1, b2]);
+            let b1 = bytes_iter.next().unwrap();
+            let b2 = bytes_iter.next().unwrap();
+            let total_parts: u16 = u16::from_be_bytes([b1, b2]);
+            let data: Data = Data::new(bytes_iter.collect()).unwrap();
+            Ok(AppMessage::new(
+                content_id,
+                is_hash,
+                part_no,
+                total_parts,
+                data,
+            ))
+        }
+        1 => Err(Data::new(bytes_iter.collect()).unwrap()),
+        _ => {
+            panic!("TODO parse cast");
+        }
+    }
+}
+
+// fn parse_sync(sync_data: SyncData) -> AppMessage {}
+
 #[async_std::main]
 async fn main() {
     let mut app_data = Application::empty();
@@ -62,6 +154,12 @@ async fn main() {
     } else {
         return;
     }
+
+    // TODO: separate user input and app loop - there will be multiple
+    // swarms running under single app - those should be served separately
+    // each in it's own loop
+    // User's input will be also served through that loop, wrapped in
+    // Response::FromUser or something similar that will contain all necessary data
 
     loop {
         if let Ok(resp) = app_recv.try_recv() {
@@ -382,6 +480,28 @@ async fn main() {
                     }
                 }
                 Response::BroadcastOrigin(_s_id, c_id, send) => b_cast_origin = Some((c_id, send)),
+                Response::BCastData(c_id, c_data) => {
+                    // TODO: serve this
+                    let a_msg_res = parse_cast(c_data);
+                    if let Ok(a_msg) = a_msg_res {
+                        let upd_res = app_data.update_transformative_link(
+                            a_msg.is_hash,
+                            a_msg.content_id,
+                            a_msg.part_no,
+                            a_msg.total_parts,
+                            a_msg.data,
+                        );
+                        if let Ok(missing) = upd_res {
+                            println!("Missing hashes: {:?}", missing);
+                            //TODO: request hashes if missing not empty
+                        } else {
+                            println!("Unable to update: {:?}", upd_res);
+                        }
+                    } else {
+                        let data = a_msg_res.err().unwrap();
+                        println!("App Data: {} ", data);
+                    }
+                }
                 _ => {
                     println!("Unserved by app: {:?}", resp);
                 }
@@ -406,12 +526,12 @@ async fn main() {
                     // 2. Split data into 64MibiByte chunks
                     //
                     let d_type = 7;
-                    let size = 128;
-                    let big_chunks = vec![BigChunk(0, size)];
+                    let total_parts = 128;
+                    let big_chunks = vec![BigChunk(0, total_parts)];
                     // Then for each big-chunk:
                     for mut big_chunk in big_chunks.into_iter() {
                         let description = String::new();
-                        let missing_hashes = vec![];
+                        let missing_hashes = HashSet::new();
                         let data_hashes = vec![];
                         let mut data_vec = Vec::with_capacity(big_chunk.1 as usize);
                         let mut hashes = Vec::with_capacity(big_chunk.1 as usize);
@@ -420,7 +540,7 @@ async fn main() {
                             // 4. Compute hash for each small-chunk
                             hashes.push(small_chunk.hash());
                             // TODO: build proper CastData from Data
-                            data_vec.push(small_chunk.to_cast());
+                            data_vec.push(small_chunk);
                         }
                         println!("// 5. Compute root hash from previous hashes.");
                         let root_hash = get_root_hash(&hashes);
@@ -428,26 +548,27 @@ async fn main() {
                         let ti = TransformInfo {
                             d_type,
                             tags: vec![],
-                            size,
+                            size: 0,
                             root_hash,
                             broadcast_id,
                             description,
                             missing_hashes,
                             data_hashes,
+                            data: HashMap::new(),
                         };
                         //
                         println!("// 7. SyncMessage::Append as many Data::Link to Datastore as necessary");
-                        if let Some(next_id) = app_data.next_c_id() {
-                            let pre: Vec<(ContentID, u64)> = vec![(next_id, 0)];
+                        if let Some(content_id) = app_data.next_c_id() {
+                            println!("ContentID: {}", content_id);
+                            let pre: Vec<(ContentID, u64)> = vec![(content_id, 0)];
                             let link =
                                 Content::Link(GnomeId(u64::MAX), String::new(), u16::MAX, Some(ti));
                             let link_hash = link.hash();
                             println!("Link hash: {}", link_hash);
-                            let data = link.link_to_data().unwrap();
+                            let data = link.to_data().unwrap();
                             println!("Link data: {:?}", data);
                             println!("Data hash: {}", data.hash());
-                            // let post: Vec<(ContentID, u64)> = vec![(next_id, data.hash())];
-                            let post: Vec<(ContentID, u64)> = vec![(next_id, link_hash)];
+                            let post: Vec<(ContentID, u64)> = vec![(content_id, link_hash)];
                             let reqs = SyncRequirements { pre, post };
                             let msg = SyncMessage::new(SyncMessageType::AddContent, reqs, data);
                             let parts = msg.into_parts();
@@ -455,40 +576,59 @@ async fn main() {
                                 let _ = service_request.send(Request::AddData(part));
                             }
                             next_val += 1;
-                        }
-                        println!("// 8. For each Link Send computed Hashes via broadcast");
-                        let (done_send, done_recv) = channel();
-                        let mut hash_bytes = vec![];
-                        for chunk in hashes.chunks(128) {
-                            let mut outgoing_bytes = Vec::with_capacity(1024);
-                            for hash in chunk {
-                                for byte in u64::to_be_bytes(*hash) {
-                                    outgoing_bytes.push(byte)
+                            println!("// 8. For each Link Send computed Hashes via broadcast");
+                            let (done_send, done_recv) = channel();
+                            let mut hash_bytes = vec![];
+                            let chunks = hashes.chunks(128);
+                            let total = chunks.len() - 1;
+                            for (i, chunk) in chunks.enumerate() {
+                                let mut outgoing_bytes = Vec::with_capacity(1024);
+                                for hash in chunk {
+                                    for byte in u64::to_be_bytes(*hash) {
+                                        outgoing_bytes.push(byte)
+                                    }
                                 }
+                                hash_bytes.push(
+                                    AppMessage::new(
+                                        content_id,
+                                        true,
+                                        i as u16,
+                                        total as u16,
+                                        Data::new(outgoing_bytes).unwrap(),
+                                    )
+                                    .to_cast(),
+                                )
                             }
-                            hash_bytes.push(CastData::new(outgoing_bytes).unwrap());
-                        }
-                        spawn(serve_broadcast_origin(
-                            broadcast_id,
-                            Duration::from_millis(400),
-                            bcast_send.clone(),
-                            hash_bytes,
-                            done_send.clone(),
-                        ));
-                        let _done_res = done_recv.recv();
-                        println!("Hashes sent: {}", _done_res.is_ok());
-                        // TODO
-                        // 9. SyncMessage::Transform a Link into Data
+                            spawn(serve_broadcast_origin(
+                                broadcast_id,
+                                Duration::from_millis(400),
+                                bcast_send.clone(),
+                                hash_bytes,
+                                done_send.clone(),
+                            ));
+                            let _done_res = done_recv.recv();
+                            println!("Hashes sent: {}", _done_res.is_ok());
+                            // TODO
+                            // 9. SyncMessage::Transform a Link into Data
 
-                        //10. Send Data chunks via broadcast
-                        spawn(serve_broadcast_origin(
-                            broadcast_id,
-                            Duration::from_millis(200),
-                            bcast_send.clone(),
-                            data_vec,
-                            done_send.clone(),
-                        ));
-                        // let done_res = done_recv.recv();
+                            //10. Send Data chunks via broadcast
+                            let mut c_data_vec = Vec::with_capacity(data_vec.len());
+                            let total_parts = total_parts - 1;
+                            for (i, data) in data_vec.into_iter().enumerate() {
+                                c_data_vec.push(
+                                    AppMessage::new(content_id, false, i as u16, total_parts, data)
+                                        .to_cast(),
+                                )
+                            }
+                            spawn(serve_broadcast_origin(
+                                broadcast_id,
+                                Duration::from_millis(200),
+                                bcast_send.clone(),
+                                c_data_vec,
+                                done_send.clone(),
+                            ));
+                            // let done_res = done_recv.recv();
+                        }
                     }
                 }
                 Key::J => {
@@ -616,7 +756,12 @@ async fn serve_user_responses(
                     let _ = to_app.send(resp);
                 }
                 Response::Broadcast(_s_id, c_id, recv_d) => {
-                    spawn(serve_broadcast(c_id, Duration::from_millis(100), recv_d));
+                    spawn(serve_broadcast(
+                        c_id,
+                        Duration::from_millis(100),
+                        recv_d,
+                        to_app.clone(),
+                    ));
                 }
                 Response::Unicast(_s_id, c_id, recv_d) => {
                     spawn(serve_unicast(c_id, Duration::from_millis(100), recv_d));
@@ -635,6 +780,11 @@ async fn serve_user_responses(
                         Duration::from_millis(500),
                         send_d,
                     ));
+                }
+                Response::BCastData(c_id, _data) => {
+                    // TODO: convert it to local BCastMessage
+                    // and apply to app_data
+                    println!("Got data from {}", c_id.0);
                 }
                 _ => {
                     let _ = to_app.send(resp);
@@ -683,12 +833,18 @@ async fn serve_tui_mgr(mut mgr: Manager, to_app: Sender<Key>) {
     }
     mgr.terminate();
 }
-async fn serve_broadcast(c_id: CastID, sleep_time: Duration, user_res: Receiver<CastData>) {
+async fn serve_broadcast(
+    c_id: CastID,
+    sleep_time: Duration,
+    user_res: Receiver<CastData>,
+    to_app: Sender<Response>,
+) {
     println!("Serving broadcast {:?}", c_id);
     loop {
         let recv_res = user_res.try_recv();
         if let Ok(data) = recv_res {
-            println!("B{:?}: {}", c_id, data);
+            // println!("B{:?}: {}", c_id, data);
+            let _ = to_app.send(Response::BCastData(c_id, data));
         }
         sleep(sleep_time).await;
     }
@@ -719,6 +875,7 @@ async fn serve_broadcast_origin(
     done: Sender<()>,
 ) {
     println!("Originating broadcast {:?}", c_id);
+    sleep(Duration::from_secs(9)).await;
     // TODO: indexing
     for data in data_vec {
         // loop {
@@ -735,7 +892,7 @@ async fn serve_broadcast_origin(
 
         sleep(sleep_time).await;
     }
-    done.send(());
+    let _ = done.send(());
 }
 
 fn get_root_hash(hashes: &Vec<u64>) -> u64 {
