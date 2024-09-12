@@ -1,8 +1,6 @@
 use animaterm::prelude::*;
-// use async_std::task::sleep;
-use async_std::task::spawn;
+use async_std::task::sleep;
 use async_std::task::spawn_blocking;
-use async_std::task::yield_now;
 use dapp_lib::prelude::*;
 use dapp_lib::ToAppMgr;
 // use std::collections::HashMap;
@@ -63,8 +61,9 @@ async fn main() {
     // that contains a loop in which Responses are handled.
     // Those responses include both messages from underlying swarm as well as
     // user's input, if given app/swarm is currently active one.
+    let dur = Duration::from_millis(256);
     loop {
-        yield_now().await;
+        sleep(dur).await;
         if let Ok(key) = key_recv.try_recv() {
             // println!("some key");
             match key {
