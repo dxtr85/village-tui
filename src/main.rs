@@ -86,6 +86,15 @@ async fn main() {
                     // let res = service_request.send(Request::StartBroadcast);
                     // b_req_sent = res.is_ok();
                 }
+                Key::ShiftB => {
+                    println!("ShiftB");
+                    let _ = to_app_mgr_send.send(ToAppMgr::EndBroadcast);
+                    // let res = service_request.send(Request::StartBroadcast);
+                    // b_req_sent = res.is_ok();
+                }
+                Key::CtrlU => {
+                    let _ = to_app_mgr_send.send(ToAppMgr::UnsubscribeBroadcast);
+                }
                 Key::M => {
                     let _ = to_app_mgr_send.send(ToAppMgr::SendManifest);
                 }
