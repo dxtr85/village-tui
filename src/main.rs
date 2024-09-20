@@ -92,8 +92,13 @@ async fn main() {
                     // let res = service_request.send(Request::StartBroadcast);
                     // b_req_sent = res.is_ok();
                 }
-                Key::CtrlU => {
+                Key::CtrlB => {
                     let _ = to_app_mgr_send.send(ToAppMgr::UnsubscribeBroadcast);
+                }
+                Key::CtrlU => {
+                    let _ = to_app_mgr_send.send(ToAppMgr::TransformLinkRequest(Box::new(
+                        SyncData::new(vec![27; 1024]).unwrap(),
+                    )));
                 }
                 Key::M => {
                     let _ = to_app_mgr_send.send(ToAppMgr::SendManifest);
