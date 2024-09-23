@@ -50,7 +50,7 @@ async fn main() {
     // User's input will be also served through that loop, wrapped in
     // Response::FromUser or something similar that will contain all necessary data
 
-    // Whe should have an ApplicationManager
+    // We should have an ApplicationManager
     // AppMgr will be responsible for handling input from both User and SwarmManager.
     // User will switch between Swarms in an Application or switch to entirely
     // different application type.
@@ -87,7 +87,7 @@ async fn main() {
                     // b_req_sent = res.is_ok();
                 }
                 Key::ShiftB => {
-                    println!("ShiftB");
+                    eprintln!("ShiftB");
                     let _ = to_app_mgr_send.send(ToAppMgr::EndBroadcast);
                     // let res = service_request.send(Request::StartBroadcast);
                     // b_req_sent = res.is_ok();
@@ -125,7 +125,7 @@ async fn main() {
                 Key::ShiftU => {
                     let _ = to_app_mgr_send.send(ToAppMgr::StartUnicast);
                 }
-                _ => println!(),
+                _ => eprintln!(),
             }
         }
 
@@ -159,7 +159,7 @@ fn instantiate_tui_mgr() -> Manager {
     )
 }
 fn serve_tui_mgr(mut mgr: Manager, to_app: Sender<Key>) {
-    println!("Serving TUI Manager");
+    eprintln!("Serving TUI Manager");
     loop {
         let key = mgr.read_key();
         let terminate = key == Key::Q || key == Key::ShiftQ;
