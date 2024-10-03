@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-animaterm = "*"
+animaterm = {path = "/home/dxtr/projects/animaterm"}
 dapp-lib = {path = "/home/dxtr/projects/dapp-lib"}
 
 [dependencies.async-std]                                                        

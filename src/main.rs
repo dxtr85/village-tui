@@ -11,7 +11,9 @@ use std::time::Duration;
 // use std::net::IpAddr;
 // use std::net::Ipv4Addr;
 // use std::path::PathBuf;
+mod input;
 mod tui;
+// use input::Input;
 use tui::{instantiate_tui_mgr, serve_tui_mgr, Direction, FromTui, ToTui};
 
 struct ApplicationLogic {
@@ -59,6 +61,7 @@ impl ApplicationLogic {
             }
         }
     }
+
     fn handle_key(&self, key: Key) -> bool {
         match key {
             Key::U => {
@@ -117,20 +120,20 @@ impl ApplicationLogic {
                 // let _ = service_request.send(Request::AddData(SyncData::new(data).unwrap()));
                 // next_val += 1;
             }
-            Key::Left => {
-                let _ = self.to_tui_send.send(ToTui::MoveSelection(Direction::Left));
-            }
-            Key::Right => {
-                let _ = self
-                    .to_tui_send
-                    .send(ToTui::MoveSelection(Direction::Right));
-            }
-            Key::Up => {
-                let _ = self.to_tui_send.send(ToTui::MoveSelection(Direction::Up));
-            }
-            Key::Down => {
-                let _ = self.to_tui_send.send(ToTui::MoveSelection(Direction::Down));
-            }
+            // Key::Left => {
+            //     let _ = self.to_tui_send.send(ToTui::MoveSelection(Direction::Left));
+            // }
+            // Key::Right => {
+            //     let _ = self
+            //         .to_tui_send
+            //         .send(ToTui::MoveSelection(Direction::Right));
+            // }
+            // Key::Up => {
+            //     let _ = self.to_tui_send.send(ToTui::MoveSelection(Direction::Up));
+            // }
+            // Key::Down => {
+            //     let _ = self.to_tui_send.send(ToTui::MoveSelection(Direction::Down));
+            // }
             Key::ShiftU => {
                 let _ = self.to_app_mgr_send.send(ToAppMgr::StartUnicast);
             }
