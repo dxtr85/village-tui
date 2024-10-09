@@ -4,15 +4,24 @@ use animaterm::utilities::message_box;
 use dapp_lib::prelude::ContentID;
 use dapp_lib::prelude::DataType;
 use dapp_lib::prelude::GnomeId;
-use dapp_lib::ToUser;
 use std::collections::HashMap;
+use std::fmt::format;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 
+#[derive(Copy, Clone)]
+pub enum TileType {
+    Home,
+    Neighbor(GnomeId),
+    Field,
+    Application,
+    Content(DataType, ContentID),
+}
 pub struct Tile {
     //TODO
     pub id: usize,
+    pub tile_type: TileType,
     pub select_frame: usize,
     pub deselect_frame: usize,
 }
@@ -24,6 +33,7 @@ impl Tile {
         mgr.set_graphic(id, 0, true);
         Tile {
             id,
+            tile_type: TileType::Field,
             select_frame: 1,
             deselect_frame: 0,
         }
@@ -31,6 +41,34 @@ impl Tile {
     pub fn set_to_home(&mut self, selected: bool, mgr: &mut Manager) {
         self.select_frame = 3;
         self.deselect_frame = 2;
+        self.tile_type = TileType::Home;
+        if selected {
+            mgr.set_graphic(self.id, self.select_frame, false);
+        } else {
+            mgr.set_graphic(self.id, self.deselect_frame, false);
+        }
+    }
+    pub fn set_to_neighbor(&mut self, n_id: GnomeId, selected: bool, mgr: &mut Manager) {
+        // TODO: make use of n_id
+        self.select_frame = 7;
+        self.deselect_frame = 6;
+        self.tile_type = TileType::Neighbor(n_id);
+        if selected {
+            mgr.set_graphic(self.id, self.select_frame, false);
+        } else {
+            mgr.set_graphic(self.id, self.deselect_frame, false);
+        }
+    }
+    pub fn set_to_content(
+        &mut self,
+        d_type: DataType,
+        c_id: ContentID,
+        selected: bool,
+        mgr: &mut Manager,
+    ) {
+        self.select_frame = 5;
+        self.deselect_frame = 4;
+        self.tile_type = TileType::Content(d_type, c_id);
         if selected {
             mgr.set_graphic(self.id, self.select_frame, false);
         } else {
@@ -92,6 +130,35 @@ impl VillageLayout {
             self.selected_tile = *index;
         }
     }
+    pub fn get_selection(&self) -> TileType {
+        self.tiles.get(&self.selected_tile).unwrap().tile_type
+    }
+    pub fn add_new_neighbor(&mut self, n_id: GnomeId, mgr: &mut Manager) -> (u8, u8) {
+        let tile_id = self.next_field_tile();
+        let tile = self.tiles.get_mut(&tile_id).unwrap();
+        tile.set_to_neighbor(n_id, false, mgr);
+        tile_id
+    }
+
+    pub fn add_new_content(
+        &mut self,
+        d_type: DataType,
+        c_id: ContentID,
+        mgr: &mut Manager,
+    ) -> (u8, u8) {
+        let tile_id = self.next_field_tile();
+        let tile = self.tiles.get_mut(&tile_id).unwrap();
+        tile.set_to_content(d_type, c_id, false, mgr);
+        tile_id
+    }
+    fn next_field_tile(&self) -> (u8, u8) {
+        for (k, v) in &self.tiles {
+            if matches!(v.tile_type, TileType::Field) {
+                return *k;
+            }
+        }
+        return (0, 0);
+    }
     pub fn select_next(&mut self, direction: Direction, mgr: &mut Manager) {
         let new_index = match direction {
             Direction::Left => {
@@ -147,11 +214,14 @@ pub enum ToTui {
     Neighbors(String, Vec<GnomeId>),
     // MoveSelection(Direction),
     AddContent(ContentID, DataType),
+    Contents(ContentID, String),
 }
 
 pub enum FromTui {
     //TODO: we don't want to send Keys out of TUI, rather instructions depending on
     // context where given key was pressed
+    NewUserEntry(String),
+    ContentInquiry(ContentID),
     KeyPress(Key),
 }
 
@@ -179,23 +249,14 @@ pub fn instantiate_tui_mgr() -> Manager {
     mgr
 }
 
-/// This function is responsible for sending keys to application and displaying user interface.
-/// It is application's responsibility to interpret key presses and in response send
-/// ToTui messages informing what action should be performed by presentation layer.
+/// This function is for sending requests to application and displaying user interface.
 pub fn serve_tui_mgr(mut mgr: Manager, to_app: Sender<FromTui>, to_tui_recv: Receiver<ToTui>) {
     let s_size = mgr.screen_size();
     let mut village = VillageLayout::new(s_size);
     village.initialize(&mut mgr);
-    // village.select(&village.selected_tile.clone(), &mut mgr);
 
-    let mut content_mapping = HashMap::<usize, (ContentID, DataType)>::new();
-    eprintln!("Serving TUI Manager scr size: {}x{}", s_size.0, s_size.1);
-    // let frame = Graphic::from_file("/home/dxtr/projects/village-tui/assets/frame.g").unwrap();
-    // let frame_id = mgr.add_graphic(frame, 2, (12, 14)).unwrap();
-    // mgr.set_graphic(frame_id, 0, true);
-    // let graphic = Graphic::from_file("/home/dxtr/projects/village-tui/assets/house.g").unwrap();
-    // let house_id = mgr.add_graphic(graphic, 2, (12, 14)).unwrap();
-    // mgr.set_graphic(house_id, 0, true);
+    // let mut tiles_mapping = HashMap::<(u8, u8), TileType>::new();
+    // eprintln!("Serving TUI Manager scr size: {}x{}", s_size.0, s_size.1);
     let main_display = 0;
     let input_display = mgr.new_display(true);
     let mut input = Input::new(&mut mgr);
@@ -205,86 +266,36 @@ pub fn serve_tui_mgr(mut mgr: Manager, to_app: Sender<FromTui>, to_tui_recv: Rec
         if let Some(key) = mgr.read_key() {
             let terminate = key == Key::Q || key == Key::ShiftQ;
             match key {
-                Key::Left => village.select_next(Direction::Left, &mut mgr),
-                Key::Right => village.select_next(Direction::Right, &mut mgr),
-                Key::Up => village.select_next(Direction::Up, &mut mgr),
-                Key::Down => village.select_next(Direction::Down, &mut mgr),
+                Key::Left | Key::H | Key::CtrlB => village.select_next(Direction::Left, &mut mgr),
+                Key::Right | Key::L | Key::CtrlF => village.select_next(Direction::Right, &mut mgr),
+                Key::Up | Key::K | Key::CtrlP => village.select_next(Direction::Up, &mut mgr),
+                Key::Down | Key::J | Key::CtrlN => village.select_next(Direction::Down, &mut mgr),
                 Key::Enter => {
                     //TODO: we need to be aware of what context we are in to determine what
-                    mgr.restore_display(input_display, true);
-                    eprint!("Type text in (press TAB to finish): ");
-                    // input.show(&mut mgr);
-                    loop {
-                        // TODO: here we need to build a text input window and add logic
-                        // for handling backspace, escape, delete...
-                        if let Some(ch) = mgr.read_char() {
-                            // eprintln!("Some ch: {}", ch);
-                            if let Some(key) = map_private_char_to_key(ch) {
-                                // eprintln!("Some key: {:?}", key);
-                                match key {
-                                    Key::Up => input.move_cursor(Direction::Up, &mut mgr),
-                                    Key::Down => input.move_cursor(Direction::Down, &mut mgr),
-                                    Key::Left => input.move_cursor(Direction::Left, &mut mgr),
-                                    Key::Right => input.move_cursor(Direction::Right, &mut mgr),
-                                    Key::Home => input.move_to_line_start(&mut mgr),
-                                    Key::End => input.move_to_line_end(&mut mgr),
-                                    Key::Delete => input.delete(&mut mgr),
-                                    Key::AltB => {
-                                        input.move_cursor(Direction::Left, &mut mgr);
-                                        input.move_cursor(Direction::Left, &mut mgr);
-                                        input.move_cursor(Direction::Left, &mut mgr);
-                                        input.move_cursor(Direction::Left, &mut mgr);
-                                    }
-                                    Key::AltF => {
-                                        input.move_cursor(Direction::Right, &mut mgr);
-                                        input.move_cursor(Direction::Right, &mut mgr);
-                                        input.move_cursor(Direction::Right, &mut mgr);
-                                        input.move_cursor(Direction::Right, &mut mgr);
-                                    }
-                                    other => eprint!("Other: {}", other),
-                                }
-                            } else if ch == '\t' {
-                                mgr.restore_display(main_display, true);
-                                // input.hide(&mut mgr);
-                                break;
-                            } else if ch == '\u{7f}' {
-                                input.backspace(&mut mgr);
-                            } else if ch == '\u{1}' {
-                                input.move_to_line_start(&mut mgr);
-                            } else if ch == '\u{5}' {
-                                input.move_to_line_end(&mut mgr);
-                            } else if ch == '\u{a}' {
-                                input.move_cursor(Direction::Down, &mut mgr);
-                                input.move_to_line_start(&mut mgr);
-                            } else if ch == '\u{b}' {
-                                input.remove_chars_from_cursor_to_end(&mut mgr);
-                            } else if ch == '\u{e}' {
-                                input.move_cursor(Direction::Down, &mut mgr);
-                            } else if ch == '\u{10}' {
-                                input.move_cursor(Direction::Up, &mut mgr);
-                            } else if ch == '\u{2}' {
-                                input.move_cursor(Direction::Left, &mut mgr);
-                            } else if ch == '\u{6}' {
-                                input.move_cursor(Direction::Right, &mut mgr);
-                            } else {
-                                // eprint!("code: {:?}", ch);
-                                input.insert(&mut mgr, ch);
-                            }
-                            // //Backspace
-                            // if ch == '\u{7f}' {
-                            //     eprint!(r"BS");
-                            //     // break;
+                    match village.get_selection() {
+                        TileType::Home => {
+                            let typed_text =
+                                serve_input(input_display, main_display, &mut input, &mut mgr);
+                            eprintln!("Got: {}", typed_text);
+                            to_app.send(FromTui::NewUserEntry(typed_text));
+                        }
+                        TileType::Field => {
+                            println!("What?");
+                        }
+                        TileType::Content(_d_type, c_id) => {
+                            // if let Some((c_id, d_type)) = tiles_mapping.get(&village.selected_tile)
+                            // {
+                            // println!("Something: {:?}", c_data);
+                            to_app.send(FromTui::ContentInquiry(c_id));
                             // }
-                            // //Escape
-                            // if ch == '\u{1b}' {
-                            //     eprint!("Esc");
-                            //     break;
-                            // }
+                        }
+                        _ => {
+                            //TODO
                         }
                     }
                 }
                 other => {
-                    // eprintln!("Send to app: {}", other);
+                    eprintln!("Send to app: {} terminate: {}", other, terminate);
                     let res = to_app.send(FromTui::KeyPress(other));
                     if res.is_err() || terminate {
                         break;
@@ -295,29 +306,114 @@ pub fn serve_tui_mgr(mut mgr: Manager, to_app: Sender<FromTui>, to_tui_recv: Rec
         if let Ok(to_tui) = to_tui_recv.try_recv() {
             match to_tui {
                 ToTui::Neighbors(s_name, neighbors) => {
-                    //TODO build a graphic for every neighbor
-                    for (i, neighbor) in neighbors.into_iter().enumerate() {
-                        let graphic =
-                            Graphic::from_file("/home/dxtr/projects/village-tui/assets/house.g")
-                                .unwrap();
-                        let x_offset = 31 + (i * 12) as isize;
-                        let house_id = mgr.add_graphic(graphic, 2, (x_offset, 19)).unwrap();
-                        mgr.set_graphic(house_id, 0, true);
+                    //TODO: first make sure neighbor is not placed on screen
+                    for neighbor in neighbors.into_iter() {
+                        let _tile_id = village.add_new_neighbor(neighbor, &mut mgr);
                     }
                 }
                 ToTui::AddContent(c_id, d_type) => {
-                    //TODO: we need a mapping between graphic id and ContentID
-                    // When application asks for item currently selected we return ContentID
-                    // or GnomeId if a Neighbor is selected
-                    let c_graphic =
-                        Graphic::from_file("/home/dxtr/projects/village-tui/assets/content.g")
-                            .unwrap();
-                    let c_gr_id = mgr.add_graphic(c_graphic, 2, (19, 12)).unwrap();
-                    mgr.set_graphic(c_gr_id, 0, true);
-                    content_mapping.insert(c_gr_id, (c_id, d_type));
-                } // ToTui::MoveSelection(dir) => village.select_next(dir, &mut mgr),
+                    let tile_id = village.add_new_content(d_type, c_id, &mut mgr);
+                    // tiles_mapping.insert(tile_id, TileType::Content(d_type, c_id));
+                }
+                ToTui::Contents(c_id, text) => {
+                    //TODO: display text
+                    let title = format!(" Content ID: {} ", c_id);
+                    let m_box = message_box(Some(title), text, Glyph::plain(), 80, 24);
+                    if let Some(g_id) = mgr.add_graphic(m_box, 3, (1, 1)) {
+                        // println!("mbox added!");
+                        mgr.set_graphic(g_id, 0, true);
+                        let mut hide = false;
+                        while !hide {
+                            if let Some(key) = mgr.read_key() {
+                                hide = true;
+                            }
+                        }
+                        mgr.move_graphic(g_id, 0, (0, 0));
+                        mgr.delete_graphic(g_id);
+                    }
+                }
             }
         }
     }
+    eprintln!("Done serving TUI");
     mgr.terminate();
+}
+
+fn serve_input(
+    input_display: usize,
+    main_display: usize,
+    input: &mut Input,
+    mut mgr: &mut Manager,
+) -> String {
+    mgr.restore_display(input_display, true);
+    eprint!("Type text in (press TAB to finish): ");
+    // input.show(&mut mgr);
+    loop {
+        // TODO: here we need to build a text input window and add logic
+        // for handling backspace, escape, delete...
+        if let Some(ch) = mgr.read_char() {
+            // eprintln!("Some ch: {}", ch);
+            if let Some(key) = map_private_char_to_key(ch) {
+                // eprintln!("Some key: {:?}", key);
+                match key {
+                    Key::Up => input.move_cursor(Direction::Up, &mut mgr),
+                    Key::Down => input.move_cursor(Direction::Down, &mut mgr),
+                    Key::Left => input.move_cursor(Direction::Left, &mut mgr),
+                    Key::Right => input.move_cursor(Direction::Right, &mut mgr),
+                    Key::Home => input.move_to_line_start(&mut mgr),
+                    Key::End => input.move_to_line_end(&mut mgr),
+                    Key::Delete => input.delete(&mut mgr),
+                    Key::AltB => {
+                        input.move_cursor(Direction::Left, &mut mgr);
+                        input.move_cursor(Direction::Left, &mut mgr);
+                        input.move_cursor(Direction::Left, &mut mgr);
+                        input.move_cursor(Direction::Left, &mut mgr);
+                    }
+                    Key::AltF => {
+                        input.move_cursor(Direction::Right, &mut mgr);
+                        input.move_cursor(Direction::Right, &mut mgr);
+                        input.move_cursor(Direction::Right, &mut mgr);
+                        input.move_cursor(Direction::Right, &mut mgr);
+                    }
+                    other => eprint!("Other: {}", other),
+                }
+            } else if ch == '\t' {
+                let taken = input.take_text(&mut mgr);
+                mgr.restore_display(main_display, true);
+                return taken;
+            } else if ch == '\u{7f}' {
+                input.backspace(&mut mgr);
+            } else if ch == '\u{1}' {
+                input.move_to_line_start(&mut mgr);
+            } else if ch == '\u{5}' {
+                input.move_to_line_end(&mut mgr);
+            } else if ch == '\u{a}' {
+                input.move_cursor(Direction::Down, &mut mgr);
+                input.move_to_line_start(&mut mgr);
+            } else if ch == '\u{b}' {
+                input.remove_chars_from_cursor_to_end(&mut mgr);
+            } else if ch == '\u{e}' {
+                input.move_cursor(Direction::Down, &mut mgr);
+            } else if ch == '\u{10}' {
+                input.move_cursor(Direction::Up, &mut mgr);
+            } else if ch == '\u{2}' {
+                input.move_cursor(Direction::Left, &mut mgr);
+            } else if ch == '\u{6}' {
+                input.move_cursor(Direction::Right, &mut mgr);
+            } else {
+                // eprint!("code: {:?}", ch);
+                input.insert(&mut mgr, ch);
+            }
+            // //Backspace
+            // if ch == '\u{7f}' {
+            //     eprint!(r"BS");
+            //     // break;
+            // }
+            // //Escape
+            // if ch == '\u{1b}' {
+            //     eprint!("Esc");
+            //     break;
+            // }
+        }
+    }
 }

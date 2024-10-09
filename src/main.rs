@@ -38,24 +38,47 @@ impl ApplicationLogic {
     }
     pub async fn run(&self) {
         let dur = Duration::from_millis(32);
-        loop {
+        'outer: loop {
             sleep(dur).await;
             if let Ok(from_tui) = self.from_tui_recv.try_recv() {
                 match from_tui {
+                    FromTui::NewUserEntry(text) => {
+                        //TODO: we need to sync this data with Swarm
+                        //TODO: we need to create logic that converts user data like String
+                        //      into SyncData|CastData before we can send it to Swarm
+                        let data = text_to_data(text);
+                        let _ = self.to_app_mgr_send.send(ToAppMgr::AddContent(data));
+                    }
                     FromTui::KeyPress(key) => {
                         if self.handle_key(key) {
-                            break;
+                            eprintln!("Sending ToAppMgr::Quit");
+                            let _ = self.to_app_mgr_send.send(ToAppMgr::Quit);
+                            // break;
                         }
+                    }
+                    FromTui::ContentInquiry(c_id) => {
+                        let _ = self.to_app_mgr_send.send(ToAppMgr::ReadData(c_id));
                     }
                 }
             }
             while let Ok(to_user) = self.to_user_recv.try_recv() {
                 match to_user {
                     ToUser::Neighbors(s_name, neighbors) => {
-                        self.to_tui_send.send(ToTui::Neighbors(s_name, neighbors));
+                        let _ = self.to_tui_send.send(ToTui::Neighbors(s_name, neighbors));
                     }
                     ToUser::NewContent(c_id, d_type) => {
-                        self.to_tui_send.send(ToTui::AddContent(c_id, d_type));
+                        let _ = self.to_tui_send.send(ToTui::AddContent(c_id, d_type));
+                    }
+                    ToUser::ReadResult(c_id, d_vec) => {
+                        let mut text = String::new();
+                        for data in d_vec {
+                            text.push_str(&String::from_utf8(data.bytes()).unwrap());
+                        }
+                        let _ = self.to_tui_send.send(ToTui::Contents(c_id, text));
+                    }
+                    ToUser::Disconnected => {
+                        eprintln!("Main job is done.");
+                        break 'outer;
                     }
                 }
             }
@@ -106,14 +129,20 @@ impl ApplicationLogic {
                 let _ = self.to_app_mgr_send.send(ToAppMgr::ListNeighbors);
             }
             Key::C => {
-                let _ = self.to_app_mgr_send.send(ToAppMgr::ChangeContent);
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::ChangeContent(0, Data::empty(0)));
             }
             Key::S => {
-                let _ = self.to_app_mgr_send.send(ToAppMgr::AddContent);
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::AddContent(Data::empty(0)));
             }
             Key::ShiftS => {
                 // TODO: extend this message with actual content
-                let _ = self.to_app_mgr_send.send(ToAppMgr::AddContent);
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::AddContent(Data::empty(0)));
                 // let data = vec![next_val; 1024];
 
                 // // TODO: indirect send via AppMgr
@@ -153,8 +182,8 @@ async fn main() {
     let config = Configuration::new(dir, 0);
     let (to_app_mgr_send, to_user_recv) = initialize(config);
     let (to_tui_send, to_tui_recv) = channel();
-    let mut logic = ApplicationLogic::new(to_app_mgr_send, to_tui_send, key_recv, to_user_recv);
-    spawn_blocking(|| serve_tui_mgr(tui_mgr, key_send, to_tui_recv));
+    let logic = ApplicationLogic::new(to_app_mgr_send, to_tui_send, key_recv, to_user_recv);
+    let _tui_join = spawn_blocking(|| serve_tui_mgr(tui_mgr, key_send, to_tui_recv));
 
     // TODO: separate user input, manager input and app loop - there will be multiple
     // swarms running under single app - those should be served separately
@@ -174,4 +203,10 @@ async fn main() {
     // Those responses include both messages from underlying swarm as well as
     // user's input, if given app/swarm is currently active one.
     logic.run().await;
+    eprintln!("logic finished");
+    // tui_join.await;
+}
+
+fn text_to_data(text: String) -> Data {
+    Data::new(text.try_into().unwrap()).unwrap()
 }

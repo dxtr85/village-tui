@@ -30,12 +30,35 @@ impl Input {
         }
     }
     pub fn show(&mut self, mgr: &mut Manager) {
-        mgr.move_graphic(self.g_id, 2, (0, 0));
+        // mgr.move_graphic(self.g_id, 2, (0, 0));
         mgr.set_graphic(self.g_id, 0, true);
     }
-    pub fn hide(&mut self, mgr: &mut Manager) {
-        mgr.move_graphic(self.g_id, 0, (0, 0));
-        // mgr.set_graphic(1, 0, true);
+    pub fn take_text(&mut self, mgr: &mut Manager) -> String {
+        let mut result = String::new();
+        // for i in 0..self.text.len() {
+        //     let line = std::mem::replace(&mut self.text[i], String::new());
+        //     result.push_str(line.trim_end_matches(' '));
+        //     result.push(' ');
+        // }
+        // self.clear(mgr);
+        // self.move_to_line_start(mgr);
+        let mut glyph = Glyph::plain();
+        for row in 1..self.max_position.1 {
+            self.cursor_position = (2, row);
+            let taken = self.remove_chars_from_cursor_to_end(mgr);
+            mgr.set_glyph(self.g_id, glyph, 2, row);
+            result.push_str(&taken);
+        }
+        self.cursor_position = (2, 1);
+        glyph.set_blink(true);
+        glyph.set_reverse(true);
+        mgr.set_glyph(
+            self.g_id,
+            glyph,
+            self.cursor_position.0,
+            self.cursor_position.1,
+        );
+        result
     }
     pub fn insert(&mut self, mgr: &mut Manager, ch: char) {
         let len = self.text[self.cursor_position.1].chars().count();
@@ -110,19 +133,13 @@ impl Input {
     pub fn backspace(&mut self, mgr: &mut Manager) {
         let glyph = Glyph::plain();
         let mut last_char = false;
-        // mgr.set_glyph(
-        //     self.g_id,
-        //     glyph,
-        //     self.cursor_position.0,
-        //     self.cursor_position.1,
-        // );
         let len = self.text[self.cursor_position.1].chars().count();
-        eprintln!("cursor position: {}", self.cursor_position.0);
+        // eprintln!("cursor position: {}", self.cursor_position.0);
         if len < self.cursor_position.0 - 2 {
             //Do nothing
-            eprintln!("1");
+            // eprintln!("1");
         } else if len == self.cursor_position.0 - 2 {
-            eprintln!("2");
+            // eprintln!("2");
             mgr.set_glyph(
                 self.g_id,
                 glyph,
@@ -147,11 +164,11 @@ impl Input {
                 self.cursor_position.0,
                 self.cursor_position.1,
             );
-            eprintln!(
-                "3, len: {}, curr position -2 : {}",
-                len,
-                self.cursor_position.0 - 2
-            );
+            // eprintln!(
+            //     "3, len: {}, curr position -2 : {}",
+            //     len,
+            //     self.cursor_position.0 - 2
+            // );
             let mut chars = self.text[self.cursor_position.1].chars();
             let mut new_string = String::with_capacity(len);
             for _i in 0..self.cursor_position.0 - 3 {
@@ -160,10 +177,10 @@ impl Input {
                 }
             }
             let skip = chars.next();
-            eprintln!("Skiping: {:?}", skip);
+            // eprintln!("Skiping: {:?}", skip);
             let mut i = 0;
             while let Some(char) = chars.next() {
-                eprintln!("pushing: {:?} at {}", char, self.cursor_position.0 + i - 1);
+                // eprintln!("pushing: {:?} at {}", char, self.cursor_position.0 + i - 1);
                 new_string.push(char);
                 mgr.set_glyph(
                     self.g_id,
@@ -195,10 +212,10 @@ impl Input {
         }
         mgr.get_glyph(self.g_id, self.cursor_position.0, self.cursor_position.1);
         if let Ok(AnimOk::GlyphRetrieved(_u, mut glyph)) = mgr.read_result() {
-            eprintln!(
-                "Got glyph: {} from pos: {}",
-                glyph.character, self.cursor_position.0
-            );
+            // eprintln!(
+            //     "Got glyph: {} from pos: {}",
+            //     glyph.character, self.cursor_position.0
+            // );
             glyph.set_blink(true);
             glyph.set_reverse(true);
             if last_char {
@@ -215,21 +232,17 @@ impl Input {
 
     pub fn delete(&mut self, mgr: &mut Manager) {
         let next_position = (self.cursor_position.0 + 1, self.cursor_position.1);
-        eprintln!("cursor position: {}", self.cursor_position.0);
+        // eprintln!("cursor position: {}", self.cursor_position.0);
         if next_position.0 > self.max_position.0 {
             return;
-            // next_position = (2, next_position.1 + 1);
-            // if next_position.1 > self.max_position.1 {
-            //     // next_position = self.max_position;
-            // }
         }
-        eprintln!("next position: {}", next_position.0);
+        // eprintln!("next position: {}", next_position.0);
         let len = self.text[self.cursor_position.1].chars().count();
         if len < next_position.0 - 2 {
             //do nothing
-            eprintln!("del 1");
+            // eprintln!("del 1");
         } else if len == next_position.0 - 2 {
-            eprintln!("del 2");
+            // eprintln!("del 2");
             self.text[self.cursor_position.1].pop();
             mgr.set_glyph(
                 self.g_id,
@@ -238,7 +251,7 @@ impl Input {
                 self.cursor_position.1,
             );
         } else {
-            eprintln!("del 3");
+            // eprintln!("del 3");
             let mut chars = self.text[next_position.1].chars();
             let mut new_string = String::with_capacity(len);
             for _i in 0..self.cursor_position.0 - 2 {
@@ -246,11 +259,11 @@ impl Input {
                     new_string.push(char);
                 }
             }
-            let skip = chars.next();
-            eprintln!("Skip: {:?}", skip);
+            let _skip = chars.next();
+            // eprintln!("Skip: {:?}", _skip);
             let mut i = next_position.0 - 1;
             while let Some(char) = chars.next() {
-                eprintln!("push: '{}'", char);
+                // eprintln!("push: '{}'", char);
                 new_string.push(char);
                 mgr.set_glyph(self.g_id, Glyph::char(char), i, next_position.1);
                 i += 1;
@@ -260,7 +273,7 @@ impl Input {
         }
         mgr.get_glyph(self.g_id, self.cursor_position.0, self.cursor_position.1);
         if let Ok(AnimOk::GlyphRetrieved(_u, mut glyph)) = mgr.read_result() {
-            eprintln!("Retrieved: '{}'", glyph.character);
+            // eprintln!("Retrieved: '{}'", glyph.character);
             glyph.set_blink(true);
             glyph.set_reverse(true);
             mgr.set_glyph(
@@ -269,20 +282,12 @@ impl Input {
                 self.cursor_position.0,
                 self.cursor_position.1,
             );
-            // for i in next_position.0 + 1..self.max_position.0 {
-            //     mgr.get_glyph(self.g_id, i, next_position.1);
-            //     if let Ok(AnimOk::GlyphRetrieved(_u, glyph)) = mgr.read_result() {
-            //         mgr.set_glyph(self.g_id, glyph, i - 1, next_position.1);
-            //     } else {
-            //         mgr.set_glyph(self.g_id, Glyph::plain(), i - 1, next_position.1);
-            //     }
-            // }
         }
     }
-    pub fn remove_chars_from_cursor_to_end(&mut self, mgr: &mut Manager) {
-        //TODO: remove all chars from selected till end of line
+    pub fn remove_chars_from_cursor_to_end(&mut self, mgr: &mut Manager) -> String {
         let mut chars = self.text[self.cursor_position.1].chars();
         let mut new_string = String::with_capacity(self.max_position.0);
+        let mut old_string = String::with_capacity(self.max_position.0);
         for _i in 0..self.cursor_position.0 - 2 {
             if let Some(char) = chars.next() {
                 new_string.push(char);
@@ -300,19 +305,28 @@ impl Input {
             self.cursor_position.1,
         );
         let mut i = 1;
-        while chars.next().is_some() {
+        let plain = Glyph::plain();
+        while let Some(char) = chars.next() {
+            // eprintln!(
+            //     "Clearing {} {}",
+            //     self.cursor_position.0 + i,
+            //     self.cursor_position.1
+            // );
             mgr.set_glyph(
                 self.g_id,
-                Glyph::plain(),
+                plain,
                 self.cursor_position.0 + i,
                 self.cursor_position.1,
             );
+            old_string.push(char);
             i += 1;
         }
+        // eprint!("NS: {} ;", new_string);
         self.text[self.cursor_position.1] = new_string;
+        old_string
     }
     pub fn move_to_line_start(&mut self, mgr: &mut Manager) {
-        // println!("Move to start");
+        // eprintln!("Move to start");
         mgr.get_glyph(self.g_id, self.cursor_position.0, self.cursor_position.1);
         if let Ok(AnimOk::GlyphRetrieved(_u, mut glyph)) = mgr.read_result() {
             glyph.set_blink(false);
@@ -338,7 +352,7 @@ impl Input {
         }
     }
     pub fn move_to_line_end(&mut self, mgr: &mut Manager) {
-        // println!("Move to start");
+        // eprintln!("Move to end");
         mgr.get_glyph(self.g_id, self.cursor_position.0, self.cursor_position.1);
         if let Ok(AnimOk::GlyphRetrieved(_u, mut glyph)) = mgr.read_result() {
             glyph.set_blink(false);
