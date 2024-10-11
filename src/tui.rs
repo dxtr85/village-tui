@@ -4,6 +4,7 @@ use animaterm::utilities::message_box;
 use dapp_lib::prelude::ContentID;
 use dapp_lib::prelude::DataType;
 use dapp_lib::prelude::GnomeId;
+use dapp_lib::prelude::SwarmName;
 use std::collections::HashMap;
 use std::fmt::format;
 use std::sync::mpsc::Receiver;
@@ -211,7 +212,7 @@ pub enum Direction {
 }
 
 pub enum ToTui {
-    Neighbors(String, Vec<GnomeId>),
+    Neighbors(SwarmName, Vec<GnomeId>),
     // MoveSelection(Direction),
     AddContent(ContentID, DataType),
     Contents(ContentID, String),
