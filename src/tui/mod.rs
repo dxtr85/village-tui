@@ -9,6 +9,8 @@ use std::fmt::format;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
+mod context_menu;
+use context_menu::CMenu;
 
 #[derive(Copy, Clone)]
 pub enum TileType {
@@ -151,6 +153,7 @@ impl VillageLayout {
         if let Some(tile) = self.tiles.get_mut(&self.home_tile) {
             tile.set_to_home(owner_id, false, owner_id == self.my_id, mgr);
         }
+        self.selected_tile = self.home_tile;
     }
 
     pub fn get_tile_headers(&self) -> Vec<((u8, u8), TileType)> {
@@ -185,12 +188,13 @@ impl VillageLayout {
         }
     }
 
-    pub fn select(&mut self, mgr: &mut Manager) {
-        if let Some(tile) = self.tiles.get(&self.selected_tile) {
-            // if let Some(old_tile) = self.tiles.get(&self.selected_tile) {
-            //     mgr.set_graphic(old_tile.id, old_tile.deselect_frame, false);
-            // }
+    pub fn select(&mut self, idx: &(u8, u8), mgr: &mut Manager) {
+        if let Some(tile) = self.tiles.get(idx) {
+            if let Some(old_tile) = self.tiles.get(&self.selected_tile) {
+                mgr.set_graphic(old_tile.id, old_tile.deselect_frame, false);
+            }
             mgr.set_graphic(tile.id, tile.select_frame, false);
+            self.selected_tile = *idx;
         }
     }
     pub fn get_selection(&self) -> TileType {
@@ -271,6 +275,21 @@ impl VillageLayout {
             self.selected_tile = new_index;
         }
     }
+
+    fn cm_position(&self) -> (isize, isize) {
+        let x = if self.selected_tile.1 >= self.tiles_in_row - 1 {
+            (self.tiles_in_row as isize - 1) * 12
+        } else {
+            (self.selected_tile.1 as isize + 1) * 12
+        };
+        let y = if self.selected_tile.0 + 1 >= self.visible_rows {
+            (self.selected_tile.0 as isize - 1) * 8
+        } else {
+            (self.selected_tile.0 as isize) * 8
+        };
+        eprintln!("sel: {:?}, (x,y): {:?}", self.selected_tile, (x, y));
+        (x, y)
+    }
 }
 pub enum Direction {
     Left,
@@ -340,20 +359,55 @@ pub fn serve_tui_mgr(
     let mut input = Input::new(&mut mgr);
     input.show(&mut mgr);
     mgr.restore_display(main_display, true);
+    let mut c_menu = CMenu::new(&mut mgr);
+    let set_id = c_menu.add_set(
+        &mut mgr,
+        vec![
+            " Jeden".to_string(),
+            " Dwa".to_string(),
+            " Trzy".to_string(),
+            " Cztery".to_string(),
+            " Pięć".to_string(),
+            " Sześć".to_string(),
+            " Siedem".to_string(),
+            " Konstantynopol".to_string(),
+        ],
+    );
     loop {
         if let Some(key) = mgr.read_key() {
             let terminate = key == Key::Q || key == Key::ShiftQ;
             match key {
+                Key::AltEnter | Key::PgUp => {
+                    let action = c_menu.show(&mut mgr, set_id, village.cm_position());
+                }
                 Key::Left | Key::H | Key::CtrlB => village.select_next(Direction::Left, &mut mgr),
                 Key::Right | Key::L | Key::CtrlF => village.select_next(Direction::Right, &mut mgr),
                 Key::Up | Key::K | Key::CtrlP => village.select_next(Direction::Up, &mut mgr),
 
                 Key::Down | Key::J | Key::CtrlN => village.select_next(Direction::Down, &mut mgr),
+                Key::AltCtrlH => {
+                    let _ = to_app.send(FromPresentation::NeighborSelected(village.my_id));
+                    swap_tiles(
+                        village.my_id,
+                        &mut village,
+                        &mut neighboring_villages,
+                        &mut mgr,
+                    );
+                }
+                Key::Home => {
+                    let sel = village.home_tile;
+                    village.select(&sel, &mut mgr);
+                }
+                Key::End => {
+                    let sel = (village.selected_tile.0, village.tiles_in_row - 1);
+                    village.select(&sel, &mut mgr);
+                }
                 Key::Enter => {
                     //TODO: we need to be aware of what context we are in to determine what
                     match village.get_selection() {
                         TileType::Home(owner) => {
                             if owner != village.my_id {
+                                let action = c_menu.show(&mut mgr, 0, village.cm_position());
                                 continue;
                             }
                             let typed_text =
@@ -363,61 +417,7 @@ pub fn serve_tui_mgr(
                         }
                         TileType::Neighbor(n_id) => {
                             let _ = to_app.send(FromPresentation::NeighborSelected(n_id));
-                            // TODO: we need to swap tiles for a new set
-                            if let Some(owner) = village.get_owner() {
-                                let existing_tile_types = village.get_tile_headers();
-                                neighboring_villages.insert(owner, existing_tile_types);
-                                village.set_owner(n_id, &mut mgr);
-                                eprintln!(
-                                    "NV keys: {:?}, searching for: {:?}",
-                                    neighboring_villages.keys(),
-                                    n_id
-                                );
-                                if let Some(new_tile_types) = neighboring_villages.remove(&n_id) {
-                                    for (slot, tile_type) in new_tile_types.into_iter() {
-                                        match tile_type {
-                                            TileType::Home(g_id) => {
-                                                if let Some(tile) = village.tiles.get_mut(&slot) {
-                                                    tile.set_to_home(
-                                                        g_id,
-                                                        false,
-                                                        g_id == village.my_id,
-                                                        &mut mgr,
-                                                    );
-                                                }
-                                            }
-                                            TileType::Neighbor(n_id) => {
-                                                if let Some(tile) = village.tiles.get_mut(&slot) {
-                                                    tile.set_to_neighbor(n_id, false, &mut mgr);
-                                                }
-                                            }
-                                            TileType::Field => {
-                                                //TODO
-                                                if let Some(tile) = village.tiles.get_mut(&slot) {
-                                                    tile.set_to_field(&mut mgr);
-                                                }
-                                            }
-                                            TileType::Application => {
-                                                //TODO
-                                            }
-                                            TileType::Content(d_type, c_id) => {
-                                                if let Some(tile) = village.tiles.get_mut(&slot) {
-                                                    tile.set_to_content(
-                                                        d_type, c_id, false, &mut mgr,
-                                                    );
-                                                }
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    eprintln!("Reseting tiles");
-                                    village.reset_tiles(n_id, &mut mgr);
-                                };
-                                village.select(&mut mgr);
-                            } else {
-                                //TODO
-                                eprintln!("No owner defined for village");
-                            }
+                            swap_tiles(n_id, &mut village, &mut neighboring_villages, &mut mgr);
                         }
                         TileType::Field => {
                             print!("What?");
@@ -435,7 +435,7 @@ pub fn serve_tui_mgr(
                     }
                 }
                 other => {
-                    eprintln!("Send to app: {} terminate: {}", other, terminate);
+                    // eprintln!("Send to app: {} terminate: {}", other, terminate);
                     let res = to_app.send(FromPresentation::KeyPress(other));
                     if res.is_err() || terminate {
                         break;
@@ -555,5 +555,62 @@ fn serve_input(
             //     break;
             // }
         }
+    }
+}
+
+fn swap_tiles(
+    n_id: GnomeId,
+    village: &mut VillageLayout,
+    neighboring_villages: &mut HashMap<GnomeId, Vec<((u8, u8), TileType)>>,
+    mgr: &mut Manager,
+) {
+    // TODO: we need to swap tiles for a new set
+    if let Some(owner) = village.get_owner() {
+        let existing_tile_types = village.get_tile_headers();
+        neighboring_villages.insert(owner, existing_tile_types);
+        village.set_owner(n_id, mgr);
+        eprintln!(
+            "NV keys: {:?}, searching for: {:?}",
+            neighboring_villages.keys(),
+            n_id
+        );
+        if let Some(new_tile_types) = neighboring_villages.remove(&n_id) {
+            for (slot, tile_type) in new_tile_types.into_iter() {
+                match tile_type {
+                    TileType::Home(g_id) => {
+                        if let Some(tile) = village.tiles.get_mut(&slot) {
+                            tile.set_to_home(g_id, false, g_id == village.my_id, mgr);
+                        }
+                    }
+                    TileType::Neighbor(n_id) => {
+                        if let Some(tile) = village.tiles.get_mut(&slot) {
+                            tile.set_to_neighbor(n_id, false, mgr);
+                        }
+                    }
+                    TileType::Field => {
+                        //TODO
+                        if let Some(tile) = village.tiles.get_mut(&slot) {
+                            tile.set_to_field(mgr);
+                        }
+                    }
+                    TileType::Application => {
+                        //TODO
+                    }
+                    TileType::Content(d_type, c_id) => {
+                        if let Some(tile) = village.tiles.get_mut(&slot) {
+                            tile.set_to_content(d_type, c_id, false, mgr);
+                        }
+                    }
+                }
+            }
+        } else {
+            eprintln!("Reseting tiles");
+            village.reset_tiles(n_id, mgr);
+        };
+        let sel = village.selected_tile;
+        village.select(&sel, mgr);
+    } else {
+        //TODO
+        eprintln!("No owner defined for village");
     }
 }
