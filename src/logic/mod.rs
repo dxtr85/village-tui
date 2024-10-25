@@ -7,6 +7,9 @@ use std::collections::HashMap;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
+mod manifest;
+pub use manifest::Manifest;
+pub use manifest::Tag;
 // use std::fs;
 // use std::net::IpAddr;
 // use std::net::Ipv4Addr;
@@ -14,9 +17,15 @@ use std::time::Duration;
 // use input::Input;
 use crate::tui::{FromPresentation, ToPresentation};
 
+struct SwarmShell {
+    swarm_id: SwarmID,
+    founder_id: GnomeId,
+    manifest: Manifest,
+}
+
 pub struct ApplicationLogic {
     my_id: GnomeId,
-    active_swarm_id: (GnomeId, SwarmID),
+    active_swarm: SwarmShell,
     to_app_mgr_send: Sender<ToAppMgr>,
     to_tui_send: Sender<ToPresentation>,
     from_tui_send: Sender<FromPresentation>,
@@ -37,7 +46,11 @@ impl ApplicationLogic {
     ) -> Self {
         ApplicationLogic {
             my_id,
-            active_swarm_id: (my_id, SwarmID(0)),
+            active_swarm: SwarmShell {
+                swarm_id: SwarmID(0),
+                founder_id: my_id,
+                manifest: Manifest::new(AppType::Catalog, HashMap::new()),
+            },
             to_app_mgr_send,
             to_tui_send,
             from_tui_send,
@@ -66,7 +79,32 @@ impl ApplicationLogic {
                         let data = text_to_data(text);
                         let _ = self
                             .to_app_mgr_send
-                            .send(ToAppMgr::AddContent(self.active_swarm_id.1, data));
+                            .send(ToAppMgr::AppendContent(self.active_swarm.swarm_id, data));
+                    }
+                    FromPresentation::AddTags(tags) => {
+                        // TODO: first check if we can add a tag for given swarm
+                        // and also check if given tag is not already added
+                        //TODO: we need to temporarily add given tag to manifest,
+                        // calculate hashes, and request app manager to modify or add Data
+                        // blocks to datastore for given swarm
+                        if self.active_swarm.manifest.add_tags(tags) {
+                            // Now our manifest is out of sync with swarm
+                            // we need to sync it with swarm.
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, 0));
+                            // TODO: Probably it is better to hide this functionality from user
+                            // and instead send a list of Data objects to update/create
+                            let data_vec = self.active_swarm.manifest.to_data();
+                            // TODO: this is not the data we want to send!
+                            eprintln!("app logic received add tags request,\nsending change content to app mgr…");
+                            let _ = self.to_app_mgr_send.send(ToAppMgr::ChangeContent(
+                                self.active_swarm.swarm_id,
+                                0,
+                                DataType::Data(0),
+                                data_vec,
+                            ));
+                        };
                     }
                     FromPresentation::NeighborSelected(gnome_id) => {
                         eprintln!("Selected neighbor: {:?}", gnome_id);
@@ -86,7 +124,7 @@ impl ApplicationLogic {
                         }
                         let _ = self
                             .to_app_mgr_send
-                            .send(ToAppMgr::ReadData(self.active_swarm_id.1, c_id));
+                            .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, c_id));
                     }
                 }
             }
@@ -100,15 +138,21 @@ impl ApplicationLogic {
                             }
                         }
                         eprintln!("Set active {:?}", s_id);
-                        self.active_swarm_id = (f_id, s_id);
-                        if let Some(pending_notifications) =
-                            self.pending_notifications.remove(&self.active_swarm_id.1)
+                        self.active_swarm = SwarmShell {
+                            swarm_id: s_id,
+                            founder_id: f_id,
+                            manifest: Manifest::new(AppType::Catalog, HashMap::new()),
+                        };
+                        if let Some(pending_notifications) = self
+                            .pending_notifications
+                            .remove(&self.active_swarm.swarm_id)
                         {
                             for note in pending_notifications.into_iter() {
                                 let _ = self.to_user_send.send(note);
                             }
                         }
                         let _ = self.to_app_mgr_send.send(ToAppMgr::ListNeighbors);
+                        // let _ = self.to_app_mgr_send.send(ToAppMgr::ReadData(s_id, 0));
                     }
                     ToApp::Neighbors(s_id, neighbors) => {
                         if !home_swarm_enforced {
@@ -116,14 +160,14 @@ impl ApplicationLogic {
                                 .to_app_mgr_send
                                 .send(ToAppMgr::SetActiveApp(self.my_id));
                         }
-                        if s_id == self.active_swarm_id.1 {
-                            if self.my_id == self.active_swarm_id.0 {
+                        if s_id == self.active_swarm.swarm_id {
+                            if self.my_id == self.active_swarm.founder_id {
                                 let _ = self.to_tui_send.send(ToPresentation::Neighbors(neighbors));
                             } else {
                                 //TODO: here we need to insert our id as a Neighbor, and remove Swarm's founder from Neighbor list
                                 let mut new_neighbors = vec![self.my_id];
                                 for n in neighbors {
-                                    if n == self.active_swarm_id.0 {
+                                    if n == self.active_swarm.founder_id {
                                         eprintln!("Removing founder from neighbors list");
                                         continue;
                                     }
@@ -136,7 +180,7 @@ impl ApplicationLogic {
                         } else {
                             eprintln!(
                                 "Not sending neighbors, because my {:?} != {:?}",
-                                self.active_swarm_id, s_id
+                                self.active_swarm.swarm_id, s_id
                             );
                             self.pending_notifications
                                 .entry(s_id)
@@ -145,14 +189,14 @@ impl ApplicationLogic {
                         }
                     }
                     ToApp::NewContent(s_id, c_id, d_type) => {
-                        if s_id == self.active_swarm_id.1 && home_swarm_enforced {
+                        if s_id == self.active_swarm.swarm_id && home_swarm_enforced {
                             let _ = self
                                 .to_tui_send
-                                .send(ToPresentation::AddContent(c_id, d_type));
+                                .send(ToPresentation::AppendContent(c_id, d_type));
                         } else {
                             eprintln!(
                                 "Not sending new content, because my {:?} != {:?}",
-                                self.active_swarm_id, s_id
+                                self.active_swarm.swarm_id, s_id
                             );
                             self.pending_notifications
                                 .entry(s_id)
@@ -160,18 +204,38 @@ impl ApplicationLogic {
                                 .push(ToApp::NewContent(s_id, c_id, d_type));
                         }
                     }
-                    ToApp::ReadResult(s_id, c_id, d_vec) => {
-                        if s_id == self.active_swarm_id.1 {
-                            let mut text = String::new();
-                            for data in d_vec {
-                                text.push_str(&String::from_utf8(data.bytes()).unwrap());
+                    ToApp::ReadSuccess(s_id, c_id, d_vec) => {
+                        if s_id == self.active_swarm.swarm_id {
+                            if c_id == 0 {
+                                eprintln!("Should show manifest, {}", d_vec.len());
+                                let manifest = Manifest::from(d_vec);
+                                let _ = self.to_tui_send.send(ToPresentation::Manifest(manifest));
+                            } else {
+                                let mut text = String::new();
+                                for data in d_vec {
+                                    text.push_str(&String::from_utf8(data.bytes()).unwrap());
+                                }
+                                let _ = self.to_tui_send.send(ToPresentation::Contents(c_id, text));
                             }
-                            let _ = self.to_tui_send.send(ToPresentation::Contents(c_id, text));
                         } else {
                             eprintln!(
                                 "Not sending read result, because my {:?} != {:?}",
-                                self.active_swarm_id, s_id
+                                self.active_swarm.swarm_id, s_id
                             );
+                        }
+                    }
+                    ToApp::ReadError(s_id, c_id, error) => {
+                        eprintln!("Received ReadError for {:?} {} {}", s_id, c_id, error);
+                        if s_id == self.active_swarm.swarm_id {
+                            if c_id == 0 && self.my_id == self.active_swarm.founder_id {
+                                // let _ = self
+                                //     .to_tui_send
+                                //     .send(ToPresentation::QueryForManifestDefinition);
+                            } else {
+                                let _ = self
+                                    .to_tui_send
+                                    .send(ToPresentation::ContentsNotExist(c_id));
+                            }
                         }
                     }
                     ToApp::Disconnected => {
@@ -221,26 +285,34 @@ impl ApplicationLogic {
                     )));
             }
             Key::M => {
-                let _ = self.to_app_mgr_send.send(ToAppMgr::SendManifest);
+                // Here we send request to read manifest data
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, 0));
             }
             Key::N => {
                 let _ = self.to_app_mgr_send.send(ToAppMgr::ListNeighbors);
             }
             Key::C => {
-                let _ = self
-                    .to_app_mgr_send
-                    .send(ToAppMgr::ChangeContent(0, Data::empty(0)));
+                let _ = self.to_app_mgr_send.send(ToAppMgr::ChangeContent(
+                    self.active_swarm.swarm_id,
+                    1,
+                    DataType::from(0),
+                    vec![Data::empty(0)],
+                ));
             }
             Key::S => {
-                let _ = self
-                    .to_app_mgr_send
-                    .send(ToAppMgr::AddContent(self.active_swarm_id.1, Data::empty(0)));
+                let _ = self.to_app_mgr_send.send(ToAppMgr::AppendContent(
+                    self.active_swarm.swarm_id,
+                    Data::empty(0),
+                ));
             }
             Key::ShiftS => {
                 // TODO: extend this message with actual content
-                let _ = self
-                    .to_app_mgr_send
-                    .send(ToAppMgr::AddContent(self.active_swarm_id.1, Data::empty(0)));
+                let _ = self.to_app_mgr_send.send(ToAppMgr::AppendContent(
+                    self.active_swarm.swarm_id,
+                    Data::empty(0),
+                ));
                 // let data = vec![next_val; 1024];
 
                 // // TODO: indirect send via AppMgr

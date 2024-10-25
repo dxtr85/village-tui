@@ -1,101 +1,27 @@
 use crate::input::Input;
+use crate::logic::Manifest;
 use animaterm::prelude::*;
 use animaterm::utilities::message_box;
+use dapp_lib::prelude::AppType;
 use dapp_lib::prelude::ContentID;
 use dapp_lib::prelude::DataType;
 use dapp_lib::prelude::GnomeId;
+use dapp_lib::Data;
 use std::collections::HashMap;
 use std::fmt::format;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
+mod ask;
 mod context_menu;
+mod manifest;
+mod tile;
+use crate::logic::Tag;
+use ask::Question;
 use context_menu::CMenu;
-
-#[derive(Copy, Clone)]
-pub enum TileType {
-    Home(GnomeId),
-    Neighbor(GnomeId),
-    Field,
-    Application,
-    Content(DataType, ContentID),
-}
-pub struct Tile {
-    //TODO
-    pub id: usize,
-    pub tile_type: TileType,
-    pub select_frame: usize,
-    pub deselect_frame: usize,
-}
-impl Tile {
-    pub fn new(offset: (isize, isize), mgr: &mut Manager) -> Self {
-        let c_graphic =
-            Graphic::from_file("/home/dxtr/projects/village-tui/assets/content.g").unwrap();
-        let id = mgr.add_graphic(c_graphic, 2, offset).unwrap();
-        mgr.set_graphic(id, 0, true);
-        Tile {
-            id,
-            tile_type: TileType::Field,
-            select_frame: 1,
-            deselect_frame: 0,
-        }
-    }
-
-    pub fn set_to_home(
-        &mut self,
-        owner_id: GnomeId,
-        selected: bool,
-        is_my: bool,
-        mgr: &mut Manager,
-    ) {
-        if is_my {
-            self.select_frame = 9;
-            self.deselect_frame = 8;
-        } else {
-            self.select_frame = 3;
-            self.deselect_frame = 2;
-        }
-        self.tile_type = TileType::Home(owner_id);
-        if selected {
-            mgr.set_graphic(self.id, self.select_frame, false);
-        } else {
-            mgr.set_graphic(self.id, self.deselect_frame, false);
-        }
-    }
-    pub fn set_to_neighbor(&mut self, n_id: GnomeId, selected: bool, mgr: &mut Manager) {
-        // TODO: make use of n_id
-        self.select_frame = 7;
-        self.deselect_frame = 6;
-        self.tile_type = TileType::Neighbor(n_id);
-        if selected {
-            mgr.set_graphic(self.id, self.select_frame, false);
-        } else {
-            mgr.set_graphic(self.id, self.deselect_frame, false);
-        }
-    }
-    pub fn set_to_content(
-        &mut self,
-        d_type: DataType,
-        c_id: ContentID,
-        selected: bool,
-        mgr: &mut Manager,
-    ) {
-        self.select_frame = 5;
-        self.deselect_frame = 4;
-        self.tile_type = TileType::Content(d_type, c_id);
-        if selected {
-            mgr.set_graphic(self.id, self.select_frame, false);
-        } else {
-            mgr.set_graphic(self.id, self.deselect_frame, false);
-        }
-    }
-    pub fn set_to_field(&mut self, mgr: &mut Manager) {
-        self.select_frame = 1;
-        self.deselect_frame = 0;
-        self.tile_type = TileType::Field;
-        mgr.set_graphic(self.id, self.deselect_frame, false);
-    }
-}
+use manifest::ManifestTui;
+use tile::Tile;
+use tile::TileType;
 
 pub struct VillageLayout {
     my_id: GnomeId,
@@ -302,14 +228,17 @@ pub enum ToPresentation {
     // Owner(GnomeId),
     Neighbors(Vec<GnomeId>),
     // MoveSelection(Direction),
-    AddContent(ContentID, DataType),
+    AppendContent(ContentID, DataType),
     Contents(ContentID, String),
+    ContentsNotExist(ContentID),
+    Manifest(Manifest),
 }
 
 #[derive(Clone)]
 pub enum FromPresentation {
     //TODO: we don't want to send Keys out of TUI, rather instructions depending on
     // context where given key was pressed
+    AddTags(Vec<Tag>),
     NewUserEntry(String),
     ContentInquiry(ContentID),
     NeighborSelected(GnomeId),
@@ -360,10 +289,12 @@ pub fn serve_tui_mgr(
     input.show(&mut mgr);
     mgr.restore_display(main_display, true);
     let mut c_menu = CMenu::new(&mut mgr);
+    let mut question = Question::new(&mut mgr);
+    let mut manifest = ManifestTui::new(AppType::Catalog, &mut mgr);
     let set_id = c_menu.add_set(
         &mut mgr,
         vec![
-            " Jeden".to_string(),
+            " Manifest".to_string(),
             " Dwa".to_string(),
             " Trzy".to_string(),
             " Cztery".to_string(),
@@ -377,8 +308,27 @@ pub fn serve_tui_mgr(
         if let Some(key) = mgr.read_key() {
             let terminate = key == Key::Q || key == Key::ShiftQ;
             match key {
-                Key::AltEnter | Key::PgUp => {
+                Key::AltEnter | Key::Space => {
                     let action = c_menu.show(&mut mgr, set_id, village.cm_position());
+                    eprintln!("Sel: {}", action);
+                    match action {
+                        1 => {
+                            eprintln!("Requesting manifest");
+                            let _ = to_app.send(FromPresentation::ContentInquiry(0));
+                        }
+                        other => {
+                            print!("A: {}", other);
+                        }
+                    }
+                }
+                Key::T => {
+                    //TODO
+                    eprintln!("Sending add tag request from presentation layer");
+                    let mut tags = Vec::with_capacity(33);
+                    for i in 0..33 {
+                        tags.push(Tag::new(format!("Tag #{}", i)).unwrap());
+                    }
+                    let _ = to_app.send(FromPresentation::AddTags(tags));
                 }
                 Key::Left | Key::H | Key::CtrlB => village.select_next(Direction::Left, &mut mgr),
                 Key::Right | Key::L | Key::CtrlF => village.select_next(Direction::Right, &mut mgr),
@@ -451,7 +401,7 @@ pub fn serve_tui_mgr(
                         let _tile_id = village.add_new_neighbor(neighbor, &mut mgr);
                     }
                 }
-                ToPresentation::AddContent(c_id, d_type) => {
+                ToPresentation::AppendContent(c_id, d_type) => {
                     let tile_id = village.add_new_content(d_type, c_id, &mut mgr);
                     // tiles_mapping.insert(tile_id, TileType::Content(d_type, c_id));
                 }
@@ -470,6 +420,21 @@ pub fn serve_tui_mgr(
                         }
                         mgr.move_graphic(g_id, 0, (0, 0));
                         mgr.delete_graphic(g_id);
+                    }
+                }
+                ToPresentation::Manifest(mani) => {
+                    manifest.present(mani, &mut mgr);
+                }
+                ToPresentation::ContentsNotExist(c_id) => {
+                    if question.ask(
+                        &format!(
+                            "Content {} was not created. Do you want to create one?",
+                            c_id
+                        ),
+                        &mut mgr,
+                    ) {
+                        // let manifest = create_manifest(&mut mgr);
+                        // TODO: send Data to Swarm
                     }
                 }
             }

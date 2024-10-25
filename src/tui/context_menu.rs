@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use animaterm::prelude::*;
-use animaterm::utilities::message_box;
 
 #[derive(Copy, Clone)]
 struct FrameSet {
@@ -83,20 +82,20 @@ impl CMenu {
         loop {
             if let Some(key) = mgr.read_key() {
                 match key {
-                    Key::Up => {
+                    Key::Up | Key::K | Key::CtrlP => {
                         selection = self.current_set.prev_frame(selection);
                         // eprintln!("UP {}", selection);
                         mgr.set_graphic(self.g_id, selection, false);
                     }
-                    Key::Down => {
+                    Key::Down | Key::J | Key::CtrlN => {
                         selection = self.current_set.next_frame(selection);
                         // eprintln!("DOWN {}", selection);
                         mgr.set_graphic(self.g_id, selection, false);
                     }
-                    Key::Enter => {
+                    Key::Enter | Key::Space => {
                         mgr.set_graphic(self.g_id, 0, false);
                         mgr.move_graphic(self.g_id, 0, (offset.0 * -1, offset.1 * -1));
-                        return selection;
+                        return selection - self.current_set.starting_frame;
                     }
                     Key::Escape => {
                         mgr.set_graphic(self.g_id, 0, false);
