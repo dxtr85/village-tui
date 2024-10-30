@@ -26,7 +26,7 @@ pub struct Manifest {
 //  (We already have some built-in Reconfigs.)
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Tag(String);
+pub struct Tag(pub String);
 impl Tag {
     pub fn new(name: String) -> Result<Self, ()> {
         if name.len() <= 32 {
@@ -149,7 +149,7 @@ impl Manifest {
                     let tag = Tag::new(String::from_utf8(name_bytes).unwrap()).unwrap();
                     tags.insert(current_tag_id, tag);
                 }
-                current_tag_id += 1;
+                current_tag_id = current_tag_id.saturating_add(1);
             }
         }
         Self {

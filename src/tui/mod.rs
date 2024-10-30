@@ -15,6 +15,7 @@ use std::time::Duration;
 mod ask;
 mod context_menu;
 mod manifest;
+mod tag;
 mod tile;
 use crate::logic::Tag;
 use ask::Question;
@@ -324,8 +325,8 @@ pub fn serve_tui_mgr(
                 Key::T => {
                     //TODO
                     eprintln!("Sending add tag request from presentation layer");
-                    let mut tags = Vec::with_capacity(33);
-                    for i in 0..33 {
+                    let mut tags = Vec::with_capacity(256);
+                    for i in 0..=255 {
                         tags.push(Tag::new(format!("Tag #{}", i)).unwrap());
                     }
                     let _ = to_app.send(FromPresentation::AddTags(tags));
