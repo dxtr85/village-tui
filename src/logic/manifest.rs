@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::hash::{DefaultHasher, Hasher};
 
+#[derive(Clone)]
 pub struct Manifest {
     pub app_type: AppType,
     pub description: String,

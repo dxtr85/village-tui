@@ -13,12 +13,14 @@ use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 mod ask;
+mod content_creator;
 mod context_menu;
 mod manifest;
 mod tag;
 mod tile;
 use crate::logic::Tag;
 use ask::Question;
+use content_creator::Creator;
 use context_menu::CMenu;
 use manifest::ManifestTui;
 use tile::Tile;
@@ -290,8 +292,14 @@ pub fn serve_tui_mgr(
     input.show(&mut mgr);
     mgr.restore_display(main_display, true);
     let mut c_menu = CMenu::new(&mut mgr);
-    let mut question = Question::new(&mut mgr);
-    let mut manifest = ManifestTui::new(AppType::Catalog, &mut mgr);
+    let mut creator = Creator::new(&mut mgr);
+    let mut d_type_map = HashMap::new();
+    d_type_map.insert(DataType::Data(0), "Text".to_string());
+    d_type_map.insert(DataType::Data(1), "Text file".to_string());
+    d_type_map.insert(DataType::Data(2), "Binary file".to_string());
+    let question = Question::new(&mut mgr);
+    let mut manifest = Manifest::new(AppType::Catalog, HashMap::new());
+    let mut manifest_tui = ManifestTui::new(AppType::Catalog, &mut mgr);
     let set_id = c_menu.add_set(
         &mut mgr,
         vec![
@@ -321,6 +329,22 @@ pub fn serve_tui_mgr(
                             print!("A: {}", other);
                         }
                     }
+                }
+                Key::C => {
+                    let read_only = false;
+                    let d_type = DataType::Data(0);
+                    if let Some((d_type, data)) = creator.show(
+                        &mut mgr,
+                        &manifest,
+                        read_only,
+                        d_type,
+                        vec![],
+                        String::new(),
+                        &d_type_map,
+                    ) {
+                        //TODO
+                        eprintln!("We have some work to do…");
+                    };
                 }
                 Key::T => {
                     //TODO
@@ -424,7 +448,8 @@ pub fn serve_tui_mgr(
                     }
                 }
                 ToPresentation::Manifest(mani) => {
-                    manifest.present(mani, &mut mgr);
+                    manifest = mani.clone();
+                    manifest_tui.present(mani, &mut mgr);
                 }
                 ToPresentation::ContentsNotExist(c_id) => {
                     if question.ask(

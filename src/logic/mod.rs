@@ -77,9 +77,11 @@ impl ApplicationLogic {
                         //TODO: we need to create logic that converts user data like String
                         //      into SyncData|CastData before we can send it to Swarm
                         let data = text_to_data(text);
-                        let _ = self
-                            .to_app_mgr_send
-                            .send(ToAppMgr::AppendContent(self.active_swarm.swarm_id, data));
+                        let _ = self.to_app_mgr_send.send(ToAppMgr::AppendContent(
+                            self.active_swarm.swarm_id,
+                            DataType::from(0),
+                            data,
+                        ));
                     }
                     FromPresentation::AddTags(tags) => {
                         // TODO: first check if we can add a tag for given swarm
@@ -304,6 +306,7 @@ impl ApplicationLogic {
             Key::S => {
                 let _ = self.to_app_mgr_send.send(ToAppMgr::AppendContent(
                     self.active_swarm.swarm_id,
+                    DataType::Data(0),
                     Data::empty(0),
                 ));
             }
@@ -311,6 +314,7 @@ impl ApplicationLogic {
                 // TODO: extend this message with actual content
                 let _ = self.to_app_mgr_send.send(ToAppMgr::AppendContent(
                     self.active_swarm.swarm_id,
+                    DataType::Data(0),
                     Data::empty(0),
                 ));
                 // let data = vec![next_val; 1024];
