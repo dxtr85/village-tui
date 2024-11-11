@@ -192,6 +192,7 @@ impl ApplicationLogic {
                     }
                     ToApp::NewContent(s_id, c_id, d_type) => {
                         if s_id == self.active_swarm.swarm_id && home_swarm_enforced {
+                            eprintln!("ToApp::NewContent({:?},{:?})", c_id, d_type);
                             let _ = self
                                 .to_tui_send
                                 .send(ToPresentation::AppendContent(c_id, d_type));

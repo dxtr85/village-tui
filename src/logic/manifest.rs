@@ -9,6 +9,7 @@ pub struct Manifest {
     pub app_type: AppType,
     pub description: String,
     pub tags: HashMap<u8, Tag>,
+    pub d_types: HashMap<u8, Tag>,
 }
 // TODO: a new Manifest definition, with attributes being added as needed during development
 //  Manifest should apply to a Swarm, not an Application, application is defined in code
@@ -54,6 +55,7 @@ impl Manifest {
             app_type,
             description: String::new(),
             tags,
+            d_types: HashMap::new(),
         }
     }
 
@@ -110,11 +112,13 @@ impl Manifest {
         eprintln!("Constructing manifest from: {} Data blocks", data_count);
         let mut app_type = AppType::Other(0);
         let mut tags = HashMap::new();
+        let mut d_types = HashMap::new();
         if data_count == 0 {
             return Manifest {
                 app_type,
                 description: String::new(),
                 tags,
+                d_types,
             };
         }
         let mut data_iter = data_vec.into_iter();
@@ -153,10 +157,12 @@ impl Manifest {
                 current_tag_id = current_tag_id.saturating_add(1);
             }
         }
+        // TODO: read data types!
         Self {
             app_type,
             description,
             tags,
+            d_types,
         }
     }
 
@@ -247,5 +253,23 @@ impl Manifest {
                 break;
             }
         }
+    }
+    pub fn tag_names(&self) -> Vec<String> {
+        let mut tag_names = Vec::with_capacity(256);
+        for id in 0..=255 {
+            if let Some(tag) = self.tags.get(&id) {
+                tag_names.push(tag.0.clone());
+            }
+        }
+        tag_names
+    }
+    pub fn dtype_names(&self) -> Vec<String> {
+        let mut type_names = Vec::with_capacity(256);
+        for id in 0..=255 {
+            if let Some(tag) = self.d_types.get(&id) {
+                type_names.push(tag.0.clone());
+            }
+        }
+        type_names
     }
 }

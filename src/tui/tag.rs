@@ -1,17 +1,18 @@
-use crate::logic::Tag;
+// use crate::logic::Tag;
 use animaterm::prelude::Glyph;
 use animaterm::prelude::Graphic;
 use animaterm::prelude::Manager;
 use std::collections::HashMap;
 
-pub struct TagTui {
-    tag_id: u8,
+pub struct Option {
+    pub index: usize,
     g_id: usize,
+    active: bool,
 }
 
-impl TagTui {
+impl Option {
     pub fn new(offset: (isize, isize), mgr: &mut Manager) -> Self {
-        eprintln!("add {:?}", offset);
+        // eprintln!("add {:?}", offset);
         let mut library = HashMap::new();
         let mut g = Glyph::char('-');
         // 0 - frame not selected, not activated
@@ -32,10 +33,15 @@ impl TagTui {
         let g_id = mgr
             .add_graphic(Graphic::new(32, 1, 0, library, None), 4, offset)
             .unwrap();
-        TagTui { tag_id: 0, g_id }
+        Option {
+            index: 0,
+            g_id,
+            active: false,
+        }
     }
     pub fn present(&mut self, selected: bool, activated: bool, mgr: &mut Manager) {
         //TODO
+        self.active = activated;
         let f_id = match (selected, activated) {
             (false, false) => 0,
             (true, false) => 1,
@@ -50,8 +56,8 @@ impl TagTui {
         mgr.move_graphic(self.g_id, 0, (0, 0));
         // mgr.set_graphic(self.g_id, 0, false);
     }
-    pub fn update(&mut self, id: u8, text: &str, mgr: &mut Manager) {
-        self.tag_id = id;
+    pub fn update(&mut self, id: usize, text: &str, mgr: &mut Manager) {
+        self.index = id;
         mgr.set_graphic(self.g_id, 0, false);
         let mut c_iter = text.chars();
         let mut g = Glyph::plain();

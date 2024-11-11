@@ -15,14 +15,14 @@ use std::time::Duration;
 mod ask;
 mod content_creator;
 mod context_menu;
-mod manifest;
+mod selector;
 mod tag;
 mod tile;
 use crate::logic::Tag;
 use ask::Question;
 use content_creator::Creator;
 use context_menu::CMenu;
-use manifest::ManifestTui;
+use selector::Selector;
 use tile::Tile;
 use tile::TileType;
 
@@ -148,7 +148,7 @@ impl VillageLayout {
         mgr: &mut Manager,
     ) -> (u8, u8) {
         let tile_id = self.next_field_tile();
-        eprintln!("Next id: {:?}", tile_id);
+        // eprintln!("Next id: {:?}", tile_id);
         let tile = self.tiles.get_mut(&tile_id).unwrap();
         tile.set_to_content(d_type, c_id, false, mgr);
         tile_id
@@ -299,7 +299,7 @@ pub fn serve_tui_mgr(
     d_type_map.insert(DataType::Data(2), "Binary file".to_string());
     let question = Question::new(&mut mgr);
     let mut manifest = Manifest::new(AppType::Catalog, HashMap::new());
-    let mut manifest_tui = ManifestTui::new(AppType::Catalog, &mut mgr);
+    let mut manifest_tui = Selector::new(AppType::Catalog, &mut mgr);
     let set_id = c_menu.add_set(
         &mut mgr,
         vec![
@@ -427,6 +427,7 @@ pub fn serve_tui_mgr(
                     }
                 }
                 ToPresentation::AppendContent(c_id, d_type) => {
+                    eprintln!("ToPresentation::AppendContent({:?}, {:?})", c_id, d_type);
                     let tile_id = village.add_new_content(d_type, c_id, &mut mgr);
                     // tiles_mapping.insert(tile_id, TileType::Content(d_type, c_id));
                 }
@@ -449,7 +450,12 @@ pub fn serve_tui_mgr(
                 }
                 ToPresentation::Manifest(mani) => {
                     manifest = mani.clone();
-                    manifest_tui.present(mani, &mut mgr);
+                    let tag_names = mani.tag_names();
+                    let _selected = manifest_tui.select(&tag_names, &mut mgr);
+                    eprintln!("Selected tags: ");
+                    for index in _selected {
+                        eprintln!("{} - {}", index, tag_names.get(index).unwrap());
+                    }
                 }
                 ToPresentation::ContentsNotExist(c_id) => {
                     if question.ask(
@@ -535,16 +541,6 @@ fn serve_input(
                 // eprint!("code: {:?}", ch);
                 input.insert(&mut mgr, ch);
             }
-            // //Backspace
-            // if ch == '\u{7f}' {
-            //     eprint!(r"BS");
-            //     // break;
-            // }
-            // //Escape
-            // if ch == '\u{1b}' {
-            //     eprint!("Esc");
-            //     break;
-            // }
         }
     }
 }
