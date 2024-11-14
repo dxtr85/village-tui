@@ -12,7 +12,6 @@ pub struct Option {
 
 impl Option {
     pub fn new(offset: (isize, isize), mgr: &mut Manager) -> Self {
-        // eprintln!("add {:?}", offset);
         let mut library = HashMap::new();
         let mut g = Glyph::char('-');
         // 0 - frame not selected, not activated

@@ -15,8 +15,8 @@ use std::time::Duration;
 mod ask;
 mod content_creator;
 mod context_menu;
+mod option;
 mod selector;
-mod tag;
 mod tile;
 use crate::logic::Tag;
 use ask::Question;
@@ -216,7 +216,7 @@ impl VillageLayout {
         } else {
             (self.selected_tile.0 as isize) * 8
         };
-        eprintln!("sel: {:?}, (x,y): {:?}", self.selected_tile, (x, y));
+        // eprintln!("sel: {:?}, (x,y): {:?}", self.selected_tile, (x, y));
         (x, y)
     }
 }
@@ -319,7 +319,7 @@ pub fn serve_tui_mgr(
             match key {
                 Key::AltEnter | Key::Space => {
                     let action = c_menu.show(&mut mgr, set_id, village.cm_position());
-                    eprintln!("Sel: {}", action);
+                    // eprintln!("Sel: {}", action);
                     match action {
                         1 => {
                             eprintln!("Requesting manifest");
@@ -451,7 +451,7 @@ pub fn serve_tui_mgr(
                 ToPresentation::Manifest(mani) => {
                     manifest = mani.clone();
                     let tag_names = mani.tag_names();
-                    let _selected = manifest_tui.select(&tag_names, &mut mgr);
+                    let _selected = manifest_tui.select(&tag_names, &mut mgr, false);
                     eprintln!("Selected tags: ");
                     for index in _selected {
                         eprintln!("{} - {}", index, tag_names.get(index).unwrap());
