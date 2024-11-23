@@ -2,7 +2,6 @@ use async_std::task::spawn_blocking;
 use dapp_lib::prelude::*;
 use std::env::args;
 use std::sync::mpsc::channel;
-mod input;
 mod logic;
 mod tui;
 use logic::ApplicationLogic;

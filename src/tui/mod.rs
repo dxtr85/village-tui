@@ -1,4 +1,3 @@
-use crate::input::Input;
 use crate::logic::Manifest;
 use animaterm::prelude::*;
 use animaterm::utilities::message_box;
@@ -15,16 +14,20 @@ use std::time::Duration;
 mod ask;
 mod content_creator;
 mod context_menu;
+mod editor;
 mod option;
 mod selector;
 mod tile;
+mod viewer;
 use crate::logic::Tag;
 use ask::Question;
 use content_creator::Creator;
 use context_menu::CMenu;
+use editor::Editor;
 use selector::Selector;
 use tile::Tile;
 use tile::TileType;
+use viewer::Viewer;
 
 pub struct VillageLayout {
     my_id: GnomeId,
@@ -241,6 +244,7 @@ pub enum ToPresentation {
 pub enum FromPresentation {
     //TODO: we don't want to send Keys out of TUI, rather instructions depending on
     // context where given key was pressed
+    AddDataType(Tag),
     AddTags(Vec<Tag>),
     NewUserEntry(String),
     ContentInquiry(ContentID),
@@ -288,10 +292,11 @@ pub fn serve_tui_mgr(
     // eprintln!("Serving TUI Manager scr size: {}x{}", s_size.0, s_size.1);
     let main_display = 0;
     let input_display = mgr.new_display(true);
-    let mut input = Input::new(&mut mgr);
-    input.show(&mut mgr);
+    let mut editor = Editor::new(&mut mgr);
+    editor.show(&mut mgr);
     mgr.restore_display(main_display, true);
     let mut c_menu = CMenu::new(&mut mgr);
+    // let mut viewer = Viewer::new(&mut mgr);
     let mut creator = Creator::new(&mut mgr);
     let mut d_type_map = HashMap::new();
     d_type_map.insert(DataType::Data(0), "Text".to_string());
@@ -304,8 +309,8 @@ pub fn serve_tui_mgr(
         &mut mgr,
         vec![
             " Manifest".to_string(),
-            " Dwa".to_string(),
-            " Trzy".to_string(),
+            " Add TAG".to_string(),
+            " Add data type".to_string(),
             " Cztery".to_string(),
             " Pięć".to_string(),
             " Sześć".to_string(),
@@ -325,11 +330,65 @@ pub fn serve_tui_mgr(
                             eprintln!("Requesting manifest");
                             let _ = to_app.send(FromPresentation::ContentInquiry(0));
                         }
+                        2 => {
+                            eprintln!("Adding new TAG");
+                            let edit_result = serve_editor(
+                                input_display,
+                                main_display,
+                                &mut editor,
+                                " Max size: 32  Oneline  Define new Tag name    (TAB to finish)",
+                                // true,
+                                false,
+                                // None,
+                                Some(32),
+                                &mut mgr,
+                            );
+                            if let Some(text) = edit_result {
+                                eprintln!("Got: '{}'", text);
+                                let tags = vec![Tag::new(text).unwrap()];
+                                let _ = to_app.send(FromPresentation::AddTags(tags));
+                            }
+                        }
+                        3 => {
+                            eprintln!("Adding new DataType");
+                            let edit_result = serve_editor(
+                                input_display,
+                                main_display,
+                                &mut editor,
+                                " Max size: 32  Oneline  Define new DataType   (TAB to finish)",
+                                // true,
+                                false,
+                                // None,
+                                Some(32),
+                                &mut mgr,
+                            );
+                            if let Some(text) = edit_result {
+                                eprintln!("Got: '{}'", text);
+                                let _ = to_app
+                                    .send(FromPresentation::AddDataType(Tag::new(text).unwrap()));
+                            }
+                        }
                         other => {
                             print!("A: {}", other);
                         }
                     }
                 }
+                // Key::A => {
+                //     let read_only = false;
+                //     let d_type = DataType::Data(0);
+                //     if let Some((d_type, data)) = editor.show(
+                //         &mut mgr,
+                //         &manifest,
+                //         read_only,
+                //         d_type,
+                //         vec![],
+                //         String::new(),
+                //         &d_type_map,
+                //     ) {
+                //         //TODO
+                //         eprintln!("We have some work to do…");
+                //     };
+                // }
                 Key::C => {
                     let read_only = false;
                     let d_type = DataType::Data(0);
@@ -385,10 +444,21 @@ pub fn serve_tui_mgr(
                                 let action = c_menu.show(&mut mgr, 0, village.cm_position());
                                 continue;
                             }
-                            let typed_text =
-                                serve_input(input_display, main_display, &mut input, &mut mgr);
-                            eprintln!("Got: {}", typed_text);
-                            let _ = to_app.send(FromPresentation::NewUserEntry(typed_text));
+                            let edit_result = serve_editor(
+                                input_display,
+                                main_display,
+                                &mut editor,
+                                " Max size: 6  Oneline  Define new Tag name    (TAB to finish)",
+                                // true,
+                                false,
+                                // None,
+                                Some(6),
+                                &mut mgr,
+                            );
+                            if let Some(text) = edit_result {
+                                eprintln!("Got: '{}'", text);
+                                let _ = to_app.send(FromPresentation::NewUserEntry(text));
+                            }
                         }
                         TileType::Neighbor(n_id) => {
                             let _ = to_app.send(FromPresentation::NeighborSelected(n_id));
@@ -450,6 +520,10 @@ pub fn serve_tui_mgr(
                 }
                 ToPresentation::Manifest(mani) => {
                     manifest = mani.clone();
+                    eprintln!("DTypes: ");
+                    for (index, tag) in &manifest.d_types {
+                        eprintln!("{} - {}", index, tag.0);
+                    }
                     let tag_names = mani.tag_names();
                     let _selected = manifest_tui.select(&tag_names, &mut mgr, false);
                     eprintln!("Selected tags: ");
@@ -476,73 +550,23 @@ pub fn serve_tui_mgr(
     mgr.terminate();
 }
 
-fn serve_input(
-    input_display: usize,
+fn serve_editor(
+    editor_display: usize,
     main_display: usize,
-    input: &mut Input,
+    editor: &mut Editor,
+    title: &str,
+    allow_newlines: bool,
+    byte_limit: Option<u16>,
     mut mgr: &mut Manager,
-) -> String {
-    mgr.restore_display(input_display, true);
-    eprint!("Type text in (press TAB to finish): ");
-    // input.show(&mut mgr);
-    loop {
-        // TODO: here we need to build a text input window and add logic
-        // for handling backspace, escape, delete...
-        if let Some(ch) = mgr.read_char() {
-            // eprintln!("Some ch: {}", ch);
-            if let Some(key) = map_private_char_to_key(ch) {
-                // eprintln!("Some key: {:?}", key);
-                match key {
-                    Key::Up => input.move_cursor(Direction::Up, &mut mgr),
-                    Key::Down => input.move_cursor(Direction::Down, &mut mgr),
-                    Key::Left => input.move_cursor(Direction::Left, &mut mgr),
-                    Key::Right => input.move_cursor(Direction::Right, &mut mgr),
-                    Key::Home => input.move_to_line_start(&mut mgr),
-                    Key::End => input.move_to_line_end(&mut mgr),
-                    Key::Delete => input.delete(&mut mgr),
-                    Key::AltB => {
-                        input.move_cursor(Direction::Left, &mut mgr);
-                        input.move_cursor(Direction::Left, &mut mgr);
-                        input.move_cursor(Direction::Left, &mut mgr);
-                        input.move_cursor(Direction::Left, &mut mgr);
-                    }
-                    Key::AltF => {
-                        input.move_cursor(Direction::Right, &mut mgr);
-                        input.move_cursor(Direction::Right, &mut mgr);
-                        input.move_cursor(Direction::Right, &mut mgr);
-                        input.move_cursor(Direction::Right, &mut mgr);
-                    }
-                    other => eprint!("Other: {}", other),
-                }
-            } else if ch == '\t' {
-                let taken = input.take_text(&mut mgr);
-                mgr.restore_display(main_display, true);
-                return taken;
-            } else if ch == '\u{7f}' {
-                input.backspace(&mut mgr);
-            } else if ch == '\u{1}' {
-                input.move_to_line_start(&mut mgr);
-            } else if ch == '\u{5}' {
-                input.move_to_line_end(&mut mgr);
-            } else if ch == '\u{a}' {
-                input.move_cursor(Direction::Down, &mut mgr);
-                input.move_to_line_start(&mut mgr);
-            } else if ch == '\u{b}' {
-                input.remove_chars_from_cursor_to_end(&mut mgr);
-            } else if ch == '\u{e}' {
-                input.move_cursor(Direction::Down, &mut mgr);
-            } else if ch == '\u{10}' {
-                input.move_cursor(Direction::Up, &mut mgr);
-            } else if ch == '\u{2}' {
-                input.move_cursor(Direction::Left, &mut mgr);
-            } else if ch == '\u{6}' {
-                input.move_cursor(Direction::Right, &mut mgr);
-            } else {
-                // eprint!("code: {:?}", ch);
-                input.insert(&mut mgr, ch);
-            }
-        }
-    }
+) -> Option<String> {
+    mgr.restore_display(editor_display, true);
+    editor.set_title(mgr, title);
+    editor.allow_newlines(allow_newlines);
+    editor.set_limit(byte_limit);
+    // eprint!("Type text in (press TAB to finish): ");
+    let result = editor.run(mgr);
+    mgr.restore_display(main_display, true);
+    result
 }
 
 fn swap_tiles(

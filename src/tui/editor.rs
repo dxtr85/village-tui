@@ -1,17 +1,19 @@
 use crate::tui::Direction;
-use animaterm::prelude::*;
 use animaterm::utilities::message_box;
+use animaterm::{glyph, prelude::*};
 //TODO: we need to create a text input logic that will handle screen and update text
 // with provided char.
 // Input can be also modified/ended when receiving a Key.
 
-pub struct Input {
+pub struct Editor {
     pub g_id: usize,
-    text: Vec<String>,
+    lines: Vec<String>,
     cursor_position: (usize, usize),
     max_position: (usize, usize),
+    allow_newlines: bool,
+    byte_limit: Option<u16>,
 }
-impl Input {
+impl Editor {
     pub fn new(mgr: &mut Manager) -> Self {
         let (cols, rows) = mgr.screen_size();
         let m_box = message_box(
@@ -22,12 +24,20 @@ impl Input {
             rows,
         );
         let g_id = mgr.add_graphic(m_box, 0, (0, 0)).unwrap();
-        Input {
+        Editor {
             g_id,
-            text: vec![String::new(); rows],
+            lines: vec![String::new(); rows],
             cursor_position: (2, 1),
             max_position: (cols - 2, rows - 2),
+            allow_newlines: true,
+            byte_limit: None,
         }
+    }
+    pub fn allow_newlines(&mut self, allow: bool) {
+        self.allow_newlines = allow;
+    }
+    pub fn set_limit(&mut self, limit: Option<u16>) {
+        self.byte_limit = limit;
     }
     pub fn show(&mut self, mgr: &mut Manager) {
         // mgr.move_graphic(self.g_id, 2, (0, 0));
@@ -58,11 +68,29 @@ impl Input {
             self.cursor_position.0,
             self.cursor_position.1,
         );
+        //A primitive way to enforce max String size
+        // TODO: find a better solution
+        if let Some(byte_limit) = self.byte_limit {
+            while result.len() > byte_limit as usize {
+                result.pop();
+            }
+        }
         result
     }
     pub fn insert(&mut self, mgr: &mut Manager, ch: char) {
-        let len = self.text[self.cursor_position.1].chars().count();
-        if len >= self.max_position.0 - 2 {
+        //TODO: we need to take into consideration self.byte_limit
+        //
+        if let Some(byte_limit) = self.byte_limit {
+            let mut cur_size = 0;
+            for line in &self.lines {
+                cur_size = cur_size + line.len();
+            }
+            if cur_size >= byte_limit as usize {
+                return;
+            }
+        }
+        let line_chars_count = self.lines[self.cursor_position.1].chars().count();
+        if line_chars_count >= self.max_position.0 - 2 {
             return;
         }
         let glyph = if ch == '\n' {
@@ -70,11 +98,11 @@ impl Input {
         } else {
             Glyph::char(ch)
         };
-        if self.cursor_position.0 - 2 == len {
-            self.text[self.cursor_position.1].push(ch);
+        if self.cursor_position.0 - 2 == line_chars_count {
+            self.lines[self.cursor_position.1].push(ch);
         } else {
-            let mut chars = self.text[self.cursor_position.1].chars();
-            let mut new_string = String::with_capacity(len);
+            let mut chars = self.lines[self.cursor_position.1].chars();
+            let mut new_string = String::with_capacity(line_chars_count);
             for _i in 0..self.cursor_position.0 - 2 {
                 if let Some(char) = chars.next() {
                     new_string.push(char);
@@ -94,7 +122,7 @@ impl Input {
                 );
                 i += 1;
             }
-            self.text[self.cursor_position.1] = new_string;
+            self.lines[self.cursor_position.1] = new_string;
         }
         mgr.set_glyph(
             self.g_id,
@@ -133,7 +161,7 @@ impl Input {
     pub fn backspace(&mut self, mgr: &mut Manager) {
         let glyph = Glyph::plain();
         let mut last_char = false;
-        let len = self.text[self.cursor_position.1].chars().count();
+        let len = self.lines[self.cursor_position.1].chars().count();
         // eprintln!("cursor position: {}", self.cursor_position.0);
         if len < self.cursor_position.0 - 2 {
             //Do nothing
@@ -147,7 +175,7 @@ impl Input {
                 self.cursor_position.1,
             );
             last_char = true;
-            self.text[self.cursor_position.1].pop();
+            self.lines[self.cursor_position.1].pop();
             mgr.set_glyph(
                 self.g_id,
                 Glyph::plain(),
@@ -169,7 +197,7 @@ impl Input {
             //     len,
             //     self.cursor_position.0 - 2
             // );
-            let mut chars = self.text[self.cursor_position.1].chars();
+            let mut chars = self.lines[self.cursor_position.1].chars();
             let mut new_string = String::with_capacity(len);
             for _i in 0..self.cursor_position.0 - 3 {
                 if let Some(char) = chars.next() {
@@ -190,7 +218,7 @@ impl Input {
                 );
                 i += 1;
             }
-            self.text[self.cursor_position.1] = new_string;
+            self.lines[self.cursor_position.1] = new_string;
             mgr.set_glyph(
                 self.g_id,
                 Glyph::plain(),
@@ -207,7 +235,7 @@ impl Input {
                 self.cursor_position = (2, 1);
             } else {
                 // eprintln!("end of prev line: {}", self.text[self.cursor_position.1]);
-                self.cursor_position.0 = self.text[self.cursor_position.1].chars().count() + 2;
+                self.cursor_position.0 = self.lines[self.cursor_position.1].chars().count() + 2;
             }
         }
         mgr.get_glyph(self.g_id, self.cursor_position.0, self.cursor_position.1);
@@ -237,13 +265,13 @@ impl Input {
             return;
         }
         // eprintln!("next position: {}", next_position.0);
-        let len = self.text[self.cursor_position.1].chars().count();
+        let len = self.lines[self.cursor_position.1].chars().count();
         if len < next_position.0 - 2 {
             //do nothing
             // eprintln!("del 1");
         } else if len == next_position.0 - 2 {
             // eprintln!("del 2");
-            self.text[self.cursor_position.1].pop();
+            self.lines[self.cursor_position.1].pop();
             mgr.set_glyph(
                 self.g_id,
                 Glyph::plain(),
@@ -252,7 +280,7 @@ impl Input {
             );
         } else {
             // eprintln!("del 3");
-            let mut chars = self.text[next_position.1].chars();
+            let mut chars = self.lines[next_position.1].chars();
             let mut new_string = String::with_capacity(len);
             for _i in 0..self.cursor_position.0 - 2 {
                 if let Some(char) = chars.next() {
@@ -269,7 +297,7 @@ impl Input {
                 i += 1;
             }
             mgr.set_glyph(self.g_id, Glyph::plain(), i, next_position.1);
-            self.text[self.cursor_position.1] = new_string;
+            self.lines[self.cursor_position.1] = new_string;
         }
         mgr.get_glyph(self.g_id, self.cursor_position.0, self.cursor_position.1);
         if let Ok(AnimOk::GlyphRetrieved(_u, mut glyph)) = mgr.read_result() {
@@ -285,7 +313,7 @@ impl Input {
         }
     }
     pub fn remove_chars_from_cursor_to_end(&mut self, mgr: &mut Manager) -> String {
-        let mut chars = self.text[self.cursor_position.1].chars();
+        let mut chars = self.lines[self.cursor_position.1].chars();
         let mut new_string = String::with_capacity(self.max_position.0);
         let mut old_string = String::with_capacity(self.max_position.0);
         for _i in 0..self.cursor_position.0 - 2 {
@@ -322,7 +350,7 @@ impl Input {
             i += 1;
         }
         // eprint!("NS: {} ;", new_string);
-        self.text[self.cursor_position.1] = new_string;
+        self.lines[self.cursor_position.1] = new_string;
         old_string
     }
     pub fn move_to_line_start(&mut self, mgr: &mut Manager) {
@@ -364,7 +392,7 @@ impl Input {
                 self.cursor_position.1,
             );
         }
-        self.cursor_position.0 = self.text[self.cursor_position.1].chars().count() + 2;
+        self.cursor_position.0 = self.lines[self.cursor_position.1].chars().count() + 2;
         mgr.get_glyph(self.g_id, self.cursor_position.0, self.cursor_position.1);
         if let Ok(AnimOk::GlyphRetrieved(_u, mut glyph)) = mgr.read_result() {
             glyph.set_blink(true);
@@ -425,6 +453,96 @@ impl Input {
                 self.cursor_position.0,
                 self.cursor_position.1,
             );
+        }
+    }
+    pub fn set_title(&mut self, mgr: &mut Manager, title: &str) {
+        let mut chars = title.chars();
+        let mut g = glyph::Glyph::char('*');
+        for i in 1..self.max_position.0 {
+            if let Some(char) = chars.next() {
+                g.set_char(char);
+            } else {
+                g.set_char('─');
+            }
+            mgr.set_glyph(self.g_id, g, i, 0);
+        }
+    }
+    pub fn run(&mut self, mgr: &mut Manager) -> Option<String> {
+        loop {
+            if let Some(ch) = mgr.read_char() {
+                // eprintln!("Some ch: {}", ch);
+                if let Some(key) = map_private_char_to_key(ch) {
+                    // eprintln!("Some key: {:?}", key);
+                    match key {
+                        Key::Up => {
+                            if self.allow_newlines {
+                                self.move_cursor(Direction::Up, mgr)
+                            }
+                        }
+                        Key::Down => {
+                            if self.allow_newlines {
+                                self.move_cursor(Direction::Down, mgr)
+                            }
+                        }
+                        Key::Left => self.move_cursor(Direction::Left, mgr),
+                        Key::Right => self.move_cursor(Direction::Right, mgr),
+                        Key::Home => self.move_to_line_start(mgr),
+                        Key::End => self.move_to_line_end(mgr),
+                        Key::Delete => self.delete(mgr),
+                        Key::AltB => {
+                            self.move_cursor(Direction::Left, mgr);
+                            self.move_cursor(Direction::Left, mgr);
+                            self.move_cursor(Direction::Left, mgr);
+                            self.move_cursor(Direction::Left, mgr);
+                        }
+                        Key::AltF => {
+                            self.move_cursor(Direction::Right, mgr);
+                            self.move_cursor(Direction::Right, mgr);
+                            self.move_cursor(Direction::Right, mgr);
+                            self.move_cursor(Direction::Right, mgr);
+                        }
+                        other => eprint!("Other: {}", other),
+                    }
+                } else if ch == '\t' {
+                    let taken = self.take_text(mgr);
+                    // mgr.restore_display(main_display, true);
+                    return Some(taken);
+                } else if ch == '\u{7f}' {
+                    self.backspace(mgr);
+                } else if ch == '\u{1}' {
+                    self.move_to_line_start(mgr);
+                } else if ch == '\u{5}' {
+                    self.move_to_line_end(mgr);
+                // } else if ch == '\u{a}' {
+                //     // Enter or newline
+                //     eprintln!("Enter!");
+                //     if self.allow_newlines {
+                //         self.move_cursor(Direction::Down, mgr);
+                //         self.move_to_line_start(mgr);
+                //     }
+                } else if ch == '\u{b}' {
+                    self.remove_chars_from_cursor_to_end(mgr);
+                } else if ch == '\u{e}' {
+                    if self.allow_newlines {
+                        self.move_cursor(Direction::Down, mgr);
+                    }
+                } else if ch == '\u{10}' {
+                    if self.allow_newlines {
+                        self.move_cursor(Direction::Up, mgr);
+                    }
+                } else if ch == '\u{2}' {
+                    self.move_cursor(Direction::Left, mgr);
+                } else if ch == '\u{6}' {
+                    self.move_cursor(Direction::Right, mgr);
+                } else {
+                    // eprint!("code: {:?}", ch);
+                    if ch == '\n' && !self.allow_newlines {
+                        // Do nothing
+                    } else {
+                        self.insert(mgr, ch);
+                    }
+                }
+            }
         }
     }
 }

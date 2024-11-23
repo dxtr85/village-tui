@@ -5,41 +5,42 @@ use animaterm::prelude::Manager;
 use dapp_lib::prelude::DataType;
 use dapp_lib::Data;
 use std::collections::HashMap;
-// TODO: A full screen window with options to
-// - select data type
-// - add description
-// - add tags
-// - buttons to apply or cancel action
-//
-// It will be used to both create new content and update existing content.
-// It can be also used to view existing content in non-owned swarm,
-// but without option to edit it's fields.
-// You will be able to copy selected content as a link into your swarm,
-// and there you will be able to edit the link that you own.
-// When updating, DataType change will be blocked unless this is a Link
-// without TransformInfo.
-// As a result we get a modified Data block addressed at index 0 that we send to Swarm
-// for synchronization
-pub struct Creator {
+
+// TODO: Use Adder for adding new DataType or Tag
+pub struct Viewer {
     g_id: usize,
     width: usize,
     height: usize,
 }
 
-impl Creator {
+impl Viewer {
     pub fn new(mgr: &mut Manager) -> Self {
         let (width, height) = mgr.screen_size();
+        let (mut desired_width, mut desired_height) = (60, 8);
+        if width < desired_width {
+            desired_width = width;
+        }
+        if height < desired_height {
+            desired_height = height;
+        }
         let g = Glyph::char(' ');
-        let frame = vec![g; width * height];
+        let frame = vec![g; desired_width * desired_height];
         let mut library = HashMap::new();
         library.insert(0, frame);
         let g_id = mgr
-            .add_graphic(Graphic::new(width, height, 0, library, None), 0, (0, 0))
+            .add_graphic(
+                Graphic::new(desired_width, desired_height, 0, library, None),
+                0,
+                (
+                    (width - desired_width) as isize / 2,
+                    (height - desired_height) as isize / 2,
+                ),
+            )
             .unwrap();
-        Creator {
+        Viewer {
             g_id,
-            width,
-            height,
+            width: desired_width,
+            height: desired_height,
         }
     }
 
@@ -55,7 +56,10 @@ impl Creator {
         d_type_map: &HashMap<DataType, String>,
     ) -> Option<(DataType, Data)> {
         let d_text = if let Some(text) = d_type_map.get(&d_type) {
-            &format!("EDIT    DataType: {}", text)
+            &format!(
+                "Define new DataType                       bytes left: {}",
+                30
+            )
         } else {
             "EDIT    DataType: Unknown"
         };
@@ -70,7 +74,7 @@ impl Creator {
                 mgr.set_glyph(self.g_id, p, x, 1);
             }
         }
-        let t_text = "EDIT    Tags: Main Games Entertainment G:Kraków";
+        let t_text = "Descpription: Plaintext file";
         let mut char_iter = t_text.chars();
         for x in 2..self.width {
             if let Some(c) = char_iter.next() {
@@ -80,19 +84,9 @@ impl Creator {
                 mgr.set_glyph(self.g_id, p, x, 3);
             }
         }
-        let s_text = "EDIT    Description:  This is an example of a description.";
-        let mut char_iter = s_text.chars();
-        for x in 2..self.width {
-            if let Some(c) = char_iter.next() {
-                g.set_char(c);
-                mgr.set_glyph(self.g_id, g, x, 10);
-            } else {
-                mgr.set_glyph(self.g_id, p, x, 10);
-            }
-        }
-        let b_text = "APPLY    CANCEL";
+        let b_text = "                    APPLY    CANCEL";
         let mut char_iter = b_text.chars();
-        let y = self.height - 3;
+        let y = self.height - 2;
         for x in 2..self.width {
             if let Some(c) = char_iter.next() {
                 g.set_char(c);
