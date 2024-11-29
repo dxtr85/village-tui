@@ -70,18 +70,19 @@ impl ApplicationLogic {
             sleep(dur).await;
             if let Ok(from_tui) = self.from_tui_recv.try_recv() {
                 match from_tui {
-                    FromPresentation::NewUserEntry(text) => {
+                    FromPresentation::CreateContent(d_type, data) => {
                         if !home_swarm_enforced {
-                            buffered_from_tui.push(FromPresentation::NewUserEntry(text));
+                            eprintln!("Push back AppendContent");
+                            buffered_from_tui.push(FromPresentation::CreateContent(d_type, data));
                             continue;
                         }
                         //TODO: we need to sync this data with Swarm
                         //TODO: we need to create logic that converts user data like String
                         //      into SyncData|CastData before we can send it to Swarm
-                        let data = text_to_data(text);
+                        eprintln!("Requesting AppendContent");
                         let _ = self.to_app_mgr_send.send(ToAppMgr::AppendContent(
                             self.active_swarm.swarm_id,
-                            DataType::from(0),
+                            d_type,
                             data,
                         ));
                     }
@@ -267,10 +268,25 @@ impl ApplicationLogic {
                                         self.to_tui_send.send(ToPresentation::Manifest(manifest));
                                 }
                             } else {
+                                eprintln!(
+                                    "Sending Contents from {},{} bytes",
+                                    d_vec.len(),
+                                    d_vec[0].len()
+                                );
                                 let mut text = String::new();
+                                let mut first_data = true;
                                 for data in d_vec {
-                                    text.push_str(&String::from_utf8(data.bytes()).unwrap());
+                                    let mut bytes = data.bytes();
+                                    if first_data {
+                                        first_data = false;
+                                        let how_many_tags = bytes.remove(0);
+                                        for i in 0..how_many_tags {
+                                            let _ = bytes.remove(0);
+                                        }
+                                    }
+                                    text.push_str(&String::from_utf8(bytes).unwrap());
                                 }
+                                eprintln!("Text len: {}", text.len());
                                 let _ = self.to_tui_send.send(ToPresentation::Contents(c_id, text));
                             }
                         } else {

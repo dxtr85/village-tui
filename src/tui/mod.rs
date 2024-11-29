@@ -12,6 +12,7 @@ use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 mod ask;
+mod button;
 mod content_creator;
 mod context_menu;
 mod editor;
@@ -246,7 +247,7 @@ pub enum FromPresentation {
     // context where given key was pressed
     AddDataType(Tag),
     AddTags(Vec<Tag>),
-    NewUserEntry(String),
+    CreateContent(DataType, Data),
     ContentInquiry(ContentID),
     NeighborSelected(GnomeId),
     KeyPress(Key),
@@ -308,16 +309,17 @@ pub fn serve_tui_mgr(
     let set_id = c_menu.add_set(
         &mut mgr,
         vec![
-            " Manifest".to_string(),
+            " TAGs".to_string(),
+            " Data types".to_string(),
             " Add TAG".to_string(),
             " Add data type".to_string(),
-            " Cztery".to_string(),
+            " Create new...".to_string(),
             " Pięć".to_string(),
             " Sześć".to_string(),
-            " Siedem".to_string(),
             " Konstantynopol".to_string(),
         ],
     );
+    let mut manifest_req: u8 = 0;
     loop {
         if let Some(key) = mgr.read_key() {
             let terminate = key == Key::Q || key == Key::ShiftQ;
@@ -328,15 +330,22 @@ pub fn serve_tui_mgr(
                     match action {
                         1 => {
                             eprintln!("Requesting manifest");
+                            manifest_req = 1;
                             let _ = to_app.send(FromPresentation::ContentInquiry(0));
                         }
                         2 => {
+                            manifest_req = 2;
+                            eprintln!("Requesting manifest");
+                            let _ = to_app.send(FromPresentation::ContentInquiry(0));
+                        }
+                        3 => {
                             eprintln!("Adding new TAG");
                             let edit_result = serve_editor(
                                 input_display,
                                 main_display,
                                 &mut editor,
                                 " Max size: 32  Oneline  Define new Tag name    (TAB to finish)",
+                                None,
                                 // true,
                                 false,
                                 // None,
@@ -349,13 +358,14 @@ pub fn serve_tui_mgr(
                                 let _ = to_app.send(FromPresentation::AddTags(tags));
                             }
                         }
-                        3 => {
+                        4 => {
                             eprintln!("Adding new DataType");
                             let edit_result = serve_editor(
                                 input_display,
                                 main_display,
                                 &mut editor,
                                 " Max size: 32  Oneline  Define new DataType   (TAB to finish)",
+                                None,
                                 // true,
                                 false,
                                 // None,
@@ -367,6 +377,29 @@ pub fn serve_tui_mgr(
                                 let _ = to_app
                                     .send(FromPresentation::AddDataType(Tag::new(text).unwrap()));
                             }
+                        }
+                        5 => {
+                            let read_only = false;
+                            let d_type = DataType::Data(0);
+                            if let Some((d_type, data)) = creator.show(
+                                &mut mgr,
+                                &manifest,
+                                &mut manifest_tui,
+                                read_only,
+                                d_type,
+                                vec![],
+                                String::new(),
+                                &d_type_map,
+                                main_display,
+                                input_display,
+                                &mut editor,
+                            ) {
+                                //TODO
+                                eprintln!("We have some work to do {:?} {}", d_type, data.len());
+                                let _ = to_app.send(FromPresentation::CreateContent(d_type, data));
+                            } else {
+                                eprintln!("Nothing to do from creator");
+                            };
                         }
                         other => {
                             print!("A: {}", other);
@@ -389,31 +422,31 @@ pub fn serve_tui_mgr(
                 //         eprintln!("We have some work to do…");
                 //     };
                 // }
-                Key::C => {
-                    let read_only = false;
-                    let d_type = DataType::Data(0);
-                    if let Some((d_type, data)) = creator.show(
-                        &mut mgr,
-                        &manifest,
-                        read_only,
-                        d_type,
-                        vec![],
-                        String::new(),
-                        &d_type_map,
-                    ) {
-                        //TODO
-                        eprintln!("We have some work to do…");
-                    };
-                }
-                Key::T => {
-                    //TODO
-                    eprintln!("Sending add tag request from presentation layer");
-                    let mut tags = Vec::with_capacity(256);
-                    for i in 0..=255 {
-                        tags.push(Tag::new(format!("Tag #{}", i)).unwrap());
-                    }
-                    let _ = to_app.send(FromPresentation::AddTags(tags));
-                }
+                // Key::C => {
+                //     let read_only = false;
+                //     let d_type = DataType::Data(0);
+                //     if let Some((d_type, data)) = creator.show(
+                //         &mut mgr,
+                //         &manifest,
+                //         read_only,
+                //         d_type,
+                //         vec![],
+                //         String::new(),
+                //         &d_type_map,
+                //     ) {
+                //         //TODO
+                //         eprintln!("We have some work to do…");
+                //     };
+                // }
+                // Key::T => {
+                //     //TODO
+                //     eprintln!("Sending add tag request from presentation layer");
+                //     let mut tags = Vec::with_capacity(256);
+                //     for i in 0..=255 {
+                //         tags.push(Tag::new(format!("Tag #{}", i)).unwrap());
+                //     }
+                //     let _ = to_app.send(FromPresentation::AddTags(tags));
+                // }
                 Key::Left | Key::H | Key::CtrlB => village.select_next(Direction::Left, &mut mgr),
                 Key::Right | Key::L | Key::CtrlF => village.select_next(Direction::Right, &mut mgr),
                 Key::Up | Key::K | Key::CtrlP => village.select_next(Direction::Up, &mut mgr),
@@ -449,6 +482,7 @@ pub fn serve_tui_mgr(
                                 main_display,
                                 &mut editor,
                                 " Max size: 6  Oneline  Define new Tag name    (TAB to finish)",
+                                None,
                                 // true,
                                 false,
                                 // None,
@@ -457,7 +491,7 @@ pub fn serve_tui_mgr(
                             );
                             if let Some(text) = edit_result {
                                 eprintln!("Got: '{}'", text);
-                                let _ = to_app.send(FromPresentation::NewUserEntry(text));
+                                // let _ = to_app.send(FromPresentation::CreateContent(text));
                             }
                         }
                         TileType::Neighbor(n_id) => {
@@ -503,33 +537,63 @@ pub fn serve_tui_mgr(
                 }
                 ToPresentation::Contents(c_id, text) => {
                     //TODO: display text
-                    let title = format!(" Content ID: {} ", c_id);
-                    let m_box = message_box(Some(title), text, Glyph::plain(), 80, 24);
-                    if let Some(g_id) = mgr.add_graphic(m_box, 3, (1, 1)) {
-                        // println!("mbox added!");
-                        mgr.set_graphic(g_id, 0, true);
-                        let mut hide = false;
-                        while !hide {
-                            if let Some(key) = mgr.read_key() {
-                                hide = true;
-                            }
-                        }
-                        mgr.move_graphic(g_id, 0, (0, 0));
-                        mgr.delete_graphic(g_id);
-                    }
+                    let title = format!(" Content ID: {} (len: {}) ", c_id, text.len());
+                    // let m_box = message_box(Some(title), text, Glyph::plain(), 80, 24);
+                    let _edit_result = serve_editor(
+                        input_display,
+                        main_display,
+                        &mut editor,
+                        &title,
+                        Some(text),
+                        true,
+                        None,
+                        &mut mgr,
+                    );
+                    // if let Some(g_id) = mgr.add_graphic(m_box, 3, (1, 1)) {
+                    //     // println!("mbox added!");
+                    //     mgr.set_graphic(g_id, 0, true);
+                    //     let mut hide = false;
+                    //     while !hide {
+                    //         if let Some(key) = mgr.read_key() {
+                    //             hide = true;
+                    //         }
+                    //     }
+                    //     mgr.move_graphic(g_id, 0, (0, 0));
+                    //     mgr.delete_graphic(g_id);
+                    // }
                 }
                 ToPresentation::Manifest(mani) => {
                     manifest = mani.clone();
-                    eprintln!("DTypes: ");
-                    for (index, tag) in &manifest.d_types {
-                        eprintln!("{} - {}", index, tag.0);
+                    if manifest_req == 1 {
+                        let tag_names = mani.tag_names();
+                        eprintln!("All tag names: {:?}", tag_names);
+                        let _selected = manifest_tui.select(
+                            "Catalog Application's Tags",
+                            &tag_names,
+                            &mut mgr,
+                            false,
+                        );
+                        eprintln!("Selected tags: ");
+                        for index in _selected {
+                            if let Some(value) = tag_names.get(index) {
+                                eprintln!("{} - {}", index, value);
+                            }
+                        }
+                    } else if manifest_req == 2 {
+                        let tag_names = mani.dtype_names();
+                        eprintln!("All dtype names: {:?}", tag_names);
+                        let _selected = manifest_tui.select(
+                            "Catalog Application's Data types",
+                            &tag_names,
+                            &mut mgr,
+                            true,
+                        );
+                        eprintln!("Selected data types: ");
+                        for index in _selected {
+                            eprintln!("{} - {}", index, tag_names.get(index).unwrap());
+                        }
                     }
-                    let tag_names = mani.tag_names();
-                    let _selected = manifest_tui.select(&tag_names, &mut mgr, false);
-                    eprintln!("Selected tags: ");
-                    for index in _selected {
-                        eprintln!("{} - {}", index, tag_names.get(index).unwrap());
-                    }
+                    manifest_req = 0;
                 }
                 ToPresentation::ContentsNotExist(c_id) => {
                     if question.ask(
@@ -550,19 +614,23 @@ pub fn serve_tui_mgr(
     mgr.terminate();
 }
 
-fn serve_editor(
+pub fn serve_editor(
     editor_display: usize,
     main_display: usize,
     editor: &mut Editor,
     title: &str,
+    initial_text: Option<String>,
     allow_newlines: bool,
     byte_limit: Option<u16>,
-    mut mgr: &mut Manager,
+    mgr: &mut Manager,
 ) -> Option<String> {
     mgr.restore_display(editor_display, true);
     editor.set_title(mgr, title);
     editor.allow_newlines(allow_newlines);
     editor.set_limit(byte_limit);
+    if let Some(text) = initial_text {
+        editor.set_text(mgr, &text);
+    }
     // eprint!("Type text in (press TAB to finish): ");
     let result = editor.run(mgr);
     mgr.restore_display(main_display, true);

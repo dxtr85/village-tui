@@ -467,6 +467,58 @@ impl Editor {
             mgr.set_glyph(self.g_id, g, i, 0);
         }
     }
+    // TODO: also put lines into self.lines
+    pub fn set_text(&mut self, mgr: &mut Manager, text: &str) {
+        let mut lines = text.lines();
+        let gp = Glyph::plain();
+        let mut g = Glyph::plain();
+        let mut curr_x_position = 2;
+        let mut curr_y_position = 1;
+        while let Some(line) = lines.next() {
+            let mut chars = line.chars();
+            let ll = chars.clone().count();
+            if ll < self.max_position.0 - 2 {
+                while let Some(c) = chars.next() {
+                    g.set_char(c);
+                    mgr.set_glyph(self.g_id, g, curr_x_position, curr_y_position);
+                    curr_x_position += 1;
+                }
+                for i in curr_x_position..self.max_position.0 {
+                    mgr.set_glyph(self.g_id, gp, i, curr_y_position);
+                }
+                curr_y_position += 1;
+                curr_x_position = 2;
+            } else {
+                while let Some(c) = chars.next() {
+                    eprint!("C:{} ", c);
+                    g.set_char(c);
+                    mgr.set_glyph(self.g_id, g, curr_x_position, curr_y_position);
+                    curr_x_position += 1;
+                    if curr_x_position > self.max_position.0 {
+                        curr_x_position = 2;
+                        curr_y_position += 1;
+                    }
+                }
+                for i in curr_x_position..self.max_position.0 {
+                    mgr.set_glyph(self.g_id, gp, i, curr_y_position);
+                }
+                // TODO: how do we split those longer lines?
+                eprintln!(
+                    "dupa {}> {} (line:{})",
+                    ll,
+                    self.max_position.0 - 2,
+                    curr_y_position
+                );
+                curr_y_position += 1;
+                curr_x_position = 2;
+            }
+        }
+        for y in curr_y_position..self.max_position.1 {
+            for x in 2..self.max_position.0 {
+                mgr.set_glyph(self.g_id, gp, x, y);
+            }
+        }
+    }
     pub fn run(&mut self, mgr: &mut Manager) -> Option<String> {
         loop {
             if let Some(ch) = mgr.read_char() {

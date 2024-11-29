@@ -64,10 +64,12 @@ impl Selector {
 
     pub fn select(
         &mut self,
+        header: &str,
         options: &Vec<String>,
         mgr: &mut Manager,
         quit_on_first_select: bool,
     ) -> Vec<usize> {
+        eprintln!("Options to present: {:?}", options);
         let mut selected = vec![];
         mgr.move_graphic(self.g_id, 3, (0, 0));
         let gp = Glyph::plain();
@@ -75,7 +77,7 @@ impl Selector {
         let filter_header = format!("Filter: ",);
         let mut filter = String::with_capacity(64);
         let mut filter_len = filter_header.len();
-        let mut iter = "Catalog Application's Tags".chars();
+        let mut iter = header.chars();
         for x in 1..self.width {
             if let Some(c) = iter.next() {
                 if c == '\n' {
@@ -472,13 +474,13 @@ impl Selector {
                 last_updated = last_updated + 1;
                 if let Some(opt_idx) = opt_page.get(last_updated) {
                     let sel = self.selected_option == last_updated;
-                    if self.options[last_updated].index != *opt_idx {
-                        self.options[last_updated].update(
-                            *opt_idx,
-                            options.get(*opt_idx).unwrap(),
-                            mgr,
-                        );
-                    }
+                    // if self.options[last_updated].index != *opt_idx {
+                    self.options[last_updated].update(
+                        *opt_idx,
+                        options.get(*opt_idx).unwrap(),
+                        mgr,
+                    );
+                    // }
                     self.options[last_updated].present(sel, selected.contains(opt_idx), mgr);
                 } else {
                     self.options[last_updated].hide(mgr);

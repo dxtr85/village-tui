@@ -121,6 +121,14 @@ impl Manifest {
         let mut data_iter = data_vec.into_iter();
         let first_data = data_iter.next().unwrap();
         let mut iter = first_data.bytes().into_iter();
+        if data_count == 1 && iter.len() == 1 {
+            return Manifest {
+                app_type: AppType::from(iter.next().unwrap()),
+                description: String::new(),
+                tags: HashMap::new(),
+                d_types: HashMap::new(),
+            };
+        }
         let app_type = if let Some(byte) = iter.next() {
             AppType::from(byte)
         } else {
@@ -303,7 +311,7 @@ impl Manifest {
     }
 
     pub fn add_tags(&mut self, tags: Vec<Tag>) -> bool {
-        // eprintln!("add_tags");
+        eprintln!("add_tags {:?}", tags);
         let mut any_tag_added = false;
         let mut existing_tags = Vec::with_capacity(self.tags.len());
         for (_id, tag) in &self.tags {
@@ -336,6 +344,7 @@ impl Manifest {
     }
 
     pub fn add_data_type(&mut self, tag: Tag) -> bool {
+        eprintln!("Adding dtype {} to manifest", tag.0);
         let mut added = false;
         if self.d_types.len() >= 256 {
             return added;
