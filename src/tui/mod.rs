@@ -236,9 +236,9 @@ pub enum ToPresentation {
     Neighbors(Vec<GnomeId>),
     // MoveSelection(Direction),
     AppendContent(ContentID, DataType),
-    Contents(ContentID, String),
+    Contents(ContentID, DataType, Vec<u8>, String, Vec<Data>),
     ContentsNotExist(ContentID),
-    Manifest(Manifest),
+    Manifest(bool, Manifest), //bool indicates if we are founder of active swarm
 }
 
 #[derive(Clone)]
@@ -248,6 +248,7 @@ pub enum FromPresentation {
     AddDataType(Tag),
     AddTags(Vec<Tag>),
     CreateContent(DataType, Data),
+    UpdateContent(ContentID, DataType, u16, Vec<Data>),
     ContentInquiry(ContentID),
     NeighborSelected(GnomeId),
     KeyPress(Key),
@@ -304,6 +305,7 @@ pub fn serve_tui_mgr(
     d_type_map.insert(DataType::Data(1), "Text file".to_string());
     d_type_map.insert(DataType::Data(2), "Binary file".to_string());
     let question = Question::new(&mut mgr);
+    let mut am_i_founder = false;
     let mut manifest = Manifest::new(AppType::Catalog, HashMap::new());
     let mut manifest_tui = Selector::new(AppType::Catalog, &mut mgr);
     let set_id = c_menu.add_set(
@@ -379,8 +381,9 @@ pub fn serve_tui_mgr(
                             }
                         }
                         5 => {
-                            let read_only = false;
-                            let d_type = DataType::Data(0);
+                            // let read_only = my_id != manifest.;
+                            let read_only = !am_i_founder;
+                            let d_type = None;
                             if let Some((d_type, data)) = creator.show(
                                 &mut mgr,
                                 &manifest,
@@ -389,7 +392,6 @@ pub fn serve_tui_mgr(
                                 d_type,
                                 vec![],
                                 String::new(),
-                                &d_type_map,
                                 main_display,
                                 input_display,
                                 &mut editor,
@@ -474,25 +476,27 @@ pub fn serve_tui_mgr(
                     match village.get_selection() {
                         TileType::Home(owner) => {
                             if owner != village.my_id {
-                                let action = c_menu.show(&mut mgr, 0, village.cm_position());
+                                let _action = c_menu.show(&mut mgr, 0, village.cm_position());
                                 continue;
                             }
-                            let edit_result = serve_editor(
-                                input_display,
-                                main_display,
-                                &mut editor,
-                                " Max size: 6  Oneline  Define new Tag name    (TAB to finish)",
-                                None,
-                                // true,
-                                false,
-                                // None,
-                                Some(6),
+                            if let Some((d_type, data)) = creator.show(
                                 &mut mgr,
-                            );
-                            if let Some(text) = edit_result {
-                                eprintln!("Got: '{}'", text);
-                                // let _ = to_app.send(FromPresentation::CreateContent(text));
-                            }
+                                &manifest,
+                                &mut manifest_tui,
+                                false,
+                                None,
+                                vec![],
+                                String::new(),
+                                main_display,
+                                input_display,
+                                &mut editor,
+                            ) {
+                                //TODO
+                                eprintln!("We have some work to do {:?} {}", d_type, data.len());
+                                let _ = to_app.send(FromPresentation::CreateContent(d_type, data));
+                            } else {
+                                eprintln!("Nothing to do from creator");
+                            };
                         }
                         TileType::Neighbor(n_id) => {
                             let _ = to_app.send(FromPresentation::NeighborSelected(n_id));
@@ -535,34 +539,39 @@ pub fn serve_tui_mgr(
                     let tile_id = village.add_new_content(d_type, c_id, &mut mgr);
                     // tiles_mapping.insert(tile_id, TileType::Content(d_type, c_id));
                 }
-                ToPresentation::Contents(c_id, text) => {
-                    //TODO: display text
-                    let title = format!(" Content ID: {} (len: {}) ", c_id, text.len());
-                    // let m_box = message_box(Some(title), text, Glyph::plain(), 80, 24);
-                    let _edit_result = serve_editor(
-                        input_display,
-                        main_display,
-                        &mut editor,
-                        &title,
-                        Some(text),
-                        true,
-                        None,
-                        &mut mgr,
+                ToPresentation::Contents(c_id, d_type, tags, text, mut data_vec) => {
+                    eprintln!(
+                        "Showing Contents of {}, manifest tags len: {:?}",
+                        c_id,
+                        manifest.tags.len()
                     );
-                    // if let Some(g_id) = mgr.add_graphic(m_box, 3, (1, 1)) {
-                    //     // println!("mbox added!");
-                    //     mgr.set_graphic(g_id, 0, true);
-                    //     let mut hide = false;
-                    //     while !hide {
-                    //         if let Some(key) = mgr.read_key() {
-                    //             hide = true;
-                    //         }
-                    //     }
-                    //     mgr.move_graphic(g_id, 0, (0, 0));
-                    //     mgr.delete_graphic(g_id);
-                    // }
+                    let read_only = !am_i_founder;
+
+                    if let Some((d_type, data)) = creator.show(
+                        &mut mgr,
+                        &manifest,
+                        &mut manifest_tui,
+                        read_only,
+                        Some(d_type),
+                        tags,
+                        text,
+                        main_display,
+                        input_display,
+                        &mut editor,
+                    ) {
+                        //TODO
+                        eprintln!("We have some work to do {:?} {}", d_type, data.len());
+                        let mut d_vec = vec![data];
+                        d_vec.append(&mut data_vec);
+                        let _ =
+                            to_app.send(FromPresentation::UpdateContent(c_id, d_type, 0, d_vec));
+                    } else {
+                        eprintln!("Nothing to do from creator");
+                    };
                 }
-                ToPresentation::Manifest(mani) => {
+                ToPresentation::Manifest(me_founder, mani) => {
+                    eprintln!("TUI got Manifest {}", mani.tags.len());
+                    am_i_founder = me_founder;
                     manifest = mani.clone();
                     if manifest_req == 1 {
                         let tag_names = mani.tag_names();
@@ -570,6 +579,7 @@ pub fn serve_tui_mgr(
                         let _selected = manifest_tui.select(
                             "Catalog Application's Tags",
                             &tag_names,
+                            vec![],
                             &mut mgr,
                             false,
                         );
@@ -585,6 +595,7 @@ pub fn serve_tui_mgr(
                         let _selected = manifest_tui.select(
                             "Catalog Application's Data types",
                             &tag_names,
+                            vec![],
                             &mut mgr,
                             true,
                         );
@@ -631,7 +642,7 @@ pub fn serve_editor(
     if let Some(text) = initial_text {
         editor.set_text(mgr, &text);
     }
-    // eprint!("Type text in (press TAB to finish): ");
+    // print!("Type text in (press TAB to finish): ");
     let result = editor.run(mgr);
     mgr.restore_display(main_display, true);
     result

@@ -57,6 +57,7 @@ impl Editor {
             self.cursor_position = (2, row);
             let taken = self.remove_chars_from_cursor_to_end(mgr);
             mgr.set_glyph(self.g_id, glyph, 2, row);
+            eprintln!("Pushing: '{}'", taken);
             result.push_str(&taken);
         }
         self.cursor_position = (2, 1);
@@ -351,6 +352,9 @@ impl Editor {
         }
         // eprint!("NS: {} ;", new_string);
         self.lines[self.cursor_position.1] = new_string;
+        if self.allow_newlines && !old_string.is_empty() && !old_string.ends_with('\n') {
+            old_string.push('\n');
+        }
         old_string
     }
     pub fn move_to_line_start(&mut self, mgr: &mut Manager) {
@@ -479,13 +483,17 @@ impl Editor {
             let ll = chars.clone().count();
             if ll < self.max_position.0 - 2 {
                 while let Some(c) = chars.next() {
+                    if c == '\n' {
+                        continue;
+                    }
                     g.set_char(c);
+                    self.lines[curr_y_position].push(c);
                     mgr.set_glyph(self.g_id, g, curr_x_position, curr_y_position);
                     curr_x_position += 1;
                 }
-                for i in curr_x_position..self.max_position.0 {
-                    mgr.set_glyph(self.g_id, gp, i, curr_y_position);
-                }
+                // for i in curr_x_position..self.max_position.0 {
+                //     mgr.set_glyph(self.g_id, gp, i, curr_y_position);
+                // }
                 curr_y_position += 1;
                 curr_x_position = 2;
             } else {
@@ -499,9 +507,9 @@ impl Editor {
                         curr_y_position += 1;
                     }
                 }
-                for i in curr_x_position..self.max_position.0 {
-                    mgr.set_glyph(self.g_id, gp, i, curr_y_position);
-                }
+                // for i in curr_x_position..self.max_position.0 {
+                //     mgr.set_glyph(self.g_id, gp, i, curr_y_position);
+                // }
                 // TODO: how do we split those longer lines?
                 eprintln!(
                     "dupa {}> {} (line:{})",
@@ -513,11 +521,11 @@ impl Editor {
                 curr_x_position = 2;
             }
         }
-        for y in curr_y_position..self.max_position.1 {
-            for x in 2..self.max_position.0 {
-                mgr.set_glyph(self.g_id, gp, x, y);
-            }
-        }
+        // for y in curr_y_position..self.max_position.1 {
+        //     for x in 2..self.max_position.0 {
+        //         mgr.set_glyph(self.g_id, gp, x, y);
+        //     }
+        // }
     }
     pub fn run(&mut self, mgr: &mut Manager) -> Option<String> {
         loop {

@@ -343,6 +343,19 @@ impl Manifest {
         any_tag_added
     }
 
+    pub fn tags_string(&self, tag_ids: Vec<u8>) -> String {
+        let mut tstring = String::new();
+        for id in tag_ids {
+            if let Some(tag) = self.tags.get(&id) {
+                tstring.push_str(&tag.0);
+                tstring.push(' ');
+                tstring.push(' ');
+                tstring.push(' ');
+                tstring.push(' ');
+            }
+        }
+        tstring
+    }
     pub fn add_data_type(&mut self, tag: Tag) -> bool {
         eprintln!("Adding dtype {} to manifest", tag.0);
         let mut added = false;
@@ -357,6 +370,13 @@ impl Manifest {
             }
         }
         added
+    }
+    pub fn dtype_string(&self, dtype_id: u8) -> String {
+        let mut tstring = String::new();
+        if let Some(tag) = self.d_types.get(&dtype_id) {
+            tstring.push_str(&tag.0);
+        }
+        tstring
     }
 
     // TODO: before deleting a Tag make sure there is no Content labeled with it

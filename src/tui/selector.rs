@@ -66,11 +66,11 @@ impl Selector {
         &mut self,
         header: &str,
         options: &Vec<String>,
+        mut selected: Vec<usize>,
         mgr: &mut Manager,
         quit_on_first_select: bool,
     ) -> Vec<usize> {
         eprintln!("Options to present: {:?}", options);
-        let mut selected = vec![];
         mgr.move_graphic(self.g_id, 3, (0, 0));
         let gp = Glyph::plain();
         let mut g = Glyph::plain();
