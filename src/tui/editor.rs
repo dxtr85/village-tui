@@ -11,6 +11,7 @@ pub struct Editor {
     cursor_position: (usize, usize),
     max_position: (usize, usize),
     allow_newlines: bool,
+    read_only: bool,
     byte_limit: Option<u16>,
 }
 impl Editor {
@@ -30,6 +31,7 @@ impl Editor {
             cursor_position: (2, 1),
             max_position: (cols - 2, rows - 2),
             allow_newlines: true,
+            read_only: false,
             byte_limit: None,
         }
     }
@@ -57,7 +59,7 @@ impl Editor {
             self.cursor_position = (2, row);
             let taken = self.remove_chars_from_cursor_to_end(mgr);
             mgr.set_glyph(self.g_id, glyph, 2, row);
-            eprintln!("Pushing: '{}'", taken);
+            // eprintln!("Pushing: '{}'", taken);
             result.push_str(&taken);
         }
         self.cursor_position = (2, 1);
@@ -205,7 +207,7 @@ impl Editor {
                     new_string.push(char);
                 }
             }
-            let skip = chars.next();
+            let _skip = chars.next();
             // eprintln!("Skiping: {:?}", skip);
             let mut i = 0;
             while let Some(char) = chars.next() {
@@ -474,7 +476,7 @@ impl Editor {
     // TODO: also put lines into self.lines
     pub fn set_text(&mut self, mgr: &mut Manager, text: &str) {
         let mut lines = text.lines();
-        let gp = Glyph::plain();
+        // let gp = Glyph::plain();
         let mut g = Glyph::plain();
         let mut curr_x_position = 2;
         let mut curr_y_position = 1;
@@ -527,6 +529,9 @@ impl Editor {
         //     }
         // }
     }
+    pub fn set_mode(&mut self, read_only: bool) {
+        self.read_only = read_only;
+    }
     pub fn run(&mut self, mgr: &mut Manager) -> Option<String> {
         loop {
             if let Some(ch) = mgr.read_char() {
@@ -548,7 +553,12 @@ impl Editor {
                         Key::Right => self.move_cursor(Direction::Right, mgr),
                         Key::Home => self.move_to_line_start(mgr),
                         Key::End => self.move_to_line_end(mgr),
-                        Key::Delete => self.delete(mgr),
+                        Key::Delete => {
+                            if self.read_only {
+                                continue;
+                            }
+                            self.delete(mgr)
+                        }
                         Key::AltB => {
                             self.move_cursor(Direction::Left, mgr);
                             self.move_cursor(Direction::Left, mgr);
@@ -568,6 +578,9 @@ impl Editor {
                     // mgr.restore_display(main_display, true);
                     return Some(taken);
                 } else if ch == '\u{7f}' {
+                    if self.read_only {
+                        continue;
+                    }
                     self.backspace(mgr);
                 } else if ch == '\u{1}' {
                     self.move_to_line_start(mgr);
@@ -581,6 +594,9 @@ impl Editor {
                 //         self.move_to_line_start(mgr);
                 //     }
                 } else if ch == '\u{b}' {
+                    if self.read_only {
+                        continue;
+                    }
                     self.remove_chars_from_cursor_to_end(mgr);
                 } else if ch == '\u{e}' {
                     if self.allow_newlines {
@@ -598,7 +614,7 @@ impl Editor {
                     // eprint!("code: {:?}", ch);
                     if ch == '\n' && !self.allow_newlines {
                         // Do nothing
-                    } else {
+                    } else if !self.read_only {
                         self.insert(mgr, ch);
                     }
                 }

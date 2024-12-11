@@ -1,13 +1,13 @@
 use super::button::Button;
-use super::editor::Editor;
-use super::selector::Selector;
-use super::serve_editor;
-use crate::logic::Manifest;
+// use super::editor::Editor;
+// use super::selector::Selector;
+// use super::serve_editor;
+// use crate::logic::Manifest;
 use animaterm::prelude::Glyph;
 use animaterm::prelude::Graphic;
 use animaterm::prelude::Manager;
-use dapp_lib::prelude::DataType;
-use dapp_lib::Data;
+// use dapp_lib::prelude::DataType;
+// use dapp_lib::Data;
 use std::collections::HashMap;
 // TODO: A full screen window with options to
 // - select data type
@@ -24,6 +24,15 @@ use std::collections::HashMap;
 // without TransformInfo.
 // As a result we get a modified Data block addressed at index 0 that we send to Swarm
 // for synchronization
+
+#[derive(Clone)]
+pub enum CreatorResult {
+    SelectDType,
+    SelectTags,
+    SelectDescription,
+    Cancel,
+    Create,
+}
 pub struct Creator {
     g_id: usize,
     button_dtypes: Button,
@@ -45,11 +54,11 @@ impl Creator {
         let g_id = mgr
             .add_graphic(Graphic::new(width, height, 0, library, None), 0, (0, 0))
             .unwrap();
-        let button_dtypes = Button::new((8, 3), 1, (2, 1), "Edytuj", mgr);
-        let button_descr = Button::new((8, 3), 1, (2, 5), "Edytuj", mgr);
-        let button_tags = Button::new((8, 3), 1, (2, 9), "Edytuj", mgr);
-        let button_apply = Button::new((8, 3), 1, (2, 20), "Zapisz", mgr);
-        let button_cancel = Button::new((8, 3), 1, (2, 24), "Anuluj", mgr);
+        let button_dtypes = Button::new((8, 3), 1, (2, 1), "Edytuj", None, mgr);
+        let button_descr = Button::new((8, 3), 1, (2, 5), "Edytuj", Some("Pokaż"), mgr);
+        let button_tags = Button::new((8, 3), 1, (2, 9), "Edytuj", Some("Pokaż"), mgr);
+        let button_apply = Button::new((8, 3), 1, (2, 20), "Zapisz", None, mgr);
+        let button_cancel = Button::new((8, 3), 1, (2, 24), "Anuluj", Some("Zamknij"), mgr);
         Creator {
             g_id,
             button_dtypes,
@@ -67,7 +76,7 @@ impl Creator {
         let mut g = Glyph::plain();
         let p = Glyph::plain();
         let mut char_iter = text.chars();
-        for x in 12..self.width + 12 {
+        for x in 12..self.width - 1 {
             if let Some(c) = char_iter.next() {
                 g.set_char(c);
                 mgr.set_glyph(self.g_id, g, x, 10);
@@ -81,7 +90,7 @@ impl Creator {
         let mut g = Glyph::plain();
         let p = Glyph::plain();
         let mut char_iter = text.chars();
-        for x in 12..self.width + 12 {
+        for x in 12..self.width - 1 {
             if let Some(c) = char_iter.next() {
                 if c == '\n' {
                     g.set_char(' ');
@@ -100,7 +109,7 @@ impl Creator {
         let p = Glyph::plain();
         let mut g = Glyph::plain();
         let mut char_iter = d_text.chars();
-        for x in 12..self.width + 12 {
+        for x in 12..self.width - 1 {
             if let Some(c) = char_iter.next() {
                 g.set_char(c);
                 mgr.set_glyph(self.g_id, g, x, 2);
@@ -109,185 +118,125 @@ impl Creator {
             }
         }
     }
+    fn next_button(&self, read_only: bool, curr_button: usize) -> usize {
+        if read_only {
+            if curr_button == 0 {
+                2
+            } else if curr_button == 2 {
+                3
+            } else {
+                0
+            }
+        } else {
+            if curr_button == 0 {
+                1
+            } else if curr_button == 1 {
+                2
+            } else if curr_button == 2 {
+                3
+            } else if curr_button == 3 {
+                4
+            } else {
+                0
+            }
+        }
+    }
+
+    fn prev_button(&self, read_only: bool, curr_button: usize) -> usize {
+        if read_only {
+            if curr_button == 0 {
+                3
+            } else if curr_button == 3 {
+                2
+            } else {
+                0
+            }
+        } else {
+            if curr_button == 0 {
+                4 // buttons_count - 1
+            } else {
+                curr_button - 1
+            }
+        }
+    }
 
     pub fn show(
         &mut self,
         mgr: &mut Manager,
-        manifest: &Manifest,
-        selector: &mut Selector,
         read_only: bool,
-        d_type: Option<DataType>,
-        tags: Vec<u8>,
+        d_type: String,
+        tags: String,
         description: String,
-        main_display: usize,
-        input_display: usize,
-        editor: &mut Editor,
-    ) -> Option<(DataType, Data)> {
-        let mut selected_dtype = if let Some(dt) = d_type {
-            dt
-        } else {
-            DataType::Data(0)
-        };
-        let mut selected_description = description;
-        let d_type_txt = if let Some(dt) = d_type {
-            selected_dtype = dt;
-            format!("{:?}", manifest.dtype_string(dt.byte()))
-        } else {
-            "none".to_string()
-        };
-        self.update_d_type(mgr, &d_type_txt);
-        let mut selected_tags = vec![];
-        for t_id in &tags {
-            selected_tags.push(*t_id as usize);
-        }
-        let tags_txt = manifest.tags_string(tags);
-        let t_text = format!("Tags: {}", tags_txt);
+    ) -> CreatorResult {
+        self.update_d_type(mgr, &d_type);
+        let t_text = format!("Tags: {}", tags);
         self.update_tags(mgr, t_text);
-        let s_text = format!("Description: {}", selected_description);
+        let s_text = format!("Description: {}", description);
         self.update_description(mgr, &s_text);
         mgr.move_graphic(self.g_id, 3, (0, 0));
-        let mut available_buttons = vec![&self.button_cancel];
+        let all_buttons = vec![
+            &self.button_cancel,
+            &self.button_dtypes,
+            &self.button_descr,
+            &self.button_tags,
+            &self.button_apply,
+        ];
+        mgr.move_graphic(self.button_descr.g_id, 4, (0, 0));
+        mgr.move_graphic(self.button_tags.g_id, 4, (0, 0));
+        mgr.move_graphic(self.button_cancel.g_id, 4, (0, 0));
         if !read_only {
             mgr.move_graphic(self.button_dtypes.g_id, 4, (0, 0));
-            mgr.move_graphic(self.button_descr.g_id, 4, (0, 0));
-            mgr.move_graphic(self.button_tags.g_id, 4, (0, 0));
             mgr.move_graphic(self.button_apply.g_id, 4, (0, 0));
-            available_buttons.push(&self.button_dtypes);
-            available_buttons.push(&self.button_descr);
-            available_buttons.push(&self.button_tags);
-            available_buttons.push(&self.button_apply);
         }
-        mgr.move_graphic(self.button_cancel.g_id, 4, (0, 0));
-        let available_buttons = available_buttons;
-        let buttons_count = available_buttons.len();
+        let available_buttons = all_buttons;
         let mut selected_button = 0;
-        available_buttons[selected_button].select(mgr);
+        available_buttons[selected_button].select(mgr, read_only);
+        available_buttons[1].deselect(mgr, read_only);
+        available_buttons[2].deselect(mgr, read_only);
+        available_buttons[3].deselect(mgr, read_only);
+        available_buttons[4].deselect(mgr, read_only);
 
-        let mut cancel_selected = true;
         loop {
             if let Some(key) = mgr.read_key() {
                 match key {
                     animaterm::Key::Escape => {
-                        cancel_selected = true;
-                        available_buttons[selected_button].deselect(mgr);
-                        break;
+                        available_buttons[selected_button].deselect(mgr, read_only);
+                        return CreatorResult::Cancel;
                     }
                     animaterm::Key::Down | animaterm::Key::CtrlN => {
-                        if buttons_count <= 1 {
-                            continue;
-                        }
-                        available_buttons[selected_button].deselect(mgr);
-                        selected_button += 1;
-                        if selected_button >= buttons_count {
-                            selected_button = 0;
-                        }
-                        cancel_selected = selected_button == 0;
-                        available_buttons[selected_button].select(mgr);
+                        available_buttons[selected_button].deselect(mgr, read_only);
+                        selected_button = self.next_button(read_only, selected_button);
+                        available_buttons[selected_button].select(mgr, read_only);
                     }
                     animaterm::Key::Up | animaterm::Key::CtrlP => {
-                        if buttons_count <= 1 {
-                            continue;
-                        }
-                        available_buttons[selected_button].deselect(mgr);
-                        if selected_button == 0 {
-                            selected_button = buttons_count - 1;
-                        } else {
-                            selected_button -= 1;
-                        }
-                        cancel_selected = selected_button == 0;
-                        available_buttons[selected_button].select(mgr);
+                        available_buttons[selected_button].deselect(mgr, read_only);
+                        selected_button = self.prev_button(read_only, selected_button);
+                        available_buttons[selected_button].select(mgr, read_only);
                     }
                     animaterm::Key::Enter => {
+                        mgr.move_graphic(self.g_id, 0, (0, 0));
+                        mgr.move_graphic(self.button_dtypes.g_id, 0, (0, 0));
+                        mgr.move_graphic(self.button_descr.g_id, 0, (0, 0));
+                        mgr.move_graphic(self.button_tags.g_id, 0, (0, 0));
+                        mgr.move_graphic(self.button_apply.g_id, 0, (0, 0));
+                        mgr.move_graphic(self.button_cancel.g_id, 0, (0, 0));
+                        available_buttons[selected_button].deselect(mgr, read_only);
                         match selected_button {
                             1 => {
-                                let tag_names = manifest.dtype_names();
-                                mgr.move_graphic(self.g_id, 0, (0, 0));
-                                mgr.move_graphic(self.button_dtypes.g_id, 0, (0, 0));
-                                mgr.move_graphic(self.button_descr.g_id, 0, (0, 0));
-                                mgr.move_graphic(self.button_tags.g_id, 0, (0, 0));
-                                mgr.move_graphic(self.button_apply.g_id, 0, (0, 0));
-                                mgr.move_graphic(self.button_cancel.g_id, 0, (0, 0));
-                                let _selected = selector.select(
-                                    "Select Data Type",
-                                    &tag_names,
-                                    vec![],
-                                    mgr,
-                                    true,
-                                );
-                                if !_selected.is_empty() && !tag_names.is_empty() {
-                                    selected_dtype = DataType::from(_selected[0] as u8);
-                                    self.update_d_type(mgr, &tag_names[_selected[0]]);
-                                }
-                                mgr.move_graphic(self.g_id, 3, (0, 0));
-                                mgr.move_graphic(self.button_dtypes.g_id, 4, (0, 0));
-                                mgr.move_graphic(self.button_descr.g_id, 4, (0, 0));
-                                mgr.move_graphic(self.button_tags.g_id, 4, (0, 0));
-                                mgr.move_graphic(self.button_apply.g_id, 4, (0, 0));
-                                mgr.move_graphic(self.button_cancel.g_id, 4, (0, 0));
+                                return CreatorResult::SelectDType;
                             }
                             2 => {
-                                eprintln!("Type description in");
-                                //TODO
-                                let edit_result = serve_editor(
-                                    input_display,
-                                    main_display,
-                                    editor,
-                                    " Max size: 764  Multiline  Content Description    (TAB to finish)",Some(selected_description.clone()),
-                                    true,
-                                    // false,
-                                    // None,
-                                    Some(764),
-                                    mgr,
-                                );
-                                if let Some(text) = edit_result {
-                                    eprintln!("Got: '{}'", text);
-                                    selected_description = text;
-                                    self.update_description(mgr, &selected_description);
-                                }
+                                return CreatorResult::SelectDescription;
                             }
                             3 => {
-                                let tag_names = manifest.tag_names();
-                                mgr.move_graphic(self.g_id, 0, (0, 0));
-                                mgr.move_graphic(self.button_dtypes.g_id, 0, (0, 0));
-                                mgr.move_graphic(self.button_descr.g_id, 0, (0, 0));
-                                mgr.move_graphic(self.button_tags.g_id, 0, (0, 0));
-                                mgr.move_graphic(self.button_apply.g_id, 0, (0, 0));
-                                mgr.move_graphic(self.button_cancel.g_id, 0, (0, 0));
-                                selected_tags = selector.select(
-                                    "Select Tags",
-                                    &tag_names,
-                                    selected_tags,
-                                    mgr,
-                                    false,
-                                );
-                                // if !selected_tags.is_empty() {
-                                //TODO
-                                eprintln!("Selected tags: {:?}", selected_tags);
-                                let mut tags_string = "Tags: ".to_string();
-                                for tag_id in &selected_tags {
-                                    tags_string.push_str(&tag_names[*tag_id]);
-                                    tags_string.push(' ');
-                                    tags_string.push(' ');
-                                    tags_string.push(' ');
-                                    tags_string.push(' ');
-                                }
-                                self.update_tags(mgr, tags_string);
-                                // }
-                                mgr.move_graphic(self.g_id, 3, (0, 0));
-                                mgr.move_graphic(self.button_dtypes.g_id, 4, (0, 0));
-                                mgr.move_graphic(self.button_descr.g_id, 4, (0, 0));
-                                mgr.move_graphic(self.button_tags.g_id, 4, (0, 0));
-                                mgr.move_graphic(self.button_apply.g_id, 4, (0, 0));
-                                mgr.move_graphic(self.button_cancel.g_id, 4, (0, 0));
+                                return CreatorResult::SelectTags;
                             }
                             4 => {
-                                available_buttons[selected_button].deselect(mgr);
-                                break;
+                                available_buttons[selected_button].deselect(mgr, read_only);
+                                return CreatorResult::Create;
                             }
                             0 => {
-                                cancel_selected = true;
-                                available_buttons[selected_button].deselect(mgr);
-                                break;
+                                return CreatorResult::Cancel;
                             }
                             other => {
                                 eprintln!("{}", other);
@@ -299,25 +248,6 @@ impl Creator {
                     }
                 }
             }
-        }
-        mgr.move_graphic(self.g_id, 0, (0, 0));
-        mgr.move_graphic(self.button_dtypes.g_id, 0, (0, 0));
-        mgr.move_graphic(self.button_descr.g_id, 0, (0, 0));
-        mgr.move_graphic(self.button_tags.g_id, 0, (0, 0));
-        mgr.move_graphic(self.button_apply.g_id, 0, (0, 0));
-        mgr.move_graphic(self.button_cancel.g_id, 0, (0, 0));
-        if cancel_selected {
-            None
-        } else {
-            let mut bytes = Vec::with_capacity(1024);
-            bytes.push(selected_tags.len() as u8);
-            for tag in selected_tags {
-                bytes.push(tag as u8);
-            }
-            for byte in selected_description.bytes() {
-                bytes.push(byte as u8);
-            }
-            Some((selected_dtype, Data::new(bytes).unwrap()))
         }
     }
 }

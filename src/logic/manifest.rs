@@ -321,6 +321,9 @@ impl Manifest {
         let mut tags_to_add = vec![];
         let tags_iter = tags.into_iter();
         for tag in tags_iter {
+            if tag.0.is_empty() {
+                continue;
+            }
             if !existing_tags.contains(&tag) {
                 // eprintln!("add_tags new: {}", tag.0);
                 tags_to_add.push(tag);
@@ -343,10 +346,10 @@ impl Manifest {
         any_tag_added
     }
 
-    pub fn tags_string(&self, tag_ids: Vec<u8>) -> String {
+    pub fn tags_string(&self, tag_ids: &Vec<u8>) -> String {
         let mut tstring = String::new();
         for id in tag_ids {
-            if let Some(tag) = self.tags.get(&id) {
+            if let Some(tag) = self.tags.get(id) {
                 tstring.push_str(&tag.0);
                 tstring.push(' ');
                 tstring.push(' ');
@@ -357,6 +360,9 @@ impl Manifest {
         tstring
     }
     pub fn add_data_type(&mut self, tag: Tag) -> bool {
+        if tag.0.is_empty() {
+            return false;
+        }
         eprintln!("Adding dtype {} to manifest", tag.0);
         let mut added = false;
         if self.d_types.len() >= 256 {
@@ -372,9 +378,13 @@ impl Manifest {
         added
     }
     pub fn dtype_string(&self, dtype_id: u8) -> String {
+        eprintln!("Searching for DType name for {}", dtype_id);
         let mut tstring = String::new();
         if let Some(tag) = self.d_types.get(&dtype_id) {
+            eprintln!("Found: {}", tag.0);
             tstring.push_str(&tag.0);
+        } else {
+            eprintln!("Not found: {:?}", self.d_types.keys());
         }
         tstring
     }
@@ -404,7 +414,16 @@ impl Manifest {
             }
         }
     }
-    pub fn tag_names(&self) -> Vec<String> {
+    pub fn tag_names(&self, filter: Option<Vec<u8>>) -> Vec<String> {
+        if let Some(filter) = filter {
+            let mut tag_names = Vec::with_capacity(filter.len());
+            for id in filter {
+                if let Some(tag) = self.tags.get(&id) {
+                    tag_names.push(tag.0.clone());
+                }
+            }
+            return tag_names;
+        }
         let mut tag_names = Vec::with_capacity(256);
         for id in 0..=255 {
             if let Some(tag) = self.tags.get(&id) {

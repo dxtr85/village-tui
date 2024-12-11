@@ -204,14 +204,14 @@ impl Selector {
                         if let Some(position) = selected.iter().position(|&x| x == idx) {
                             selected.remove(position);
                             self.options[self.selected_option].present(true, false, mgr);
-                            let index = option_pages[curr_page][self.selected_option];
+                            // let index = option_pages[curr_page][self.selected_option];
+                        } else if quit_on_first_select {
+                            selected = vec![idx];
+                            self.selected_option = 0;
+                            break;
                         } else {
                             selected.push(idx);
                             self.options[self.selected_option].present(true, true, mgr);
-                            if quit_on_first_select {
-                                self.selected_option = 0;
-                                break;
-                            }
                         }
                     }
                     Action::NextPage => {

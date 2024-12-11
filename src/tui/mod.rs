@@ -1,6 +1,7 @@
 use crate::logic::Manifest;
 use animaterm::prelude::*;
-use animaterm::utilities::message_box;
+// use animaterm::utilities::message_box;
+pub use content_creator::CreatorResult;
 use dapp_lib::prelude::AppType;
 use dapp_lib::prelude::ContentID;
 use dapp_lib::prelude::DataType;
@@ -27,8 +28,8 @@ use context_menu::CMenu;
 use editor::Editor;
 use selector::Selector;
 use tile::Tile;
-use tile::TileType;
-use viewer::Viewer;
+pub use tile::TileType;
+// use viewer::Viewer;
 
 pub struct VillageLayout {
     my_id: GnomeId,
@@ -232,13 +233,25 @@ pub enum Direction {
 }
 
 pub enum ToPresentation {
-    // Owner(GnomeId),
     Neighbors(Vec<GnomeId>),
-    // MoveSelection(Direction),
     AppendContent(ContentID, DataType),
     Contents(ContentID, DataType, Vec<u8>, String, Vec<Data>),
     ContentsNotExist(ContentID),
-    Manifest(bool, Manifest), //bool indicates if we are founder of active swarm
+    DisplaySelector(bool, String, Vec<String>, Vec<usize>), //bool indicates if we are founder of active swarm
+    DisplayCMenu(usize),
+    DisplayEditor(
+        bool,
+        String,
+        Option<String>,
+        bool,        // allow_newlines
+        Option<u16>, // byte_limit
+    ),
+    DisplayCreator(
+        bool,   // read_only
+        String, // DataType,
+        String, //Description
+        String, //Tags
+    ),
 }
 
 #[derive(Clone)]
@@ -252,6 +265,11 @@ pub enum FromPresentation {
     ContentInquiry(ContentID),
     NeighborSelected(GnomeId),
     KeyPress(Key),
+    ShowContextMenu(TileType),
+    CMenuAction(usize),
+    SelectedIndices(Vec<usize>),
+    EditResult(Option<String>),
+    CreatorResult(CreatorResult),
 }
 
 pub fn instantiate_tui_mgr() -> Manager {
@@ -298,7 +316,6 @@ pub fn serve_tui_mgr(
     editor.show(&mut mgr);
     mgr.restore_display(main_display, true);
     let mut c_menu = CMenu::new(&mut mgr);
-    // let mut viewer = Viewer::new(&mut mgr);
     let mut creator = Creator::new(&mut mgr);
     let mut d_type_map = HashMap::new();
     d_type_map.insert(DataType::Data(0), "Text".to_string());
@@ -307,7 +324,7 @@ pub fn serve_tui_mgr(
     let question = Question::new(&mut mgr);
     let mut am_i_founder = false;
     let mut manifest = Manifest::new(AppType::Catalog, HashMap::new());
-    let mut manifest_tui = Selector::new(AppType::Catalog, &mut mgr);
+    let mut selector = Selector::new(AppType::Catalog, &mut mgr);
     let set_id = c_menu.add_set(
         &mut mgr,
         vec![
@@ -327,21 +344,27 @@ pub fn serve_tui_mgr(
             let terminate = key == Key::Q || key == Key::ShiftQ;
             match key {
                 Key::AltEnter | Key::Space => {
-                    let action = c_menu.show(&mut mgr, set_id, village.cm_position());
+                    // TODO: minimize logic in tui - simply send a Selected message to logic
+                    //       and wait for instructions
+                    let _ = to_app.send(FromPresentation::ShowContextMenu(village.get_selection()));
+
+                    // TODO: move following code elsewhere
+                    // let action = c_menu.show(&mut mgr, set_id, village.cm_position());
                     // eprintln!("Sel: {}", action);
+                    let action = 0;
                     match action {
                         1 => {
-                            eprintln!("Requesting manifest");
+                            // eprintln!("Requesting manifest");
                             manifest_req = 1;
                             let _ = to_app.send(FromPresentation::ContentInquiry(0));
                         }
                         2 => {
                             manifest_req = 2;
-                            eprintln!("Requesting manifest");
+                            // eprintln!("Requesting manifest");
                             let _ = to_app.send(FromPresentation::ContentInquiry(0));
                         }
                         3 => {
-                            eprintln!("Adding new TAG");
+                            // eprintln!("Adding new TAG");
                             let edit_result = serve_editor(
                                 input_display,
                                 main_display,
@@ -355,13 +378,15 @@ pub fn serve_tui_mgr(
                                 &mut mgr,
                             );
                             if let Some(text) = edit_result {
-                                eprintln!("Got: '{}'", text);
-                                let tags = vec![Tag::new(text).unwrap()];
-                                let _ = to_app.send(FromPresentation::AddTags(tags));
+                                if !text.is_empty() {
+                                    eprintln!("Got: '{}'", text);
+                                    let tags = vec![Tag::new(text).unwrap()];
+                                    let _ = to_app.send(FromPresentation::AddTags(tags));
+                                }
                             }
                         }
                         4 => {
-                            eprintln!("Adding new DataType");
+                            // eprintln!("Adding new DataType");
                             let edit_result = serve_editor(
                                 input_display,
                                 main_display,
@@ -375,80 +400,42 @@ pub fn serve_tui_mgr(
                                 &mut mgr,
                             );
                             if let Some(text) = edit_result {
-                                eprintln!("Got: '{}'", text);
-                                let _ = to_app
-                                    .send(FromPresentation::AddDataType(Tag::new(text).unwrap()));
+                                if !text.is_empty() {
+                                    eprintln!("Got: '{}'", text);
+                                    let _ = to_app.send(FromPresentation::AddDataType(
+                                        Tag::new(text).unwrap(),
+                                    ));
+                                }
                             }
                         }
                         5 => {
                             // let read_only = my_id != manifest.;
-                            let read_only = !am_i_founder;
-                            let d_type = None;
-                            if let Some((d_type, data)) = creator.show(
-                                &mut mgr,
-                                &manifest,
-                                &mut manifest_tui,
-                                read_only,
-                                d_type,
-                                vec![],
-                                String::new(),
-                                main_display,
-                                input_display,
-                                &mut editor,
-                            ) {
-                                //TODO
-                                eprintln!("We have some work to do {:?} {}", d_type, data.len());
-                                let _ = to_app.send(FromPresentation::CreateContent(d_type, data));
-                            } else {
-                                eprintln!("Nothing to do from creator");
-                            };
+                            // let read_only = !am_i_founder;
+                            // let d_type = None;
+                            // if let Some((d_type, data)) = creator.show(
+                            //     &mut mgr,
+                            //     &manifest,
+                            //     &mut selector,
+                            //     read_only,
+                            //     d_type,
+                            //     vec![],
+                            //     String::new(),
+                            //     main_display,
+                            //     input_display,
+                            //     &mut editor,
+                            // ) {
+                            //     //TODO
+                            //     eprintln!("We have some work to do {:?} {}", d_type, data.len());
+                            //     let _ = to_app.send(FromPresentation::CreateContent(d_type, data));
+                            // } else {
+                            //     eprintln!("Nothing to do from creator");
+                            // };
                         }
                         other => {
-                            print!("A: {}", other);
+                            eprintln!("A: {}", other);
                         }
                     }
                 }
-                // Key::A => {
-                //     let read_only = false;
-                //     let d_type = DataType::Data(0);
-                //     if let Some((d_type, data)) = editor.show(
-                //         &mut mgr,
-                //         &manifest,
-                //         read_only,
-                //         d_type,
-                //         vec![],
-                //         String::new(),
-                //         &d_type_map,
-                //     ) {
-                //         //TODO
-                //         eprintln!("We have some work to do…");
-                //     };
-                // }
-                // Key::C => {
-                //     let read_only = false;
-                //     let d_type = DataType::Data(0);
-                //     if let Some((d_type, data)) = creator.show(
-                //         &mut mgr,
-                //         &manifest,
-                //         read_only,
-                //         d_type,
-                //         vec![],
-                //         String::new(),
-                //         &d_type_map,
-                //     ) {
-                //         //TODO
-                //         eprintln!("We have some work to do…");
-                //     };
-                // }
-                // Key::T => {
-                //     //TODO
-                //     eprintln!("Sending add tag request from presentation layer");
-                //     let mut tags = Vec::with_capacity(256);
-                //     for i in 0..=255 {
-                //         tags.push(Tag::new(format!("Tag #{}", i)).unwrap());
-                //     }
-                //     let _ = to_app.send(FromPresentation::AddTags(tags));
-                // }
                 Key::Left | Key::H | Key::CtrlB => village.select_next(Direction::Left, &mut mgr),
                 Key::Right | Key::L | Key::CtrlF => village.select_next(Direction::Right, &mut mgr),
                 Key::Up | Key::K | Key::CtrlP => village.select_next(Direction::Up, &mut mgr),
@@ -479,24 +466,24 @@ pub fn serve_tui_mgr(
                                 let _action = c_menu.show(&mut mgr, 0, village.cm_position());
                                 continue;
                             }
-                            if let Some((d_type, data)) = creator.show(
-                                &mut mgr,
-                                &manifest,
-                                &mut manifest_tui,
-                                false,
-                                None,
-                                vec![],
-                                String::new(),
-                                main_display,
-                                input_display,
-                                &mut editor,
-                            ) {
-                                //TODO
-                                eprintln!("We have some work to do {:?} {}", d_type, data.len());
-                                let _ = to_app.send(FromPresentation::CreateContent(d_type, data));
-                            } else {
-                                eprintln!("Nothing to do from creator");
-                            };
+                            // if let Some((d_type, data)) = creator.show(
+                            //     &mut mgr,
+                            //     &manifest,
+                            //     &mut selector,
+                            //     false,
+                            //     None,
+                            //     vec![],
+                            //     String::new(),
+                            //     main_display,
+                            //     input_display,
+                            //     &mut editor,
+                            // ) {
+                            //     //TODO
+                            //     eprintln!("We have some work to do {:?} {}", d_type, data.len());
+                            //     let _ = to_app.send(FromPresentation::CreateContent(d_type, data));
+                            // } else {
+                            //     eprintln!("Nothing to do from creator");
+                            // };
                         }
                         TileType::Neighbor(n_id) => {
                             let _ = to_app.send(FromPresentation::NeighborSelected(n_id));
@@ -528,6 +515,10 @@ pub fn serve_tui_mgr(
         }
         if let Ok(to_tui) = to_tui_recv.try_recv() {
             match to_tui {
+                ToPresentation::DisplayCMenu(set_id) => {
+                    let action = c_menu.show(&mut mgr, set_id, village.cm_position());
+                    let _ = to_app.send(FromPresentation::CMenuAction(action));
+                }
                 ToPresentation::Neighbors(neighbors) => {
                     //TODO: first make sure neighbor is not placed on screen
                     for neighbor in neighbors.into_iter() {
@@ -547,64 +538,96 @@ pub fn serve_tui_mgr(
                     );
                     let read_only = !am_i_founder;
 
-                    if let Some((d_type, data)) = creator.show(
-                        &mut mgr,
-                        &manifest,
-                        &mut manifest_tui,
-                        read_only,
-                        Some(d_type),
-                        tags,
-                        text,
-                        main_display,
-                        input_display,
-                        &mut editor,
-                    ) {
-                        //TODO
-                        eprintln!("We have some work to do {:?} {}", d_type, data.len());
-                        let mut d_vec = vec![data];
-                        d_vec.append(&mut data_vec);
-                        let _ =
-                            to_app.send(FromPresentation::UpdateContent(c_id, d_type, 0, d_vec));
-                    } else {
-                        eprintln!("Nothing to do from creator");
-                    };
+                    // if let Some((d_type, data)) = creator.show(
+                    //     &mut mgr,
+                    //     &manifest,
+                    //     &mut selector,
+                    //     read_only,
+                    //     Some(d_type),
+                    //     tags,
+                    //     text,
+                    //     main_display,
+                    //     input_display,
+                    //     &mut editor,
+                    // ) {
+                    //     //TODO
+                    //     eprintln!("We have some work to do {:?} {}", d_type, data.len());
+                    //     let mut d_vec = vec![data];
+                    //     d_vec.append(&mut data_vec);
+                    //     let _ =
+                    //         to_app.send(FromPresentation::UpdateContent(c_id, d_type, 0, d_vec));
+                    // } else {
+                    //     eprintln!("Nothing to do from creator");
+                    // };
                 }
-                ToPresentation::Manifest(me_founder, mani) => {
-                    eprintln!("TUI got Manifest {}", mani.tags.len());
-                    am_i_founder = me_founder;
-                    manifest = mani.clone();
-                    if manifest_req == 1 {
-                        let tag_names = mani.tag_names();
-                        eprintln!("All tag names: {:?}", tag_names);
-                        let _selected = manifest_tui.select(
-                            "Catalog Application's Tags",
-                            &tag_names,
-                            vec![],
-                            &mut mgr,
-                            false,
-                        );
-                        eprintln!("Selected tags: ");
-                        for index in _selected {
-                            if let Some(value) = tag_names.get(index) {
-                                eprintln!("{} - {}", index, value);
-                            }
-                        }
-                    } else if manifest_req == 2 {
-                        let tag_names = mani.dtype_names();
-                        eprintln!("All dtype names: {:?}", tag_names);
-                        let _selected = manifest_tui.select(
-                            "Catalog Application's Data types",
-                            &tag_names,
-                            vec![],
-                            &mut mgr,
-                            true,
-                        );
-                        eprintln!("Selected data types: ");
-                        for index in _selected {
-                            eprintln!("{} - {}", index, tag_names.get(index).unwrap());
-                        }
-                    }
-                    manifest_req = 0;
+                ToPresentation::DisplaySelector(
+                    quit_on_first_select,
+                    header,
+                    tag_names,
+                    selections,
+                ) => {
+                    // eprintln!("TUI got Manifest {}", mani.tags.len());
+                    // am_i_founder = me_founder;
+                    // manifest = mani.clone();
+                    // if manifest_req == 1 {
+                    // let tag_names = mani.tag_names();
+                    eprintln!("All tag names: {:?}", tag_names);
+                    let _selected = selector.select(
+                        // "Catalog Application's Tags",
+                        &header,
+                        &tag_names,
+                        selections,
+                        &mut mgr,
+                        quit_on_first_select,
+                    );
+                    // eprintln!("Selected tags: ");
+                    // for index in _selected {
+                    //     if let Some(value) = tag_names.get(index) {
+                    //         eprintln!("{} - {}", index, value);
+                    //     }
+                    // }
+                    let _ = to_app.send(FromPresentation::SelectedIndices(_selected));
+                    // } else if manifest_req == 2 {
+                    //     let tag_names = mani.dtype_names();
+                    //     eprintln!("All dtype names: {:?}", tag_names);
+                    //     let _selected = selector.select(
+                    //         "Catalog Application's Data types",
+                    //         &tag_names,
+                    //         vec![],
+                    //         &mut mgr,
+                    //         true,
+                    //     );
+                    //     eprintln!("Selected data types: ");
+                    //     for index in _selected {
+                    //         eprintln!("{} - {}", index, tag_names.get(index).unwrap());
+                    //     }
+                    // }
+                    // manifest_req = 0;
+                }
+                ToPresentation::DisplayEditor(
+                    read_only,
+                    header,
+                    initial_text,
+                    allow_new_lines,
+                    limit,
+                ) => {
+                    editor.set_mode(read_only);
+                    let edit_result = serve_editor(
+                        input_display,
+                        main_display,
+                        &mut editor,
+                        &header,
+                        initial_text,
+                        allow_new_lines,
+                        limit,
+                        &mut mgr,
+                    );
+                    let _ = to_app.send(FromPresentation::EditResult(edit_result));
+                }
+                ToPresentation::DisplayCreator(read_only, d_type, description, tags) => {
+                    //TODO
+                    let c_result = creator.show(&mut mgr, read_only, d_type, tags, description);
+                    let _ = to_app.send(FromPresentation::CreatorResult(c_result));
                 }
                 ToPresentation::ContentsNotExist(c_id) => {
                     if question.ask(
