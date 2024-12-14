@@ -4,7 +4,7 @@ use dapp_lib::prelude::ContentID;
 use dapp_lib::prelude::DataType;
 use dapp_lib::prelude::GnomeId;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum TileType {
     Home(GnomeId),
     Neighbor(GnomeId),

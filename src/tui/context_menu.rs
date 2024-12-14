@@ -75,8 +75,9 @@ impl CMenu {
         }
     }
     pub fn show(&mut self, mgr: &mut Manager, set_nr: usize, offset: (isize, isize)) -> usize {
-        let mut selection = 1;
         self.current_set(set_nr);
+        let mut selection = self.current_set.starting_frame;
+        // eprintln!("Set nr: {}", set_nr);
         mgr.set_graphic(self.g_id, self.current_set.starting_frame, false);
         mgr.move_graphic(self.g_id, 3, offset);
         loop {
@@ -89,7 +90,7 @@ impl CMenu {
                     }
                     Key::Down | Key::J | Key::CtrlN => {
                         selection = self.current_set.next_frame(selection);
-                        // eprintln!("DOWN {}", selection);
+                        // eprintln!("DOWN {:?}", selection);
                         mgr.set_graphic(self.g_id, selection, false);
                     }
                     Key::Enter | Key::Space => {

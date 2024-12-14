@@ -26,6 +26,7 @@ enum Action {
 
 pub struct Selector {
     g_id: usize,
+    display_id: usize,
     width: usize,
     height: usize,
     options: Vec<Option>,
@@ -35,6 +36,7 @@ pub struct Selector {
 
 impl Selector {
     pub fn new(_app_type: AppType, mgr: &mut Manager) -> Self {
+        let display_id = mgr.new_display(true);
         let (cols, rows) = mgr.screen_size();
         let width = cols;
         let height = rows;
@@ -54,6 +56,7 @@ impl Selector {
         }
         Selector {
             g_id,
+            display_id,
             width,
             height,
             options: tags,
@@ -70,6 +73,7 @@ impl Selector {
         mgr: &mut Manager,
         quit_on_first_select: bool,
     ) -> Vec<usize> {
+        mgr.restore_display(self.display_id, true);
         eprintln!("Options to present: {:?}", options);
         mgr.move_graphic(self.g_id, 3, (0, 0));
         let gp = Glyph::plain();

@@ -35,6 +35,7 @@ pub enum CreatorResult {
 }
 pub struct Creator {
     g_id: usize,
+    display_id: usize,
     button_dtypes: Button,
     button_tags: Button,
     button_descr: Button,
@@ -47,6 +48,7 @@ pub struct Creator {
 impl Creator {
     pub fn new(mgr: &mut Manager) -> Self {
         let (width, height) = mgr.screen_size();
+        let display_id = mgr.new_display(true);
         let g = Glyph::char(' ');
         let frame = vec![g; width * height];
         let mut library = HashMap::new();
@@ -61,6 +63,7 @@ impl Creator {
         let button_cancel = Button::new((8, 3), 1, (2, 24), "Anuluj", Some("Zamknij"), mgr);
         Creator {
             g_id,
+            display_id,
             button_dtypes,
             button_tags,
             button_descr,
@@ -168,6 +171,7 @@ impl Creator {
         tags: String,
         description: String,
     ) -> CreatorResult {
+        mgr.restore_display(self.display_id, true);
         self.update_d_type(mgr, &d_type);
         let t_text = format!("Tags: {}", tags);
         self.update_tags(mgr, t_text);
@@ -221,6 +225,7 @@ impl Creator {
                         mgr.move_graphic(self.button_apply.g_id, 0, (0, 0));
                         mgr.move_graphic(self.button_cancel.g_id, 0, (0, 0));
                         available_buttons[selected_button].deselect(mgr, read_only);
+                        mgr.restore_display(0, true);
                         match selected_button {
                             1 => {
                                 return CreatorResult::SelectDType;

@@ -1,4 +1,4 @@
-use crate::logic::Manifest;
+// use crate::logic::Manifest;
 use animaterm::prelude::*;
 // use animaterm::utilities::message_box;
 pub use content_creator::CreatorResult;
@@ -17,6 +17,7 @@ mod button;
 mod content_creator;
 mod context_menu;
 mod editor;
+mod indexer;
 mod option;
 mod selector;
 mod tile;
@@ -26,6 +27,7 @@ use ask::Question;
 use content_creator::Creator;
 use context_menu::CMenu;
 use editor::Editor;
+use indexer::Indexer;
 use selector::Selector;
 use tile::Tile;
 pub use tile::TileType;
@@ -252,6 +254,7 @@ pub enum ToPresentation {
         String, //Description
         String, //Tags
     ),
+    DisplayIndexer(Vec<String>),
 }
 
 #[derive(Clone)]
@@ -266,9 +269,11 @@ pub enum FromPresentation {
     NeighborSelected(GnomeId),
     KeyPress(Key),
     ShowContextMenu(TileType),
+    TileSelected(TileType),
     CMenuAction(usize),
     SelectedIndices(Vec<usize>),
     EditResult(Option<String>),
+    IndexResult(Option<usize>),
     CreatorResult(CreatorResult),
 }
 
@@ -311,21 +316,20 @@ pub fn serve_tui_mgr(
     // let mut tiles_mapping = HashMap::<(u8, u8), TileType>::new();
     // eprintln!("Serving TUI Manager scr size: {}x{}", s_size.0, s_size.1);
     let main_display = 0;
-    let input_display = mgr.new_display(true);
     let mut editor = Editor::new(&mut mgr);
-    editor.show(&mut mgr);
+    let mut indexer = Indexer::new(&mut mgr);
+    let mut creator = Creator::new(&mut mgr);
+    let mut selector = Selector::new(AppType::Catalog, &mut mgr);
     mgr.restore_display(main_display, true);
     let mut c_menu = CMenu::new(&mut mgr);
-    let mut creator = Creator::new(&mut mgr);
     let mut d_type_map = HashMap::new();
     d_type_map.insert(DataType::Data(0), "Text".to_string());
     d_type_map.insert(DataType::Data(1), "Text file".to_string());
     d_type_map.insert(DataType::Data(2), "Binary file".to_string());
     let question = Question::new(&mut mgr);
-    let mut am_i_founder = false;
-    let mut manifest = Manifest::new(AppType::Catalog, HashMap::new());
-    let mut selector = Selector::new(AppType::Catalog, &mut mgr);
-    let set_id = c_menu.add_set(
+    // let mut am_i_founder = false;
+    // let mut manifest = Manifest::new(AppType::Catalog, HashMap::new());
+    let _set_id = c_menu.add_set(
         &mut mgr,
         vec![
             " TAGs".to_string(),
@@ -338,7 +342,21 @@ pub fn serve_tui_mgr(
             " Konstantynopol".to_string(),
         ],
     );
-    let mut manifest_req: u8 = 0;
+    let _set_id = c_menu.add_set(
+        &mut mgr,
+        vec![
+            " New Note".to_string(),
+            " Jak".to_string(),
+            " By".to_string(),
+            " Nie".to_string(),
+            " Było".to_string(),
+            " Będzie".to_string(),
+            " Bardzo".to_string(),
+            " Miło".to_string(),
+        ],
+    );
+    eprintln!("Added CMenu set: {}", _set_id);
+    // let mut manifest_req: u8 = 0;
     loop {
         if let Some(key) = mgr.read_key() {
             let terminate = key == Key::Q || key == Key::ShiftQ;
@@ -355,20 +373,19 @@ pub fn serve_tui_mgr(
                     match action {
                         1 => {
                             // eprintln!("Requesting manifest");
-                            manifest_req = 1;
+                            // manifest_req = 1;
                             let _ = to_app.send(FromPresentation::ContentInquiry(0));
                         }
                         2 => {
-                            manifest_req = 2;
+                            // manifest_req = 2;
                             // eprintln!("Requesting manifest");
                             let _ = to_app.send(FromPresentation::ContentInquiry(0));
                         }
                         3 => {
                             // eprintln!("Adding new TAG");
-                            let edit_result = serve_editor(
-                                input_display,
+                            let edit_result = editor.serve(
+                                // input_display,
                                 main_display,
-                                &mut editor,
                                 " Max size: 32  Oneline  Define new Tag name    (TAB to finish)",
                                 None,
                                 // true,
@@ -387,10 +404,10 @@ pub fn serve_tui_mgr(
                         }
                         4 => {
                             // eprintln!("Adding new DataType");
-                            let edit_result = serve_editor(
-                                input_display,
+                            let edit_result = editor.serve(
+                                // input_display,
                                 main_display,
-                                &mut editor,
+                                // &mut editor,
                                 " Max size: 32  Oneline  Define new DataType   (TAB to finish)",
                                 None,
                                 // true,
@@ -459,50 +476,56 @@ pub fn serve_tui_mgr(
                     village.select(&sel, &mut mgr);
                 }
                 Key::Enter => {
-                    //TODO: we need to be aware of what context we are in to determine what
-                    match village.get_selection() {
-                        TileType::Home(owner) => {
-                            if owner != village.my_id {
-                                let _action = c_menu.show(&mut mgr, 0, village.cm_position());
-                                continue;
-                            }
-                            // if let Some((d_type, data)) = creator.show(
-                            //     &mut mgr,
-                            //     &manifest,
-                            //     &mut selector,
-                            //     false,
-                            //     None,
-                            //     vec![],
-                            //     String::new(),
-                            //     main_display,
-                            //     input_display,
-                            //     &mut editor,
-                            // ) {
-                            //     //TODO
-                            //     eprintln!("We have some work to do {:?} {}", d_type, data.len());
-                            //     let _ = to_app.send(FromPresentation::CreateContent(d_type, data));
-                            // } else {
-                            //     eprintln!("Nothing to do from creator");
-                            // };
-                        }
-                        TileType::Neighbor(n_id) => {
-                            let _ = to_app.send(FromPresentation::NeighborSelected(n_id));
-                            swap_tiles(n_id, &mut village, &mut neighboring_villages, &mut mgr);
-                        }
-                        TileType::Field => {
-                            print!("What?");
-                        }
-                        TileType::Content(_d_type, c_id) => {
-                            // if let Some((c_id, d_type)) = tiles_mapping.get(&village.selected_tile)
-                            // {
-                            // println!("Something: {:?}", c_data);
-                            let _ = to_app.send(FromPresentation::ContentInquiry(c_id));
-                            // }
-                        }
-                        _ => {
-                            //TODO
-                        }
+                    let tile = village.get_selection();
+                    if let TileType::Neighbor(g_id) = &tile {
+                        swap_tiles(*g_id, &mut village, &mut neighboring_villages, &mut mgr);
                     }
+                    //         let _ = to_app.send(FromPresentation::NeighborSelected(n_id));
+                    let _ = to_app.send(FromPresentation::TileSelected(tile));
+                    //TODO: we need to be aware of what context we are in to determine what
+                    // match{
+                    //     TileType::Home(owner) => {
+                    //         if owner != village.my_id {
+                    //             let _action = c_menu.show(&mut mgr, 0, village.cm_position());
+                    //             continue;
+                    //         }
+                    //         // if let Some((d_type, data)) = creator.show(
+                    //         //     &mut mgr,
+                    //         //     &manifest,
+                    //         //     &mut selector,
+                    //         //     false,
+                    //         //     None,
+                    //         //     vec![],
+                    //         //     String::new(),
+                    //         //     main_display,
+                    //         //     input_display,
+                    //         //     &mut editor,
+                    //         // ) {
+                    //         //     //TODO
+                    //         //     eprintln!("We have some work to do {:?} {}", d_type, data.len());
+                    //         //     let _ = to_app.send(FromPresentation::CreateContent(d_type, data));
+                    //         // } else {
+                    //         //     eprintln!("Nothing to do from creator");
+                    //         // };
+                    //     }
+                    //     TileType::Neighbor(n_id) => {
+                    //         let _ = to_app.send(FromPresentation::NeighborSelected(n_id));
+                    //         swap_tiles(n_id, &mut village, &mut neighboring_villages, &mut mgr);
+                    //     }
+                    //     TileType::Field => {
+                    //         print!("What?");
+                    //     }
+                    //     TileType::Content(_d_type, c_id) => {
+                    //         // if let Some((c_id, d_type)) = tiles_mapping.get(&village.selected_tile)
+                    //         // {
+                    //         // println!("Something: {:?}", c_data);
+                    //         let _ = to_app.send(FromPresentation::ContentInquiry(c_id));
+                    //         // }
+                    //     }
+                    //     _ => {
+                    //         //TODO
+                    //     }
+                    // }
                 }
                 other => {
                     // eprintln!("Send to app: {} terminate: {}", other, terminate);
@@ -531,12 +554,8 @@ pub fn serve_tui_mgr(
                     // tiles_mapping.insert(tile_id, TileType::Content(d_type, c_id));
                 }
                 ToPresentation::Contents(c_id, d_type, tags, text, mut data_vec) => {
-                    eprintln!(
-                        "Showing Contents of {}, manifest tags len: {:?}",
-                        c_id,
-                        manifest.tags.len()
-                    );
-                    let read_only = !am_i_founder;
+                    eprintln!("Showing Contents of {}", c_id,);
+                    // let read_only = !am_i_founder;
 
                     // if let Some((d_type, data)) = creator.show(
                     //     &mut mgr,
@@ -573,13 +592,13 @@ pub fn serve_tui_mgr(
                     // let tag_names = mani.tag_names();
                     eprintln!("All tag names: {:?}", tag_names);
                     let _selected = selector.select(
-                        // "Catalog Application's Tags",
                         &header,
                         &tag_names,
                         selections,
                         &mut mgr,
                         quit_on_first_select,
                     );
+                    mgr.restore_display(main_display, true);
                     // eprintln!("Selected tags: ");
                     // for index in _selected {
                     //     if let Some(value) = tag_names.get(index) {
@@ -612,10 +631,10 @@ pub fn serve_tui_mgr(
                     limit,
                 ) => {
                     editor.set_mode(read_only);
-                    let edit_result = serve_editor(
-                        input_display,
+                    let edit_result = editor.serve(
+                        // input_display,
                         main_display,
-                        &mut editor,
+                        // &mut editor,
                         &header,
                         initial_text,
                         allow_new_lines,
@@ -623,6 +642,11 @@ pub fn serve_tui_mgr(
                         &mut mgr,
                     );
                     let _ = to_app.send(FromPresentation::EditResult(edit_result));
+                }
+                ToPresentation::DisplayIndexer(headers) => {
+                    let index_result =
+                        indexer.serve(main_display, "This is an Indexer", headers, &mut mgr);
+                    let _ = to_app.send(FromPresentation::IndexResult(index_result));
                 }
                 ToPresentation::DisplayCreator(read_only, d_type, description, tags) => {
                     //TODO
@@ -646,29 +670,6 @@ pub fn serve_tui_mgr(
     }
     eprintln!("Done serving TUI");
     mgr.terminate();
-}
-
-pub fn serve_editor(
-    editor_display: usize,
-    main_display: usize,
-    editor: &mut Editor,
-    title: &str,
-    initial_text: Option<String>,
-    allow_newlines: bool,
-    byte_limit: Option<u16>,
-    mgr: &mut Manager,
-) -> Option<String> {
-    mgr.restore_display(editor_display, true);
-    editor.set_title(mgr, title);
-    editor.allow_newlines(allow_newlines);
-    editor.set_limit(byte_limit);
-    if let Some(text) = initial_text {
-        editor.set_text(mgr, &text);
-    }
-    // print!("Type text in (press TAB to finish): ");
-    let result = editor.run(mgr);
-    mgr.restore_display(main_display, true);
-    result
 }
 
 fn swap_tiles(

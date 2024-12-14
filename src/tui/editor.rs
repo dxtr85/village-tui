@@ -1,12 +1,10 @@
 use crate::tui::Direction;
 use animaterm::utilities::message_box;
 use animaterm::{glyph, prelude::*};
-//TODO: we need to create a text input logic that will handle screen and update text
-// with provided char.
-// Input can be also modified/ended when receiving a Key.
 
 pub struct Editor {
     pub g_id: usize,
+    display_id: usize,
     lines: Vec<String>,
     cursor_position: (usize, usize),
     max_position: (usize, usize),
@@ -16,6 +14,7 @@ pub struct Editor {
 }
 impl Editor {
     pub fn new(mgr: &mut Manager) -> Self {
+        let display_id = mgr.new_display(true);
         let (cols, rows) = mgr.screen_size();
         let m_box = message_box(
             Some("Text input".to_string()),
@@ -25,15 +24,18 @@ impl Editor {
             rows,
         );
         let g_id = mgr.add_graphic(m_box, 0, (0, 0)).unwrap();
-        Editor {
+        let mut editor = Editor {
             g_id,
+            display_id,
             lines: vec![String::new(); rows],
             cursor_position: (2, 1),
             max_position: (cols - 2, rows - 2),
             allow_newlines: true,
             read_only: false,
             byte_limit: None,
-        }
+        };
+        editor.show(mgr);
+        editor
     }
     pub fn allow_newlines(&mut self, allow: bool) {
         self.allow_newlines = allow;
@@ -55,7 +57,7 @@ impl Editor {
         // self.clear(mgr);
         // self.move_to_line_start(mgr);
         let mut glyph = Glyph::plain();
-        for row in 1..self.max_position.1 {
+        for row in 1..=self.max_position.1 {
             self.cursor_position = (2, row);
             let taken = self.remove_chars_from_cursor_to_end(mgr);
             mgr.set_glyph(self.g_id, glyph, 2, row);
@@ -523,12 +525,29 @@ impl Editor {
                 curr_x_position = 2;
             }
         }
-        // for y in curr_y_position..self.max_position.1 {
-        //     for x in 2..self.max_position.0 {
-        //         mgr.set_glyph(self.g_id, gp, x, y);
-        //     }
-        // }
     }
+    pub fn serve(
+        &mut self,
+        main_display: usize,
+        title: &str,
+        initial_text: Option<String>,
+        allow_newlines: bool,
+        byte_limit: Option<u16>,
+        mgr: &mut Manager,
+    ) -> Option<String> {
+        mgr.restore_display(self.display_id, true);
+        self.set_title(mgr, title);
+        self.allow_newlines(allow_newlines);
+        self.set_limit(byte_limit);
+        if let Some(text) = initial_text {
+            self.set_text(mgr, &text);
+        }
+        // print!("Type text in (press TAB to finish): ");
+        let result = self.run(mgr);
+        mgr.restore_display(main_display, true);
+        result
+    }
+
     pub fn set_mode(&mut self, read_only: bool) {
         self.read_only = read_only;
     }

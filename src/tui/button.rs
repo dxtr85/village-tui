@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 pub struct Button {
     pub g_id: usize,
+    size: (usize, usize),
 }
 
 impl Button {
@@ -69,7 +70,51 @@ impl Button {
                 offset,
             )
             .unwrap();
-        Button { g_id }
+        Button { g_id, size }
+    }
+    pub fn rename(&self, mgr: &mut Manager, new_name: &String) {
+        let mut g = Glyph::char(' ');
+        let mut gr = Glyph::char(' ');
+        gr.set_reverse(true);
+        let mut c_iter = new_name.chars().into_iter();
+        let row = self.size.1 >> 1;
+        let mut added = 1;
+        mgr.set_graphic(self.g_id, 1, false);
+        let mut cc_iter = c_iter.clone();
+        while let Some(c) = cc_iter.next() {
+            if added >= self.size.0 - 1 {
+                break;
+            }
+            // g.set_char(c);
+            gr.set_char(c);
+            // let location = size.0 * row + added;
+            // frame_deselect[location] = g;
+            // frame_select[location] = gr;
+            mgr.set_glyph(self.g_id, gr, added, row);
+            added = added + 1;
+        }
+        gr.set_char(' ');
+        for i in added..self.size.0 {
+            mgr.set_glyph(self.g_id, gr, i, row);
+        }
+        added = 1;
+        mgr.set_graphic(self.g_id, 0, false);
+        while let Some(c) = c_iter.next() {
+            if added >= self.size.0 - 1 {
+                break;
+            }
+            g.set_char(c);
+            // gr.set_char(c);
+            // let location = size.0 * row + added;
+            // frame_deselect[location] = g;
+            // frame_select[location] = gr;
+            mgr.set_glyph(self.g_id, g, added, row);
+            added = added + 1;
+        }
+        g.set_char(' ');
+        for i in added..self.size.0 {
+            mgr.set_glyph(self.g_id, g, i, row);
+        }
     }
     pub fn select(&self, mgr: &mut Manager, alternative: bool) {
         if alternative {
