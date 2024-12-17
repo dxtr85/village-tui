@@ -2,6 +2,7 @@
 use animaterm::prelude::*;
 // use animaterm::utilities::message_box;
 pub use content_creator::CreatorResult;
+use dapp_lib::prelude::AppError;
 use dapp_lib::prelude::AppType;
 use dapp_lib::prelude::ContentID;
 use dapp_lib::prelude::DataType;
@@ -238,11 +239,11 @@ pub enum ToPresentation {
     Neighbors(Vec<GnomeId>),
     AppendContent(ContentID, DataType),
     Contents(ContentID, DataType, Vec<u8>, String, Vec<Data>),
-    ContentsNotExist(ContentID),
+    ReadError(ContentID, AppError),
     DisplaySelector(bool, String, Vec<String>, Vec<usize>), //bool indicates if we are founder of active swarm
     DisplayCMenu(usize),
     DisplayEditor(
-        bool,
+        (bool, bool), // (read_only, can_edit)
         String,
         Option<String>,
         bool,        // allow_newlines
@@ -653,12 +654,9 @@ pub fn serve_tui_mgr(
                     let c_result = creator.show(&mut mgr, read_only, d_type, tags, description);
                     let _ = to_app.send(FromPresentation::CreatorResult(c_result));
                 }
-                ToPresentation::ContentsNotExist(c_id) => {
+                ToPresentation::ReadError(c_id, error) => {
                     if question.ask(
-                        &format!(
-                            "Content {} was not created. Do you want to create one?",
-                            c_id
-                        ),
+                        &format!("Error reading CID {}:\n {}", c_id, error),
                         &mut mgr,
                     ) {
                         // let manifest = create_manifest(&mut mgr);

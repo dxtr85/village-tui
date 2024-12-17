@@ -8,6 +8,7 @@ pub struct Indexer {
     pub g_id: usize,
     display_id: usize,
     buttons: Vec<Button>,
+    visible_buttons: usize,
     cursor_position: usize,
     max_position: (usize, usize),
     allow_newlines: bool,
@@ -18,14 +19,14 @@ impl Indexer {
     pub fn new(mgr: &mut Manager) -> Self {
         let display_id = mgr.new_display(true);
         let (cols, rows) = mgr.screen_size();
-        let blen = rows / 3 - 1;
-        let mut buttons = Vec::with_capacity(blen);
-        for i in 0..blen {
+        let visible_buttons = rows / 3 - 1;
+        let mut buttons = Vec::with_capacity(visible_buttons);
+        for i in 0..visible_buttons {
             let button = Button::new(
                 (cols, 3),
-                1,
+                0,
                 (0, (i as isize + 1) * 3),
-                &format!("Nagłówek {} z {}zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", i, blen - 1),
+                &format!("Nagłówek {} z {}zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", i, visible_buttons - 1),
                 None,
                 mgr,
             );
@@ -42,11 +43,12 @@ impl Indexer {
             cols,
             rows,
         );
-        let g_id = mgr.add_graphic(m_box, 0, (0, 0)).unwrap();
+        let g_id = mgr.add_graphic(m_box, 1, (0, 0)).unwrap();
         let mut indexer = Indexer {
             g_id,
             display_id,
             buttons,
+            visible_buttons,
             cursor_position: 0,
             max_position: (cols - 2, rows - 2),
             allow_newlines: true,
@@ -65,13 +67,13 @@ impl Indexer {
         self.buttons[self.cursor_position].deselect(mgr, false);
         if matches!(direction, Direction::Up) {
             if self.cursor_position == 0 {
-                self.cursor_position = self.buttons.len() - 1;
+                self.cursor_position = self.visible_buttons - 1;
             } else {
                 self.cursor_position -= 1;
             }
             self.buttons[self.cursor_position].select(mgr, false);
         } else {
-            if self.cursor_position == self.buttons.len() - 1 {
+            if self.cursor_position == self.visible_buttons - 1 {
                 self.cursor_position = 0;
             } else {
                 self.cursor_position += 1;
@@ -101,14 +103,20 @@ impl Indexer {
         mgr: &mut Manager,
     ) -> Option<usize> {
         mgr.restore_display(self.display_id, true);
+        self.cursor_position = 0;
         self.set_title(mgr, title);
-        // print!("Type text in (press TAB to finish): ");
+        let h_len = headers.len();
+        let b_len = self.buttons.len();
+        self.visible_buttons = if h_len < b_len { h_len } else { b_len };
+        // eprintln!("Indexer visible buttons: {}", self.visible_buttons);
         for i in 0..self.buttons.len() {
             if let Some(name) = headers.get(i) {
                 self.buttons[i].rename(mgr, name);
+                self.buttons[i].show(mgr);
             } else {
                 //TODO: disable following buttons
-                break;
+                // break;
+                self.buttons[i].hide(mgr);
             }
         }
         let result = self.run(mgr);

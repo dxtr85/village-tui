@@ -10,6 +10,7 @@ pub struct Editor {
     max_position: (usize, usize),
     allow_newlines: bool,
     read_only: bool,
+    can_edit: bool,
     byte_limit: Option<u16>,
 }
 impl Editor {
@@ -32,6 +33,7 @@ impl Editor {
             max_position: (cols - 2, rows - 2),
             allow_newlines: true,
             read_only: false,
+            can_edit: true,
             byte_limit: None,
         };
         editor.show(mgr);
@@ -548,8 +550,9 @@ impl Editor {
         result
     }
 
-    pub fn set_mode(&mut self, read_only: bool) {
+    pub fn set_mode(&mut self, (read_only, can_edit): (bool, bool)) {
         self.read_only = read_only;
+        self.can_edit = can_edit;
     }
     pub fn run(&mut self, mgr: &mut Manager) -> Option<String> {
         loop {
@@ -578,6 +581,13 @@ impl Editor {
                             }
                             self.delete(mgr)
                         }
+                        Key::F8 => {
+                            eprintln!("Read-only:{}, can_edit: {}", self.read_only, self.can_edit);
+                            if self.read_only && self.can_edit {
+                                self.read_only = false;
+                                eprintln!("Read-write enabled");
+                            }
+                        }
                         Key::AltB => {
                             self.move_cursor(Direction::Left, mgr);
                             self.move_cursor(Direction::Left, mgr);
@@ -595,7 +605,11 @@ impl Editor {
                 } else if ch == '\t' {
                     let taken = self.take_text(mgr);
                     // mgr.restore_display(main_display, true);
-                    return Some(taken);
+                    if self.read_only {
+                        return None;
+                    } else {
+                        return Some(taken);
+                    }
                 } else if ch == '\u{7f}' {
                     if self.read_only {
                         continue;

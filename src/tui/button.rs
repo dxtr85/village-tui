@@ -72,6 +72,12 @@ impl Button {
             .unwrap();
         Button { g_id, size }
     }
+    pub fn hide(&self, mgr: &mut Manager) {
+        mgr.move_graphic(self.g_id, 0, (0, 0));
+    }
+    pub fn show(&self, mgr: &mut Manager) {
+        mgr.move_graphic(self.g_id, 2, (0, 0));
+    }
     pub fn rename(&self, mgr: &mut Manager, new_name: &String) {
         let mut g = Glyph::char(' ');
         let mut gr = Glyph::char(' ');
