@@ -1,7 +1,8 @@
 use async_std::task::spawn_blocking;
 use dapp_lib::prelude::*;
-use std::env::args;
+use std::path::PathBuf;
 use std::sync::mpsc::channel;
+use std::{env::args, path::Path};
 mod logic;
 mod tui;
 use logic::ApplicationLogic;
@@ -9,8 +10,13 @@ use tui::{instantiate_tui_mgr, serve_tui_mgr};
 
 #[async_std::main]
 async fn main() {
-    let dir: String = args().nth(1).unwrap().parse().unwrap();
-    let config = Configuration::new(dir, 0);
+    let dir = if let Some(arg) = args().nth(1) {
+        let args = arg.to_string();
+        PathBuf::new().join(args)
+    } else {
+        PathBuf::new()
+    };
+    let config = Configuration::new(dir);
 
     let (to_presentation_msg_send, to_presentation_msg_recv) = channel();
     let (from_presentation_msg_send, from_presentation_msg_recv) = channel();
