@@ -346,8 +346,8 @@ pub fn serve_tui_mgr(
     let _set_id = c_menu.add_set(
         &mut mgr,
         vec![
-            " New Note".to_string(),
-            " Jak".to_string(),
+            " Nowa Notatka".to_string(),
+            " Usuń Notatkę".to_string(),
             " By".to_string(),
             " Nie".to_string(),
             " Było".to_string(),

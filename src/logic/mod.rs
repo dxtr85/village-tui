@@ -17,6 +17,7 @@ enum TuiState {
     Village,
     AddTag,
     AddDType,
+    RemovePage(ContentID),
     AppendData(ContentID),
     ContextMenuOn(TileType),
     Creator(Option<ContentID>, bool, DataType, String, Vec<u8>),
@@ -347,6 +348,7 @@ impl ApplicationLogic {
                                 eprintln!("{:?} got Selected indices", other);
                             }
                         }
+                        eprintln!("Setting state to: {:?}", new_state);
                         self.state = new_state;
                     }
 
@@ -474,7 +476,6 @@ impl ApplicationLogic {
                                 }
                                 TileType::Content(d_type, c_id) => {
                                     self.run_cmenu_action_on_content(c_id, d_type, action);
-                                    self.state = TuiState::AppendData(c_id);
                                 }
                                 other => {
                                     eprintln!(
@@ -693,6 +694,25 @@ impl ApplicationLogic {
                     FromPresentation::IndexResult(i_result) => {
                         let mut new_state = None;
                         match &self.state {
+                            TuiState::RemovePage(c_id) => {
+                                if let Some(page_id) = i_result {
+                                    eprintln!(
+                                        "We should request Page #{} removal from CID-{}",
+                                        page_id, c_id
+                                    );
+                                    if page_id > 0 {
+                                        let _ = self.to_app_mgr_send.send(ToAppMgr::RemoveData(
+                                            self.active_swarm.swarm_id,
+                                            *c_id,
+                                            page_id as u16,
+                                        ));
+                                    } else {
+                                        // TODO: make this logic built-into dapp-lib
+                                        eprintln!("Unable to remove Page #0");
+                                    }
+                                }
+                                new_state = Some(TuiState::Village);
+                            }
                             TuiState::Indexing(
                                 c_id,
                                 d_id_opt,
@@ -934,7 +954,7 @@ impl ApplicationLogic {
             self.active_swarm.manifest = manifest;
         } else {
             match &self.state {
-                TuiState::ReadRequestForIndexer(rc_id) => {
+                TuiState::ReadRequestForIndexer(rc_id) | TuiState::RemovePage(rc_id) => {
                     if *rc_id == c_id {
                         // eprintln!("Run ReadRequestForIndexer on {} data items", d_vec.len());
                         //TODO: get first line of every data for Indexer to present
@@ -991,15 +1011,17 @@ impl ApplicationLogic {
                             .to_tui
                             .send(ToPresentation::DisplayIndexer(all_headers.clone()));
                         // and update state to store all data that was read
-                        self.state = TuiState::Indexing(
-                            c_id,
-                            None,
-                            d_type,
-                            tag_ids,
-                            description,
-                            all_headers,
-                            all_notes,
-                        );
+                        if !matches!(self.state, TuiState::RemovePage(_c_id)) {
+                            self.state = TuiState::Indexing(
+                                c_id,
+                                None,
+                                d_type,
+                                tag_ids,
+                                description,
+                                all_headers,
+                                all_notes,
+                            );
+                        }
                     } else {
                         eprintln!("ReadSuccess on {}, was expecting: {}", c_id, rc_id);
                     }
@@ -1029,6 +1051,7 @@ impl ApplicationLogic {
         match action {
             1 => {
                 //TODO
+                self.state = TuiState::AppendData(c_id);
                 let _ = self.to_tui.send(ToPresentation::DisplayEditor(
                     (false, true),
                     "Add Note".to_string(),
@@ -1036,6 +1059,11 @@ impl ApplicationLogic {
                     true,
                     Some(1024),
                 ));
+            }
+            2 => {
+                // eprintln!("Setting state to RemovePage({})", c_id);
+                self.query_content_for_indexer(c_id);
+                self.state = TuiState::RemovePage(c_id);
             }
             other => {
                 //TODO
