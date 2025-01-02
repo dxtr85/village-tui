@@ -881,7 +881,7 @@ impl ApplicationLogic {
                     }
                     ToApp::NewContent(s_id, c_id, d_type) => {
                         if s_id == self.active_swarm.swarm_id && home_swarm_enforced {
-                            eprintln!("ToApp::NewContent({:?},{:?})", c_id, d_type);
+                            // eprintln!("ToApp::NewContent({:?},{:?})", c_id, d_type);
                             let _ = self
                                 .to_tui
                                 .send(ToPresentation::AppendContent(c_id, d_type));
@@ -911,7 +911,7 @@ impl ApplicationLogic {
                         }
                     }
                     ToApp::ReadSuccess(s_id, c_id, d_type, d_vec) => {
-                        eprintln!("Received ReadSuccess {:?} {}", s_id, c_id);
+                        // eprintln!("Received ReadSuccess {:?} {}", s_id, c_id);
                         if s_id == self.active_swarm.swarm_id {
                             self.process_data(c_id, d_type, d_vec);
                         } else {
@@ -946,10 +946,10 @@ impl ApplicationLogic {
 
     fn process_data(&mut self, c_id: ContentID, d_type: DataType, mut d_vec: Vec<Data>) {
         if c_id == 0 {
-            eprintln!(
-                "Sending Manifest d_vec.len: {} to Presentation",
-                d_vec.len()
-            );
+            // eprintln!(
+            //     "Sending Manifest d_vec.len: {} to Presentation",
+            //     d_vec.len()
+            // );
             let manifest = Manifest::from(d_vec);
             self.active_swarm.manifest = manifest;
         } else {

@@ -117,7 +117,7 @@ impl Manifest {
                 d_types: HashMap::new(),
             };
         }
-        eprintln!("Constructing manifest from: {} Data blocks", data_count);
+        // eprintln!("Constructing manifest from: {} Data blocks", data_count);
         let mut data_iter = data_vec.into_iter();
         let first_data = data_iter.next().unwrap();
         let mut iter = first_data.bytes().into_iter();
