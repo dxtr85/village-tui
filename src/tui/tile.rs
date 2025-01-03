@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use animaterm::Graphic;
 use animaterm::Manager;
 use dapp_lib::prelude::ContentID;
@@ -21,9 +23,9 @@ pub struct Tile {
     pub deselect_frame: usize,
 }
 impl Tile {
-    pub fn new(offset: (isize, isize), mgr: &mut Manager) -> Self {
-        let c_graphic =
-            Graphic::from_file("/home/dxtr/projects/village-tui/assets/content.g").unwrap();
+    pub fn new(offset: (isize, isize), mgr: &mut Manager, asset_dir: &PathBuf) -> Self {
+        let c_path = asset_dir.join("content.g");
+        let c_graphic = Graphic::from_file(c_path).unwrap();
         let id = mgr.add_graphic(c_graphic, 2, offset).unwrap();
         mgr.set_graphic(id, 0, true);
         Tile {

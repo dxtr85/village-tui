@@ -10,6 +10,7 @@ use dapp_lib::prelude::GnomeId;
 use dapp_lib::Data;
 use std::collections::HashMap;
 use std::fmt::format;
+use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
@@ -23,6 +24,7 @@ mod option;
 mod selector;
 mod tile;
 mod viewer;
+use crate::config::Configuration;
 use crate::logic::Tag;
 use ask::Question;
 use content_creator::Creator;
@@ -59,7 +61,7 @@ impl VillageLayout {
         }
     }
 
-    pub fn initialize(&mut self, owner_id: GnomeId, mgr: &mut Manager) {
+    pub fn initialize(&mut self, owner_id: GnomeId, mgr: &mut Manager, config: Configuration) {
         self.my_id = owner_id;
         for col in 0..self.tiles_in_row {
             for row in 0..self.visible_rows {
@@ -75,7 +77,7 @@ impl VillageLayout {
                 } else {
                     row as isize * 8
                 };
-                let tile = Tile::new((off_x, off_y), mgr);
+                let tile = Tile::new((off_x, off_y), mgr, &config.asset_dir);
                 self.tiles.insert((row, col), tile);
             }
         }
@@ -308,11 +310,13 @@ pub fn serve_tui_mgr(
     mut mgr: Manager,
     to_app: Sender<FromPresentation>,
     to_tui_recv: Receiver<ToPresentation>,
+    config_dir: PathBuf,
 ) {
+    let config = Configuration::new(&config_dir);
     let s_size = mgr.screen_size();
     let mut village = VillageLayout::new(s_size);
     let mut neighboring_villages = HashMap::new();
-    village.initialize(my_id, &mut mgr);
+    village.initialize(my_id, &mut mgr, config);
 
     // let mut tiles_mapping = HashMap::<(u8, u8), TileType>::new();
     // eprintln!("Serving TUI Manager scr size: {}x{}", s_size.0, s_size.1);

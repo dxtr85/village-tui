@@ -3,6 +3,7 @@ use dapp_lib::prelude::*;
 use std::path::PathBuf;
 use std::sync::mpsc::channel;
 use std::{env::args, path::Path};
+mod config;
 mod logic;
 mod tui;
 use logic::ApplicationLogic;
@@ -16,7 +17,7 @@ async fn main() {
     } else {
         PathBuf::new()
     };
-    let config = Configuration::new(dir);
+    let config = Configuration::new(dir.clone());
 
     let (to_presentation_msg_send, to_presentation_msg_recv) = channel();
     let (from_presentation_msg_send, from_presentation_msg_recv) = channel();
@@ -29,7 +30,7 @@ async fn main() {
         to_application_send.clone(),
         to_app_mgr_send.clone(),
         to_app_mgr_recv,
-        config,
+        dir.clone(),
     );
     let mut logic = ApplicationLogic::new(
         my_id,
@@ -47,6 +48,7 @@ async fn main() {
             tui_mgr,
             from_presentation_msg_send,
             to_presentation_msg_recv,
+            dir,
         )
     });
     logic.run().await;
