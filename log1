@@ -1,0 +1,1795 @@
+warning: unused import: `CastData`
+ --> /home/dxtr/projects/swarm-consensus/src/internal.rs:1:13
+  |
+1 | use crate::{CastData, CastID, GnomeId, NeighborRequest, NeighborResponse};
+  |             ^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `crate::capabilities::CapabiLeaf`
+ --> /home/dxtr/projects/swarm-consensus/src/swarm.rs:1:5
+  |
+1 | use crate::capabilities::CapabiLeaf;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::message::BlockID`
+ --> /home/dxtr/projects/swarm-consensus/src/neighbor.rs:1:5
+  |
+1 | use crate::message::BlockID;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::SyncData`
+  --> /home/dxtr/projects/swarm-consensus/src/neighbor.rs:23:5
+   |
+23 | use crate::SyncData;
+   |     ^^^^^^^^^^^^^^^
+
+warning: unused import: `std::io::Read`
+  --> /home/dxtr/projects/swarm-consensus/src/swarm.rs:24:5
+   |
+24 | use std::io::Read;
+   |     ^^^^^^^^^^^^^
+
+warning: value assigned to `available_bandwith` is never read
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:1534:17
+     |
+1534 |         let mut available_bandwith = if let Ok(band) = self.band_receiver.try_recv() {
+     |                 ^^^^^^^^^^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+     = note: `#[warn(unused_assignments)]` on by default
+
+warning: variable `remote_id` is assigned to, but never used
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:1920:17
+     |
+1920 |         let mut remote_id = GnomeId(0);
+     |                 ^^^^^^^^^
+     |
+     = note: consider using `_remote_id` instead
+     = note: `#[warn(unused_variables)]` on by default
+
+warning: value assigned to `remote_id` is never read
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:1940:17
+     |
+1940 |                 remote_id = neighbor.id;
+     |                 ^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+
+warning: value assigned to `remote_id` is never read
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:1963:17
+     |
+1963 |                 remote_id = neighbor.id;
+     |                 ^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+
+warning: unused variable: `id`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2457:58
+     |
+2457 | ...                   ChangeConfig::InsertPubkey { id, key, .. } => {
+     |                                                    ^^-
+     |                                                    |
+     |                                                    help: try removing the field
+
+warning: unused variable: `key`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2457:62
+     |
+2457 | ...                   ChangeConfig::InsertPubkey { id, key, .. } => {
+     |                                                        ^^^-
+     |                                                        |
+     |                                                        help: try removing the field
+
+warning: unused variable: `chunk_no`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2787:59
+     |
+2787 |                         NeighborResponse::KeyRegistrySync(chunk_no, total_chunks, mut pairs) => {
+     |                                                           ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_chunk_no`
+
+warning: unused variable: `total_chunks`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2787:69
+     |
+2787 |                         NeighborResponse::KeyRegistrySync(chunk_no, total_chunks, mut pairs) => {
+     |                                                                     ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_total_chunks`
+
+warning: unused variable: `chunk_no`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2793:58
+     |
+2793 |                         NeighborResponse::CapabilitySync(chunk_no, total_chunks, mut pairs) => {
+     |                                                          ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_chunk_no`
+
+warning: unused variable: `total_chunks`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2793:68
+     |
+2793 |                         NeighborResponse::CapabilitySync(chunk_no, total_chunks, mut pairs) => {
+     |                                                                    ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_total_chunks`
+
+warning: unused variable: `chunk_no`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2805:57
+     |
+2805 |                         NeighborResponse::BroadcastSync(chunk_no, total_chunks, mut pairs) => {
+     |                                                         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_chunk_no`
+
+warning: unused variable: `total_chunks`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2805:67
+     |
+2805 |                         NeighborResponse::BroadcastSync(chunk_no, total_chunks, mut pairs) => {
+     |                                                                   ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_total_chunks`
+
+warning: unused variable: `chunk_no`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2812:57
+     |
+2812 |                         NeighborResponse::MulticastSync(chunk_no, total_chunks, mut pairs) => {
+     |                                                         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_chunk_no`
+
+warning: unused variable: `total_chunks`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2812:67
+     |
+2812 |                         NeighborResponse::MulticastSync(chunk_no, total_chunks, mut pairs) => {
+     |                                                                   ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_total_chunks`
+
+warning: unused variable: `c_id`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2813:45
+     |
+2813 | ...                   while let Some((c_id, origin)) = pairs.pop() {
+     |                                       ^^^^ help: if this is intentional, prefix it with an underscore: `_c_id`
+
+warning: unused variable: `origin`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2813:51
+     |
+2813 | ...                   while let Some((c_id, origin)) = pairs.pop() {
+     |                                             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_origin`
+
+warning: unused variable: `cap`
+   --> /home/dxtr/projects/swarm-consensus/src/swarm.rs:360:44
+    |
+360 |         if matches!(Capabilities::Founder, cap) {
+    |                                            ^^^ help: if this is intentional, prefix it with an underscore: `_cap`
+
+warning: unused variable: `sync_req_params`
+   --> /home/dxtr/projects/swarm-consensus/src/neighbor.rs:247:79
+    |
+247 |                 if let CastContent::Request(NeighborRequest::SwarmSyncRequest(sync_req_params)) =
+    |                                                                               ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_sync_req_params`
+
+warning: field `queried_neighbors` is never read
+  --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:83:5
+   |
+78 | struct NeighborDiscovery {
+   |        ----------------- field in this struct
+...
+83 |     queried_neighbors: Vec<GnomeId>,
+   |     ^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: method `query_for_new_neighbors` is never used
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2899:8
+     |
+347  | impl Gnome {
+     | ---------- method in this implementation
+...
+2899 |     fn query_for_new_neighbors(&mut self) {
+     |        ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `insert2048` is never used
+  --> /home/dxtr/projects/swarm-consensus/src/key_registry.rs:89:4
+   |
+89 | fn insert2048(gnome_id: GnomeId, key: Vec<u8>, array: &mut [(GnomeId, Vec<u8>); 2048]) {
+   |    ^^^^^^^^^^
+
+warning: function `insert4096` is never used
+  --> /home/dxtr/projects/swarm-consensus/src/key_registry.rs:98:4
+   |
+98 | fn insert4096(gnome_id: GnomeId, key: Vec<u8>, array: &mut [(GnomeId, Vec<u8>); 4096]) {
+   |    ^^^^^^^^^^
+
+warning: function `insert8192` is never used
+   --> /home/dxtr/projects/swarm-consensus/src/key_registry.rs:107:4
+    |
+107 | fn insert8192(gnome_id: GnomeId, key: Vec<u8>, array: &mut [(GnomeId, Vec<u8>); 8192]) {
+    |    ^^^^^^^^^^
+
+warning: function `get2048` is never used
+   --> /home/dxtr/projects/swarm-consensus/src/key_registry.rs:179:4
+    |
+179 | fn get2048(gnome_id: GnomeId, array: &[(GnomeId, Vec<u8>); 2048]) -> Option<Vec<u8>> {
+    |    ^^^^^^^
+
+warning: function `get4096` is never used
+   --> /home/dxtr/projects/swarm-consensus/src/key_registry.rs:188:4
+    |
+188 | fn get4096(gnome_id: GnomeId, array: &[(GnomeId, Vec<u8>); 4096]) -> Option<Vec<u8>> {
+    |    ^^^^^^^
+
+warning: function `get8192` is never used
+   --> /home/dxtr/projects/swarm-consensus/src/key_registry.rs:197:4
+    |
+197 | fn get8192(gnome_id: GnomeId, array: &[(GnomeId, Vec<u8>); 8192]) -> Option<Vec<u8>> {
+    |    ^^^^^^^
+
+warning: function `has2048` is never used
+   --> /home/dxtr/projects/swarm-consensus/src/key_registry.rs:269:4
+    |
+269 | fn has2048(gnome_id: GnomeId, array: &[(GnomeId, Vec<u8>); 2048]) -> bool {
+    |    ^^^^^^^
+
+warning: function `has4096` is never used
+   --> /home/dxtr/projects/swarm-consensus/src/key_registry.rs:278:4
+    |
+278 | fn has4096(gnome_id: GnomeId, array: &[(GnomeId, Vec<u8>); 4096]) -> bool {
+    |    ^^^^^^^
+
+warning: function `has8192` is never used
+   --> /home/dxtr/projects/swarm-consensus/src/key_registry.rs:287:4
+    |
+287 | fn has8192(gnome_id: GnomeId, array: &[(GnomeId, Vec<u8>); 8192]) -> bool {
+    |    ^^^^^^^
+
+warning: method `send_casting` is never used
+   --> /home/dxtr/projects/swarm-consensus/src/neighbor.rs:643:8
+    |
+139 | impl Neighbor {
+    | ------------- method in this implementation
+...
+643 |     fn send_casting(&self, message: CastMessage) {
+    |        ^^^^^^^^^^^^
+
+warning: path statement with no effect
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:1175:13
+     |
+1175 |             any_data_processed;
+     |             ^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(path_statements)]` on by default
+
+warning: `swarm-consensus` (lib) generated 36 warnings (run `cargo fix --lib -p swarm-consensus` to apply 6 suggestions)
+warning: unused import: `std::net::Ipv4Addr`
+ --> /home/dxtr/projects/gnome/src/lib.rs:6:5
+  |
+6 | use std::net::Ipv4Addr;
+  |     ^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `Encrypter`
+ --> /home/dxtr/projects/gnome/src/networking/direct_punch.rs:4:32
+  |
+4 | use crate::crypto::{Decrypter, Encrypter};
+  |                                ^^^^^^^^^
+
+warning: unused import: `GnomeId`
+  --> /home/dxtr/projects/gnome/src/networking/direct_punch.rs:18:23
+   |
+18 | use swarm_consensus::{GnomeId, NetworkSettings, SwarmName, ToGnome};
+   |                       ^^^^^^^
+
+warning: unused import: `yield_now`
+  --> /home/dxtr/projects/gnome/src/networking/holepunch.rs:11:37
+   |
+11 | use async_std::task::{sleep, spawn, yield_now};
+   |                                     ^^^^^^^^^
+
+warning: unused import: `rsa::sha2::digest::HashMarker`
+ --> /home/dxtr/projects/gnome/src/networking/subscription.rs:3:5
+  |
+3 | use rsa::sha2::digest::HashMarker;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `NotificationBundle`
+ --> /home/dxtr/projects/gnome/src/networking/subscription.rs:9:51
+  |
+9 |     Nat, Neighbor, NetworkSettings, Notification, NotificationBundle, SwarmName, ToGnome,
+  |                                                   ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `self::common::are_we_behind_a_nat`
+  --> /home/dxtr/projects/gnome/src/networking/mod.rs:16:5
+   |
+16 | use self::common::are_we_behind_a_nat;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `self::holepunch::holepunch`
+  --> /home/dxtr/projects/gnome/src/networking/mod.rs:17:5
+   |
+17 | use self::holepunch::holepunch;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `NotificationBundle`
+  --> /home/dxtr/projects/gnome/src/networking/mod.rs:30:37
+   |
+30 | use swarm_consensus::{Notification, NotificationBundle};
+   |                                     ^^^^^^^^^^^^^^^^^^
+
+warning: unused variable: `remote_gnome_id`
+   --> /home/dxtr/projects/gnome/src/networking/client.rs:150:13
+    |
+150 |     let mut remote_gnome_id: GnomeId = GnomeId(0);
+    |             ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_remote_gnome_id`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+   --> /home/dxtr/projects/gnome/src/networking/client.rs:150:9
+    |
+150 |     let mut remote_gnome_id: GnomeId = GnomeId(0);
+    |         ----^^^^^^^^^^^^^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: unused variable: `send_result`
+   --> /home/dxtr/projects/gnome/src/networking/tcp_common.rs:506:9
+    |
+506 |     let send_result = socket.write(&buf).await;
+    |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_send_result`
+
+warning: unused variable: `holepunch_receiver`
+  --> /home/dxtr/projects/gnome/src/networking/mod.rs:63:28
+   |
+63 |     let (holepunch_sender, holepunch_receiver) = channel();
+   |                            ^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_holepunch_receiver`
+
+warning: variable does not need to be mutable
+  --> /home/dxtr/projects/gnome/src/networking/mod.rs:60:28
+   |
+60 |     let (sub_send_one_bis, mut sub_recv_one_bis) = channel();
+   |                            ----^^^^^^^^^^^^^^^^
+   |                            |
+   |                            help: remove this `mut`
+
+warning: unused import: `futures::SinkExt`
+  --> /home/dxtr/projects/gnome/src/networking/common.rs:12:5
+   |
+12 | use futures::SinkExt;
+   |     ^^^^^^^^^^^^^^^^
+
+warning: unused import: `aes_gcm::aead::Buffer`
+ --> /home/dxtr/projects/gnome/src/networking/common.rs:8:5
+  |
+8 | use aes_gcm::aead::Buffer;
+  |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused variable: `r`
+   --> /home/dxtr/projects/gnome/src/manager.rs:549:13
+    |
+549 |         let r = self
+    |             ^ help: if this is intentional, prefix it with an underscore: `_r`
+
+warning: unused variable: `pub_key_pem`
+   --> /home/dxtr/projects/gnome/src/networking/common.rs:231:5
+    |
+231 |     pub_key_pem: String,
+    |     ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_pub_key_pem`
+
+warning: unused variable: `other`
+   --> /home/dxtr/projects/gnome/src/networking/stun.rs:126:9
+    |
+126 |         other => {
+    |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_other`
+
+warning: method `verify` is never used
+  --> /home/dxtr/projects/gnome/src/crypto.rs:61:12
+   |
+27 | impl Encrypter {
+   | -------------- method in this implementation
+...
+61 |     pub fn verify(&self, data: &[u8], signature: &[u8]) -> bool {
+   |            ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: field `decrypter` is never read
+  --> /home/dxtr/projects/gnome/src/manager.rs:52:5
+   |
+41 | pub struct Manager {
+   |            ------- field in this struct
+...
+52 |     decrypter: Decrypter,
+   |     ^^^^^^^^^
+
+warning: function `holepunch` is never used
+  --> /home/dxtr/projects/gnome/src/networking/holepunch.rs:48:14
+   |
+48 | pub async fn holepunch(
+   |              ^^^^^^^^^
+
+warning: function `holepunch_probe_ok` is never used
+  --> /home/dxtr/projects/gnome/src/networking/holepunch.rs:95:10
+   |
+95 | async fn holepunch_probe_ok(puncher: SocketAddr) -> bool {
+   |          ^^^^^^^^^^^^^^^^^^
+
+warning: function `holepunch_task` is never used
+   --> /home/dxtr/projects/gnome/src/networking/holepunch.rs:116:10
+    |
+116 | async fn holepunch_task(
+    |          ^^^^^^^^^^^^^^
+
+warning: function `ask_proxy_for_remote_socket` is never used
+   --> /home/dxtr/projects/gnome/src/networking/holepunch.rs:364:10
+    |
+364 | async fn ask_proxy_for_remote_socket(
+    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `MagicPorts` is never constructed
+   --> /home/dxtr/projects/gnome/src/networking/holepunch.rs:478:8
+    |
+478 | struct MagicPorts(VecDeque<u16>);
+    |        ^^^^^^^^^^
+
+warning: associated items `new`, `next`, and `is_magic` are never used
+   --> /home/dxtr/projects/gnome/src/networking/holepunch.rs:481:8
+    |
+480 | impl MagicPorts {
+    | --------------- associated items in this implementation
+481 |     fn new() -> Self {
+    |        ^^^
+...
+489 |     fn next(&mut self) -> u16 {
+    |        ^^^^
+...
+494 |     fn is_magic(&self, port: u16) -> bool {
+    |        ^^^^^^^^
+
+warning: function `timeout` is never used
+   --> /home/dxtr/projects/gnome/src/networking/holepunch.rs:499:10
+    |
+499 | async fn timeout(time: &Duration) -> Result<(), u8> {
+    |          ^^^^^^^
+
+warning: function `try_communicate` is never used
+   --> /home/dxtr/projects/gnome/src/networking/holepunch.rs:503:10
+    |
+503 | async fn try_communicate(socket: &UdpSocket, remote_addr: SocketAddr) -> Result<SocketAddr, u8> {
+    |          ^^^^^^^^^^^^^^^
+
+warning: function `punch_back` is never used
+   --> /home/dxtr/projects/gnome/src/networking/holepunch.rs:630:10
+    |
+630 | async fn punch_back(
+    |          ^^^^^^^^^^
+
+warning: method `bytes` is never used
+   --> /home/dxtr/projects/gnome/src/networking/stun.rs:352:12
+    |
+351 | impl StunAddress {
+    | ---------------- method in this implementation
+352 |     pub fn bytes(&self) -> Vec<u8> {
+    |            ^^^^^
+
+warning: method `bytes` is never used
+   --> /home/dxtr/projects/gnome/src/networking/stun.rs:375:12
+    |
+374 | impl StunChangeRequest {
+    | ---------------------- method in this implementation
+375 |     pub fn bytes(&self) -> Vec<u8> {
+    |            ^^^^^
+
+warning: fields `class`, `number`, and `reason_phrase` are never read
+   --> /home/dxtr/projects/gnome/src/networking/stun.rs:421:5
+    |
+420 | pub struct StunErrorCode {
+    |            ------------- fields in this struct
+421 |     class: StunErrorClass,
+    |     ^^^^^
+422 |     number: StunErrorNumber,
+    |     ^^^^^^
+423 |     reason_phrase: Vec<u8>,
+    |     ^^^^^^^^^^^^^
+    |
+    = note: `StunErrorCode` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: method `bytes` is never used
+   --> /home/dxtr/projects/gnome/src/networking/stun.rs:426:12
+    |
+425 | impl StunErrorCode {
+    | ------------------ method in this implementation
+426 |     pub fn bytes(&self) -> Vec<u8> {
+    |            ^^^^^
+
+warning: field `0` is never read
+   --> /home/dxtr/projects/gnome/src/networking/stun.rs:469:19
+    |
+469 |     ChangeRequest(StunChangeRequest),
+    |     ------------- ^^^^^^^^^^^^^^^^^
+    |     |
+    |     field in this variant
+    |
+    = note: `StunAttributeValue` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+469 |     ChangeRequest(()),
+    |                   ~~
+
+warning: field `0` is never read
+   --> /home/dxtr/projects/gnome/src/networking/stun.rs:470:11
+    |
+470 |     Error(StunErrorCode),
+    |     ----- ^^^^^^^^^^^^^
+    |     |
+    |     field in this variant
+    |
+    = note: `StunAttributeValue` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+470 |     Error(()),
+    |           ~~
+
+warning: field `0` is never read
+   --> /home/dxtr/projects/gnome/src/networking/stun.rs:471:13
+    |
+471 |     Unknown(StunUnknownAttributes),
+    |     ------- ^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     field in this variant
+    |
+    = note: `StunAttributeValue` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+471 |     Unknown(()),
+    |             ~~
+
+warning: field `0` is never read
+   --> /home/dxtr/projects/gnome/src/networking/stun.rs:472:16
+    |
+472 |     Unexpected(Vec<u8>),
+    |     ---------- ^^^^^^^
+    |     |
+    |     field in this variant
+    |
+    = note: `StunAttributeValue` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+472 |     Unexpected(()),
+    |                ~~
+
+warning: method `bytes` is never used
+   --> /home/dxtr/projects/gnome/src/networking/stun.rs:475:12
+    |
+474 | impl StunAttributeValue {
+    | ----------------------- method in this implementation
+475 |     pub fn bytes(&self) -> Vec<u8> {
+    |            ^^^^^
+
+warning: variants `Turtle` and `Cheetah` are never constructed
+   --> /home/dxtr/projects/gnome/src/networking/token.rs:220:5
+    |
+219 | enum Category {
+    |      -------- variants in this enum
+220 |     Turtle,
+    |     ^^^^^^
+221 |     Rabbit,
+222 |     Cheetah,
+    |     ^^^^^^^
+
+warning: field `cat` is never read
+   --> /home/dxtr/projects/gnome/src/networking/token.rs:226:5
+    |
+225 | struct TokenEater {
+    |        ---------- field in this struct
+226 |     cat: Category,
+    |     ^^^
+
+warning: unused `Result` that must be used
+  --> /home/dxtr/projects/gnome/src/networking/tcp_client.rs:49:9
+   |
+49 |         stream.close().await;
+   |         ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: this `Result` may be an `Err` variant, which should be handled
+   = note: `#[warn(unused_must_use)]` on by default
+help: use `let _ = ...` to ignore the resulting value
+   |
+49 |         let _ = stream.close().await;
+   |         +++++++
+
+warning: unused `Result` that must be used
+  --> /home/dxtr/projects/gnome/src/networking/tcp_client.rs:62:9
+   |
+62 |         stream.close().await;
+   |         ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+   |
+62 |         let _ = stream.close().await;
+   |         +++++++
+
+warning: unused `Result` that must be used
+   --> /home/dxtr/projects/gnome/src/networking/tcp_client.rs:112:9
+    |
+112 |         stream.close().await;
+    |         ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+112 |         let _ = stream.close().await;
+    |         +++++++
+
+warning: unused `Result` that must be used
+   --> /home/dxtr/projects/gnome/src/networking/tcp_client.rs:136:9
+    |
+136 |         stream.close().await;
+    |         ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+136 |         let _ = stream.close().await;
+    |         +++++++
+
+warning: unused `Result` that must be used
+   --> /home/dxtr/projects/gnome/src/networking/tcp_client.rs:167:13
+    |
+167 |             stream.close().await;
+    |             ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+167 |             let _ = stream.close().await;
+    |             +++++++
+
+warning: unused `Result` that must be used
+   --> /home/dxtr/projects/gnome/src/networking/tcp_client.rs:172:9
+    |
+172 |         stream.close().await;
+    |         ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+172 |         let _ = stream.close().await;
+    |         +++++++
+
+warning: unused `Result` that must be used
+   --> /home/dxtr/projects/gnome/src/networking/tcp_client.rs:198:9
+    |
+198 |         stream.close().await;
+    |         ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+198 |         let _ = stream.close().await;
+    |         +++++++
+
+warning: unused `Result` that must be used
+   --> /home/dxtr/projects/gnome/src/networking/tcp_client.rs:216:9
+    |
+216 |         stream.close().await;
+    |         ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+216 |         let _ = stream.close().await;
+    |         +++++++
+
+warning: unused `Result` that must be used
+   --> /home/dxtr/projects/gnome/src/networking/tcp_common.rs:211:17
+    |
+211 |                 stream.close().await;
+    |                 ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+211 |                 let _ = stream.close().await;
+    |                 +++++++
+
+warning: unused `Result` that must be used
+   --> /home/dxtr/projects/gnome/src/networking/tcp_common.rs:215:17
+    |
+215 |                 stream.close().await;
+    |                 ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+215 |                 let _ = stream.close().await;
+    |                 +++++++
+
+warning: unused `Result` that must be used
+   --> /home/dxtr/projects/gnome/src/networking/tcp_server.rs:121:9
+    |
+121 |         reader.close().await;
+    |         ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+121 |         let _ = reader.close().await;
+    |         +++++++
+
+warning: unused `Result` that must be used
+   --> /home/dxtr/projects/gnome/src/networking/tcp_server.rs:137:9
+    |
+137 |         reader.close().await;
+    |         ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+137 |         let _ = reader.close().await;
+    |         +++++++
+
+warning: unused `Result` that must be used
+   --> /home/dxtr/projects/gnome/src/networking/tcp_server.rs:143:9
+    |
+143 |         reader.close().await;
+    |         ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+143 |         let _ = reader.close().await;
+    |         +++++++
+
+warning: unused `Result` that must be used
+   --> /home/dxtr/projects/gnome/src/networking/tcp_server.rs:150:9
+    |
+150 |         reader.close().await;
+    |         ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+150 |         let _ = reader.close().await;
+    |         +++++++
+
+warning: unused `Result` that must be used
+   --> /home/dxtr/projects/gnome/src/networking/tcp_server.rs:167:9
+    |
+167 |         reader.close().await;
+    |         ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+167 |         let _ = reader.close().await;
+    |         +++++++
+
+warning: unused `Result` that must be used
+   --> /home/dxtr/projects/gnome/src/networking/tcp_server.rs:179:9
+    |
+179 |         writer.close().await;
+    |         ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+179 |         let _ = writer.close().await;
+    |         +++++++
+
+warning: unused `Result` that must be used
+   --> /home/dxtr/projects/gnome/src/networking/tcp_server.rs:206:9
+    |
+206 |         writer.close().await;
+    |         ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+206 |         let _ = writer.close().await;
+    |         +++++++
+
+warning: `gnome` (lib) generated 58 warnings (run `cargo fix --lib -p gnome` to apply 11 suggestions)
+warning: unused import: `std::arch::x86_64::_MM_FROUND_TO_NEAREST_INT`
+ --> /home/dxtr/projects/dapp-lib/src/lib.rs:5:5
+  |
+5 | use std::arch::x86_64::_MM_FROUND_TO_NEAREST_INT;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `std::ascii::AsciiExt`
+ --> /home/dxtr/projects/dapp-lib/src/sync_message.rs:1:5
+  |
+1 | use std::ascii::AsciiExt;
+  |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `async_std::net::ToSocketAddrs`
+  --> /home/dxtr/projects/dapp-lib/src/lib.rs:21:5
+   |
+21 | use async_std::net::ToSocketAddrs;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated trait `std::ascii::AsciiExt`: use inherent methods instead
+ --> /home/dxtr/projects/dapp-lib/src/sync_message.rs:1:17
+  |
+1 | use std::ascii::AsciiExt;
+  |                 ^^^^^^^^
+  |
+  = note: `#[warn(deprecated)]` on by default
+
+warning: unreachable statement
+   --> /home/dxtr/projects/dapp-lib/src/lib.rs:803:21
+    |
+802 |                     panic!("THIS IS NOT FULLY IMPLEMENTED!!!");
+    |                     ------------------------------------------ any code following this expression is unreachable
+803 |                     let hash_hash_chunks = bottom_hashes_as_data_blocks.chunks_exact(128);
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unreachable statement
+    |
+    = note: `#[warn(unreachable_code)]` on by default
+
+warning: unused variable: `h`
+   --> /home/dxtr/projects/dapp-lib/src/lib.rs:565:29
+    |
+565 |                         for h in c.data_hashes() {
+    |                             ^ help: if this is intentional, prefix it with an underscore: `_h`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `hash_hash_data`
+   --> /home/dxtr/projects/dapp-lib/src/lib.rs:734:25
+    |
+734 |                 let mut hash_hash_data = Vec::with_capacity(4);
+    |                         ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_hash_hash_data`
+
+warning: unused variable: `new_data_len`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:1344:29
+     |
+1344 |                         let new_data_len = byte_groups_iter.len() as u16;
+     |                             ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_new_data_len`
+
+warning: unused variable: `len`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:1518:34
+     |
+1518 |                         let (_t, len) = app_data.get_type_and_len(c_id).unwrap();
+     |                                  ^^^ help: if this is intentional, prefix it with an underscore: `_len`
+
+warning: unused variable: `c_id`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:1556:49
+     |
+1556 |                     SyncMessageType::InsertData(c_id, d_id) => {
+     |                                                 ^^^^ help: if this is intentional, prefix it with an underscore: `_c_id`
+
+warning: unused variable: `d_id`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:1556:55
+     |
+1556 |                     SyncMessageType::InsertData(c_id, d_id) => {
+     |                                                       ^^^^ help: if this is intentional, prefix it with an underscore: `_d_id`
+
+warning: unused variable: `c_id`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:1560:49
+     |
+1560 |                     SyncMessageType::ExtendData(c_id, d_id) => {
+     |                                                 ^^^^ help: if this is intentional, prefix it with an underscore: `_c_id`
+
+warning: unused variable: `d_id`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:1560:55
+     |
+1560 |                     SyncMessageType::ExtendData(c_id, d_id) => {
+     |                                                       ^^^^ help: if this is intentional, prefix it with an underscore: `_d_id`
+
+warning: unused variable: `upd_res`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:2114:49
+     |
+2114 | ...                   let upd_res = app_data.update_transformative_link(
+     |                           ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_upd_res`
+
+warning: unused variable: `res`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:2173:57
+     |
+2173 | ...                   let res = app_data
+     |                           ^^^ help: if this is intentional, prefix it with an underscore: `_res`
+
+warning: unused variable: `res`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:2240:49
+     |
+2240 | ...                   let res = app_data.update_transformative_link(
+     |                           ^^^ help: if this is intentional, prefix it with an underscore: `_res`
+
+warning: unused variable: `len`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:2284:26
+     |
+2284 |                 let (_t, len) = type_and_len_result.unwrap();
+     |                          ^^^ help: if this is intentional, prefix it with an underscore: `_len`
+
+warning: unused variable: `root_hash`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:2285:25
+     |
+2285 |                 let (t, root_hash) = app_data.content_root_hash(c_id).unwrap();
+     |                         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_root_hash`
+
+warning: variable does not need to be mutable
+   --> /home/dxtr/projects/dapp-lib/src/lib.rs:441:9
+    |
+441 |     let mut used_memory_pages = 0;
+    |         ----^^^^^^^^^^^^^^^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: variable does not need to be mutable
+   --> /home/dxtr/projects/dapp-lib/src/lib.rs:734:21
+    |
+734 |                 let mut hash_hash_data = Vec::with_capacity(4);
+    |                     ----^^^^^^^^^^^^^^
+    |                     |
+    |                     help: remove this `mut`
+
+warning: unused variable: `c_id`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:2426:39
+     |
+2426 |                 GnomeToApp::BCastData(c_id, _data) => {
+     |                                       ^^^^ help: if this is intentional, prefix it with an underscore: `_c_id`
+
+warning: unused variable: `s_id`
+   --> /home/dxtr/projects/dapp-lib/src/lib.rs:351:41
+    |
+351 |                 ToAppMgr::ChangeContent(s_id, c_id, d_type, data_vec) => {
+    |                                         ^^^^ help: if this is intentional, prefix it with an underscore: `_s_id`
+
+warning: unused variable: `d_type`
+   --> /home/dxtr/projects/dapp-lib/src/content.rs:426:21
+    |
+426 |                 let d_type = bytes_iter.next().unwrap();
+    |                     ^^^^^^ help: if this is intentional, prefix it with an underscore: `_d_type`
+
+warning: unused variable: `update_result`
+  --> /home/dxtr/projects/dapp-lib/src/datastore.rs:61:13
+   |
+61 |         let update_result = self.update(c_id, content);
+   |             ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_update_result`
+
+warning: unused variable: `len`
+  --> /home/dxtr/projects/dapp-lib/src/datastore.rs:77:18
+   |
+77 |         let (_t, len) = self.type_and_len(c_id).unwrap();
+   |                  ^^^ help: if this is intentional, prefix it with an underscore: `_len`
+
+warning: unused variable: `c_id`
+  --> /home/dxtr/projects/dapp-lib/src/message.rs:65:33
+   |
+65 |     pub fn post_validate(&self, c_id: ContentID, app: &ApplicationData) -> bool {
+   |                                 ^^^^ help: if this is intentional, prefix it with an underscore: `_c_id`
+
+warning: unused variable: `d_len`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:2743:13
+     |
+2743 |         let d_len = data.len();
+     |             ^^^^^ help: if this is intentional, prefix it with an underscore: `_d_len`
+
+warning: method `to_sync` is never used
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:2591:12
+     |
+2574 | impl AppMessage {
+     | --------------- method in this implementation
+...
+2591 |     pub fn to_sync(self) -> SyncData {
+     |            ^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+warning: methods `hashes` and `content_hashes` are never used
+   --> /home/dxtr/projects/dapp-lib/src/datastore.rs:434:12
+    |
+20  | impl Datastore {
+    | -------------- methods in this implementation
+...
+434 |     pub fn hashes(&self) {}
+    |            ^^^^^^
+...
+438 |     pub fn content_hashes(&self, _c_id: ContentID) {}
+    |            ^^^^^^^^^^^^^^
+
+warning: method `insert` is never used
+  --> /home/dxtr/projects/dapp-lib/src/registry.rs:13:12
+   |
+9  | impl ChangeRegistry {
+   | ------------------- method in this implementation
+...
+13 |     pub fn insert(&mut self, content_id: ContentID) {
+   |            ^^^^^^
+
+warning: unused `Result` that must be used
+   --> /home/dxtr/projects/dapp-lib/src/lib.rs:231:29
+    |
+231 | ...                   app_mgr.set_active(&my_id);
+    |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+    = note: `#[warn(unused_must_use)]` on by default
+help: use `let _ = ...` to ignore the resulting value
+    |
+231 |                             let _ = app_mgr.set_active(&my_id);
+    |                             +++++++
+
+warning: unused `Result` that must be used
+   --> /home/dxtr/projects/dapp-lib/src/lib.rs:693:21
+    |
+693 |                     a_tree.append(Data::empty(hash));
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+    |
+693 |                     let _ = a_tree.append(Data::empty(hash));
+    |                     +++++++
+
+warning: `dapp-lib` (lib) generated 32 warnings (run `cargo fix --lib -p dapp-lib` to apply 5 suggestions)
+   Compiling village-tui v0.1.0 (/home/dxtr/projects/village-tui)
+warning: unused import: `path::Path`
+ --> src/main.rs:5:22
+  |
+5 | use std::{env::args, path::Path};
+  |                      ^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `std::net::IpAddr`
+ --> src/config.rs:3:5
+  |
+3 | use std::net::IpAddr;
+  |     ^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::str::FromStr`
+ --> src/config.rs:5:5
+  |
+5 | use std::str::FromStr;
+  |     ^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::fmt::format`
+  --> src/tui/mod.rs:12:5
+   |
+12 | use std::fmt::format;
+   |     ^^^^^^^^^^^^^^^^
+
+warning: unused variable: `config`
+  --> src/main.rs:20:9
+   |
+20 |     let config = Configuration::new(dir.clone());
+   |         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_config`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `g_id`
+   --> src/logic/mod.rs:210:48
+    |
+210 | ...                   TileType::Neighbor(g_id) => {
+    |                                          ^^^^ help: if this is intentional, prefix it with an underscore: `_g_id`
+
+warning: unused variable: `dtype`
+   --> src/logic/mod.rs:213:47
+    |
+213 | ...                   TileType::Content(dtype, c_id) => {
+    |                                         ^^^^^ help: if this is intentional, prefix it with an underscore: `_dtype`
+
+warning: unused variable: `c_id`
+   --> src/logic/mod.rs:213:54
+    |
+213 | ...                   TileType::Content(dtype, c_id) => {
+    |                                                ^^^^ help: if this is intentional, prefix it with an underscore: `_c_id`
+
+warning: unused variable: `g_id`
+   --> src/logic/mod.rs:474:48
+    |
+474 | ...                   TileType::Home(g_id) => {
+    |                                      ^^^^ help: if this is intentional, prefix it with an underscore: `_g_id`
+
+warning: unused variable: `read_only`
+   --> src/logic/mod.rs:621:37
+    |
+621 | ...                   read_only,
+    |                       ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_read_only`
+
+warning: unused variable: `d_id_opt`
+   --> src/logic/mod.rs:718:33
+    |
+718 | ...                   d_id_opt,
+    |                       ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_d_id_opt`
+
+warning: unused variable: `d_type`
+    --> src/logic/mod.rs:1060:64
+     |
+1060 |     fn run_cmenu_action_on_content(&mut self, c_id: ContentID, d_type: DataType, action: usize) {
+     |                                                                ^^^^^^ help: if this is intentional, prefix it with an underscore: `_d_type`
+
+warning: unused variable: `other`
+  --> src/tui/ask.rs:61:21
+   |
+61 |                     other => {}
+   |                     ^^^^^ help: if this is intentional, prefix it with an underscore: `_other`
+
+warning: unused variable: `cols`
+  --> src/tui/context_menu.rs:42:14
+   |
+42 |         let (cols, rows) = mgr.screen_size();
+   |              ^^^^ help: if this is intentional, prefix it with an underscore: `_cols`
+
+warning: unused variable: `rows`
+  --> src/tui/context_menu.rs:42:20
+   |
+42 |         let (cols, rows) = mgr.screen_size();
+   |                    ^^^^ help: if this is intentional, prefix it with an underscore: `_rows`
+
+warning: value assigned to `action` is never read
+   --> src/tui/selector.rs:149:25
+    |
+149 |                 let mut action = Action::None;
+    |                         ^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` on by default
+
+warning: variable does not need to be mutable
+   --> src/tui/selector.rs:134:13
+    |
+134 |         let mut options_count = total_added;
+    |             ----^^^^^^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: unused variable: `text`
+  --> src/tui/viewer.rs:58:34
+   |
+58 |         let d_text = if let Some(text) = d_type_map.get(&d_type) {
+   |                                  ^^^^ help: if this is intentional, prefix it with an underscore: `_text`
+
+warning: unused variable: `manifest`
+  --> src/tui/viewer.rs:51:9
+   |
+51 |         manifest: &Manifest,
+   |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_manifest`
+
+warning: unused variable: `tags`
+  --> src/tui/viewer.rs:54:9
+   |
+54 |         tags: Vec<u8>,
+   |         ^^^^ help: if this is intentional, prefix it with an underscore: `_tags`
+
+warning: unused variable: `description`
+  --> src/tui/viewer.rs:55:9
+   |
+55 |         description: String,
+   |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_description`
+
+warning: unused variable: `tile_id`
+   --> src/tui/mod.rs:558:25
+    |
+558 |                     let tile_id = village.add_new_content(d_type, c_id, &mut mgr);
+    |                         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_tile_id`
+
+warning: unused variable: `d_type`
+   --> src/tui/mod.rs:561:48
+    |
+561 |                 ToPresentation::Contents(c_id, d_type, tags, text, mut data_vec) => {
+    |                                                ^^^^^^ help: if this is intentional, prefix it with an underscore: `_d_type`
+
+warning: unused variable: `tags`
+   --> src/tui/mod.rs:561:56
+    |
+561 |                 ToPresentation::Contents(c_id, d_type, tags, text, mut data_vec) => {
+    |                                                        ^^^^ help: if this is intentional, prefix it with an underscore: `_tags`
+
+warning: unused variable: `text`
+   --> src/tui/mod.rs:561:62
+    |
+561 |                 ToPresentation::Contents(c_id, d_type, tags, text, mut data_vec) => {
+    |                                                              ^^^^ help: if this is intentional, prefix it with an underscore: `_text`
+
+warning: unused variable: `data_vec`
+   --> src/tui/mod.rs:561:72
+    |
+561 |                 ToPresentation::Contents(c_id, d_type, tags, text, mut data_vec) => {
+    |                                                                        ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_data_vec`
+
+warning: variable does not need to be mutable
+   --> src/tui/mod.rs:561:68
+    |
+561 |                 ToPresentation::Contents(c_id, d_type, tags, text, mut data_vec) => {
+    |                                                                    ----^^^^^^^^
+    |                                                                    |
+    |                                                                    help: remove this `mut`
+
+warning: function `text_to_data` is never used
+    --> src/logic/mod.rs:1226:4
+     |
+1226 | fn text_to_data(text: String) -> Data {
+     |    ^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+warning: methods `set_description`, `first_hash`, `del_tags`, and `rename_tags` are never used
+   --> src/logic/manifest.rs:62:12
+    |
+52  | impl Manifest {
+    | ------------- methods in this implementation
+...
+62  |     pub fn set_description(&mut self, text: String) -> bool {
+    |            ^^^^^^^^^^^^^^^
+...
+74  |     pub fn first_hash(&self) -> u64 {
+    |            ^^^^^^^^^^
+...
+395 |     pub fn del_tags(&mut self, tags: Vec<Tag>) {
+    |            ^^^^^^^^
+...
+404 |     pub fn rename_tags(&mut self, mut tags: HashMap<Tag, Tag>) {
+    |            ^^^^^^^^^^^
+
+warning: variant `Contents` is never constructed
+   --> src/tui/mod.rs:243:5
+    |
+240 | pub enum ToPresentation {
+    |          -------------- variant in this enum
+...
+243 |     Contents(ContentID, DataType, Vec<u8>, String, Vec<Data>),
+    |     ^^^^^^^^
+
+warning: variants `CreateContent` and `UpdateContent` are never constructed
+   --> src/tui/mod.rs:269:5
+    |
+264 | pub enum FromPresentation {
+    |          ---------------- variants in this enum
+...
+269 |     CreateContent(DataType, Data),
+    |     ^^^^^^^^^^^^^
+270 |     UpdateContent(ContentID, DataType, u16, Vec<Data>),
+    |     ^^^^^^^^^^^^^
+    |
+    = note: `FromPresentation` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: field `height` is never read
+  --> src/tui/content_creator.rs:45:5
+   |
+36 | pub struct Creator {
+   |            ------- field in this struct
+...
+45 |     height: usize,
+   |     ^^^^^^
+
+warning: fields `allow_newlines`, `read_only`, and `byte_limit` are never read
+  --> src/tui/indexer.rs:14:5
+   |
+7  | pub struct Indexer {
+   |            ------- fields in this struct
+...
+14 |     allow_newlines: bool,
+   |     ^^^^^^^^^^^^^^
+15 |     read_only: bool,
+   |     ^^^^^^^^^
+16 |     byte_limit: Option<u16>,
+   |     ^^^^^^^^^^
+
+warning: field `last_updated_row` is never read
+  --> src/tui/selector.rs:34:5
+   |
+27 | pub struct Selector {
+   |            -------- field in this struct
+...
+34 |     last_updated_row: usize,
+   |     ^^^^^^^^^^^^^^^^
+
+warning: variant `Application` is never constructed
+  --> src/tui/tile.rs:14:5
+   |
+10 | pub enum TileType {
+   |          -------- variant in this enum
+...
+14 |     Application,
+   |     ^^^^^^^^^^^
+   |
+   = note: `TileType` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: struct `Viewer` is never constructed
+  --> src/tui/viewer.rs:10:12
+   |
+10 | pub struct Viewer {
+   |            ^^^^^^
+
+warning: associated items `new` and `show` are never used
+  --> src/tui/viewer.rs:17:12
+   |
+16 | impl Viewer {
+   | ----------- associated items in this implementation
+17 |     pub fn new(mgr: &mut Manager) -> Self {
+   |            ^^^
+...
+48 |     pub fn show(
+   |            ^^^^
+
+warning: `village-tui` (bin "village-tui") generated 37 warnings (run `cargo fix --bin "village-tui"` to apply 6 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.52s
+     Running `target/debug/village-tui /home/dxtr/.czat`
+Ignoring Line: # NAT:
+Ignoring Line: #  Unknown = 0,                                                                                
+Ignoring Line: #  None = 1,                                                                                   
+Ignoring Line: #  FullCone = 2,                                                                               
+Ignoring Line: #  AddressRestrictedCone = 4,                                                                  
+Ignoring Line: #  PortRestrictedCone = 8,                                                                     
+Ignoring Line: #  SymmetricWithPortControl = 16,                                                              
+Ignoring Line: #  Symmetric = 32,
+Ignoring Line: #
+Ignoring Line: # PORT_ALLOC_RULE:
+Ignoring Line: #  Random = 0,                                                                                 
+Ignoring Line: #  FullCone = 1,                                                                               
+Ignoring Line: #  AddressSensitive = 2,                                                                       
+Ignoring Line: #  PortSensitive = 4,
+Ignoring Line: #
+Ignoring Line: # IPADDR      PORT NAT PORT_ALLOC_RULE
+Parsing Line:  100.127.65.53 1026 1   1
+IP: 100.127.65.53, Port: 1026, NAT: None, rule: FullCone
+Ignoring Line: # 45.138.99.83    1026   1   1
+Ignoring Line: # NAT:
+Ignoring Line: #  Unknown = 0,                                                                                
+Ignoring Line: #  None = 1,                                                                                   
+Ignoring Line: #  FullCone = 2,                                                                               
+Ignoring Line: #  AddressRestrictedCone = 4,                                                                  
+Ignoring Line: #  PortRestrictedCone = 8,                                                                     
+Ignoring Line: #  SymmetricWithPortControl = 16,                                                              
+Ignoring Line: #  Symmetric = 32,
+Ignoring Line: #
+Ignoring Line: # PORT_ALLOC_RULE:
+Ignoring Line: #  Random = 0,                                                                                 
+Ignoring Line: #  FullCone = 1,                                                                               
+Ignoring Line: #  AddressSensitive = 2,                                                                       
+Ignoring Line: #  PortSensitive = 4,
+Ignoring Line: #
+Ignoring Line: # IPADDR      PORT NAT PORT_ALLOC_RULE
+Parsing Line:  100.127.65.53 1026 1   1
+IP: 100.127.65.53, Port: 1026, NAT: None, rule: FullCone
+Ignoring Line: # 45.138.99.83    1026   1   1
+Storage root: "/home/dxtr/.czat/storage"
+Sending neighbor settings: [NetworkSettings { pub_ip: 100.127.65.53, pub_port: 1026, nat_type: None, port_allocation: (FullCone, 1) }]
+Joined `GID-0-/` swarm
+Notifying network about GID-0-/
+Joined `any /` swarm
+Waiting for user/network to provide some Neighbors for GID-0-/...
+Storage root, gmgr: "/home/dxtr/.czat/storage"
+Subscriber service started
+Received Bundle for SwarmName { founder: GnomeId(0), name: "/" }
+Starting token dispenser service
+Added swarm in networking: GID-0-/
+sub sending: [SwarmName { founder: GnomeId(0), name: "/" }]
+SwarmID(0) joined GID-0-/
+Storage root app data: "/home/dxtr/.czat/storage"
+SwarmID(0) Memory: 0/32768 Pages (not implemented)
+--------------------------------------
+- - - - - - - - SERVER - - - - - - - -
+- Listens on: 0.0.0.0:1026   -
+--------------------------------------
+Waiting for direct connect requests.
+Server listening for TCP connections…
+My GnomeId: GID-e9eb84c70cd00f29
+Trying to communicate over UDP…
+UDP conn req from: 192.168.1.22:35696
+NAT detected, identifying...
+Waiting for STUN to respond...
+Added CMenu set: 2
+UDP connection success: false
+ TCP ADDR: None [SwarmName { founder: GnomeId(0), name: "/" }]
+NAT type: Symmetric 
+Trying to communicate over UDP…
+Trying to notify neighbor
+My pub port has changed from 37614 to 60521
+UDP connection success: false
+ TCP ADDR: Some((100.127.65.53, 1026)) [SwarmName { founder: GnomeId(0), name: "/" }]
+Trying to communicate over TCP…
+TCP CLIENT 100.127.65.53:1026
+TCP client Remote GnomeId: GID-d62a0cd89e1c492
+Neighbor member of swarms: [SwarmName { founder: GnomeId(5944107583523706201), name: "/" }, SwarmName { founder: GnomeId(964510074852721810), name: "/" }, SwarmName { founder: GnomeId(16855712020812533545), name: "/" }]
+Request include GID-d62a0cd89e1c492 to GID-d62a0cd89e1c492-/
+Waiting for initial tokens
+Max tokens: 1600000
+Setting generic swarm founder to: GID-d62a0cd89e1c492
+Set founder to GID-d62a0cd89e1c492
+Swarm / setting founder from: GID-0 to: GID-d62a0cd89e1c492
+GID-d62a0cd89e1c492 ADD	add a new neighbor to GID-d62a0cd89e1c492-/
+add_neighbor [SwarmName { founder: GnomeId(5944107583523706201), name: "/" }, SwarmName { founder: GnomeId(964510074852721810), name: "/" }, SwarmName { founder: GnomeId(16855712020812533545), name: "/" }]
+GID-d62a0cd89e1c492-/ have neighbors!
+Avail bandwith: 1024
+SID-0 In presync
+SID-0 Sending GID-d62a0cd89e1c492-/ SyncReq to GID-d62a0cd89e1c492 
+Updating existing name_to_id mapping
+Manager got info about a swarm: 'GID-527db65a9ea2d559-/'
+Manager got info about a swarm: 'GID-e9eb84c70cd00f29-/'
+App sync ST: ST0000040305 Round: ST0000040304 Key#: 1
+Legacy founder set
+Swarm / setting founder from: GID-d62a0cd89e1c492 to: GID-d62a0cd89e1c492
+Reading Datastore from "/home/dxtr/.czat/storage/GID-d62a0cd89e1c492/datastore.sync"…
+Swarm storage at: "/home/dxtr/.czat/storage/GID-d62a0cd89e1c492"
+Insert capability Founder: [GnomeId(964510074852721810)]
+overwrite Founder
+GID-d62a0cd89e1c492  <  ST0000040305 N-0 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040306 N-1 Sync KA[1024]
+Starting a new swarm, where I am Founder…
+NewSwarm available, joining: GID-527db65a9ea2d559-/
+NewSwarm available, joining: GID-e9eb84c70cd00f29-/
+Manager Received JoinSwarm(GID-e9eb84c70cd00f29-/)
+Existing neighbors already in GID-e9eb84c70cd00f29-/: 
+GID-d62a0cd89e1c492 in GID-e9eb84c70cd00f29-/… request sent: Ok(())
+Joined `GID-e9eb84c70cd00f29-/` swarm
+Notifying network about GID-e9eb84c70cd00f29-/
+Informing others about new swarm
+Waiting for user/network to provide some Neighbors for GID-e9eb84c70cd00f29-/...
+GID-d62a0cd89e1c492-/ received neighbor request for GID-e9eb84c70cd00f29-/. Am I founder?: true
+GID-d62a0cd89e1c492-/ request add GID-d62a0cd89e1c492 to GID-e9eb84c70cd00f29-/
+TCP Extend req: GID-e9eb84c70cd00f29-/
+Manager Received JoinSwarm(GID-527db65a9ea2d559-/)
+Existing neighbors already in GID-527db65a9ea2d559-/: 
+GID-d62a0cd89e1c492 in GID-527db65a9ea2d559-/… request sent: Ok(())
+Joined `GID-527db65a9ea2d559-/` swarm
+Notifying network about GID-527db65a9ea2d559-/
+Informing others about new swarm
+Mgr recvd add GID-d62a0cd89e1c492 to GID-e9eb84c70cd00f29-/
+Waiting for user/network to provide some Neighbors for GID-527db65a9ea2d559-/...
+Added GID-d62a0cd89e1c492 to existing swarm 1
+Gnome adding GID-d62a0cd89e1c492 neighbor to GID-e9eb84c70cd00f29-/
+Send CN GID-d62a0cd89e1c492 foor GID-e9eb84c70cd00f29-/
+add_neighbor []
+CreateNeighbor to bytes
+GID-e9eb84c70cd00f29-/ have neighbors!
+Avail bandwith: 1024
+SID-1 In presync
+SID-1 Sending GID-e9eb84c70cd00f29-/ SyncReq to GID-d62a0cd89e1c492 
+GID-d62a0cd89e1c492-/ received neighbor request for GID-527db65a9ea2d559-/. Am I founder?: false
+GID-d62a0cd89e1c492-/ request add GID-d62a0cd89e1c492 to GID-527db65a9ea2d559-/
+TCP Extend req: GID-527db65a9ea2d559-/
+Manager Received JoinSwarm(GID-e9eb84c70cd00f29-/)
+Not joining GID-e9eb84c70cd00f29-/, we are already there
+Mgr recvd add GID-d62a0cd89e1c492 to GID-527db65a9ea2d559-/
+Added GID-d62a0cd89e1c492 to existing swarm 2
+Gnome adding GID-d62a0cd89e1c492 neighbor to GID-527db65a9ea2d559-/
+Send CN GID-d62a0cd89e1c492 foor GID-527db65a9ea2d559-/
+add_neighbor []
+GID-527db65a9ea2d559-/ have neighbors!
+Avail bandwith: 1024
+SID-2 In presync
+SID-2 Sending GID-527db65a9ea2d559-/ SyncReq to GID-d62a0cd89e1c492 
+CreateNeighbor to bytes
+NotiFounder: GID-d62a0cd89e1c492
+SwarmID(1) joined GID-e9eb84c70cd00f29-/
+SwarmID(2) joined GID-527db65a9ea2d559-/
+Storage root app data: "/home/dxtr/.czat/storage"
+SwarmID(1) Memory: 0/32768 Pages (not implemented)
+Storage root app data: "/home/dxtr/.czat/storage"
+Swarm SwarmID(1) is now active
+SwarmID(2) Memory: 0/32768 Pages (not implemented)
+Got SyncResponse::Datastore
+Load SwarmID(0) CID-0 from disk ok: true
+Load SwarmID(0) CID-1 from disk ok: true
+Load SwarmID(0) CID-2 from disk ok: true
+Requesting Manifest
+Set active SwarmID(1)
+App sync ST: ST0000037588 Round: ST0000037587 Key#: 1
+Legacy founder set
+Swarm / setting founder from: GID-e9eb84c70cd00f29 to: GID-e9eb84c70cd00f29
+GID-d62a0cd89e1c492  <  ST0000040306 N-2 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040307 N-2 Sync KA[819200]
+Insert capability Founder: [GnomeId(16855712020812533545)]
+overwrite Founder
+GID-d62a0cd89e1c492  <  ST0000037588 N-0 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037589 N-1 Sync KA[1024]
+Reading Datastore from "/home/dxtr/.czat/storage/GID-e9eb84c70cd00f29/datastore.sync"…
+Swarm storage at: "/home/dxtr/.czat/storage/GID-e9eb84c70cd00f29"
+Not sending new content, because my SwarmID(1) != SwarmID(0)
+Not sending new content, because my SwarmID(1) != SwarmID(0)
+Not sending neighbors, because my SwarmID(1) != SwarmID(2)
+Not sending neighbors, because my SwarmID(1) != SwarmID(2)
+GID-d62a0cd89e1c492  <  ST0000040307 N-3 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040308 N-3 Sync KA[819200]
+GID-d62a0cd89e1c492  <  ST0000037589 N-2 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037590 N-2 Sync KA[1024]
+Received Bundle for SwarmName { founder: GnomeId(16855712020812533545), name: "/" }
+Added swarm in networking: GID-e9eb84c70cd00f29-/
+Got SyncResponse::Datastore
+Load SwarmID(1) CID-0 from disk ok: true
+Load SwarmID(1) CID-1 from disk ok: true
+Received ReadError for SwarmID(1) CID-0: AppDataNotSynced
+Requesting CID-0 again…
+GID-d62a0cd89e1c492  <  ST0000040308 N-4 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040309 N-4 Sync KA[819200]
+App sync ST: ST0000040370 Round: ST0000040369 Key#: 1
+Legacy founder set
+Swarm / setting founder from: GID-527db65a9ea2d559 to: GID-527db65a9ea2d559
+GID-d62a0cd89e1c492  <  ST0000037590 N-3 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037591 N-3 Sync KA[102400]
+Reading Datastore from "/home/dxtr/.czat/storage/GID-527db65a9ea2d559/datastore.sync"…
+Swarm storage at: "/home/dxtr/.czat/storage/GID-527db65a9ea2d559"
+Insert capability Founder: [GnomeId(5944107583523706201)]
+overwrite Founder
+GID-d62a0cd89e1c492  <  ST0000040370 N-0 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040371 N-1 Sync KA[1024]
+GID-d62a0cd89e1c492  <  ST0000040309 N-5 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040310 N-5 Sync KA[819200]
+ToPresentation::AppendContent(1, Data(0))
+GID-d62a0cd89e1c492  <  ST0000037591 N-4 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037592 N-4 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040371 N-2 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040372 N-2 Sync KA[1024]
+GID-d62a0cd89e1c492  <  ST0000040310 N-6 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040311 N-6 Sync KA[819200]
+Received Bundle for SwarmName { founder: GnomeId(5944107583523706201), name: "/" }
+Added swarm in networking: GID-527db65a9ea2d559-/
+Got SyncResponse::Datastore
+Load SwarmID(2) CID-0 from disk ok: true
+Load SwarmID(2) CID-1 from disk ok: true
+GID-d62a0cd89e1c492  <  ST0000037592 N-5 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037593 N-5 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040372 N-3 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040373 N-3 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040311 N-7 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040312 N-7 Sync KA[819200]
+Sync swarm time ST0000040312
+Not sending new content, because my SwarmID(1) != SwarmID(2)
+GID-d62a0cd89e1c492  <  ST0000037593 N-6 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037594 N-6 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040373 N-4 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040374 N-4 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037594 N-7 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037595 N-7 Sync KA[102400]
+Sync swarm time ST0000037595
+GID-d62a0cd89e1c492  <  ST0000040374 N-5 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040375 N-5 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040375 N-6 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040376 N-6 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040376 N-7 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040377 N-7 Sync KA[102400]
+Sync swarm time ST0000040377
+In query_content_for_indexer
+About to show CID 1 dtype: Data(0)
+Should show Note #9
+GID-d62a0cd89e1c492  <  ST0000040312 N-0 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040313 N-0 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040313 N-1 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040314 N-2 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037595 N-0 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037596 N-0 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040314 N-2 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040315 N-3 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037596 N-1 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037597 N-2 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040378 N-0 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037597 N-2 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037598 N-3 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040315 N-3 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040316 N-4 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040377 N-0 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040378 N-1 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040378 N-2 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040379 N-2 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040316 N-4 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040317 N-5 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040379 N-3 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040380 N-3 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037598 N-3 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037599 N-4 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040380 N-4 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040381 N-4 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040317 N-5 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040318 N-6 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040381 N-5 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040382 N-5 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037599 N-4 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037600 N-5 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040382 N-6 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040383 N-6 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040318 N-6 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040319 N-7 Sync KA[102400]
+Sync swarm time ST0000040319
+GID-d62a0cd89e1c492  <  ST0000040383 N-7 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040384 N-7 Sync KA[102400]
+Sync swarm time ST0000040384
+GID-d62a0cd89e1c492  <  ST0000037600 N-5 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037601 N-6 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037601 N-6 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037602 N-7 Sync KA[102400]
+Sync swarm time ST0000037602
+GID-d62a0cd89e1c492  <  ST0000040319 N-7 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037602 N-7 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040320 N-0 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040385 N-0 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040384 N-0 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040385 N-1 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037603 N-0 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040320 N-0 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040321 N-1 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040385 N-1 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040386 N-2 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040386 N-2 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040387 N-3 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040321 N-2 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040322 N-2 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040387 N-3 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040388 N-4 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037603 N-0 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037604 N-1 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040388 N-4 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040389 N-5 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040322 N-3 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040323 N-3 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037604 N-2 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037605 N-2 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040389 N-5 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040390 N-6 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040390 N-6 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040391 N-7 Sync KA[102400]
+Sync swarm time ST0000040391
+GID-d62a0cd89e1c492  <  ST0000040323 N-4 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040324 N-4 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037605 N-3 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037606 N-3 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040391 N-7 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040324 N-5 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040325 N-5 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037606 N-4 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037607 N-4 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040325 N-6 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040326 N-6 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037607 N-5 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037608 N-5 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040326 N-7 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040327 N-7 Sync KA[102400]
+Sync swarm time ST0000040327
+GID-d62a0cd89e1c492  <  ST0000037608 N-6 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037609 N-6 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037609 N-7 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037610 N-7 Sync KA[102400]
+Sync swarm time ST0000037610
+GID-e9eb84c70cd00f29 >>> ST0000040392 N-0 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040392 N-0 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040393 N-1 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040393 N-2 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040394 N-2 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040394 N-3 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040395 N-3 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040327 N-0 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040328 N-0 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040395 N-4 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040396 N-4 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040328 N-1 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040329 N-2 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037610 N-0 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037611 N-0 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040396 N-5 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040397 N-5 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040329 N-2 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040330 N-3 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037611 N-1 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037612 N-2 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040330 N-3 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040331 N-4 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040397 N-6 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040398 N-6 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040331 N-4 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040332 N-5 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037612 N-2 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037613 N-3 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040332 N-5 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040333 N-6 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040398 N-7 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040399 N-7 Sync KA[102400]
+Sync swarm time ST0000040399
+GID-d62a0cd89e1c492  <  ST0000040333 N-6 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040334 N-7 Sync KA[102400]
+Sync swarm time ST0000040334
+GID-d62a0cd89e1c492  <  ST0000037613 N-3 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037614 N-4 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040334 N-7 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037614 N-4 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037615 N-5 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037615 N-5 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037616 N-6 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037616 N-6 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037617 N-7 Sync KA[102400]
+Sync swarm time ST0000037617
+GID-d62a0cd89e1c492  <  ST0000037617 N-7 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040399 N-0 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040400 N-0 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040335 N-0 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040400 N-1 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040401 N-2 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040335 N-0 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040336 N-1 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037618 N-0 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040401 N-2 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040402 N-3 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040336 N-2 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040337 N-2 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040402 N-3 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040403 N-4 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040403 N-4 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040404 N-5 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037618 N-0 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037619 N-1 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040404 N-5 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040405 N-6 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040337 N-3 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040338 N-3 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040405 N-6 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040406 N-7 Sync KA[102400]
+Sync swarm time ST0000040406
+GID-d62a0cd89e1c492  <  ST0000037619 N-2 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037620 N-2 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040406 N-7 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040338 N-4 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040339 N-4 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037620 N-3 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037621 N-3 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040339 N-5 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040340 N-5 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037621 N-4 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037622 N-4 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040340 N-6 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040341 N-6 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037622 N-5 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037623 N-5 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040341 N-7 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040342 N-7 Sync KA[102400]
+Sync swarm time ST0000040342
+GID-d62a0cd89e1c492  <  ST0000037623 N-6 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037624 N-6 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037624 N-7 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037625 N-7 Sync KA[102400]
+Sync swarm time ST0000037625
+GID-e9eb84c70cd00f29 >>> ST0000040407 N-0 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040407 N-0 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040408 N-1 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040408 N-2 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040409 N-2 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040409 N-3 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040410 N-3 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040342 N-0 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040343 N-0 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037626 N-0 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037625 N-0 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037626 N-1 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040410 N-4 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040411 N-4 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037626 N-2 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037627 N-2 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040343 N-1 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040344 N-2 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040411 N-5 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040412 N-5 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037627 N-3 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037628 N-3 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040344 N-2 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040345 N-3 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040412 N-6 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040413 N-6 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037628 N-4 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037629 N-4 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040345 N-3 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040346 N-4 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040413 N-7 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040414 N-7 Sync KA[102400]
+Sync swarm time ST0000040414
+GID-d62a0cd89e1c492  <  ST0000037629 N-5 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037630 N-5 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040346 N-4 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040347 N-5 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037630 N-6 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037631 N-6 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000040347 N-5 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040348 N-6 Sync KA[102400]
+GID-d62a0cd89e1c492  <  ST0000037631 N-7 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000037632 N-7 Sync KA[102400]
+Sync swarm time ST0000037632
+GID-d62a0cd89e1c492  <  ST0000040348 N-6 Sync KA[102400]
+GID-e9eb84c70cd00f29 >>> ST0000040349 N-7 Sync KA[102400]
+Sync swarm time ST0000040349
+GID-d62a0cd89e1c492  <  ST0000040349 N-7 Sync KA[102400]
+Unsupperted key pressed: Escape
+Going back to Village
+Done serving TUI
+Done serving AppData
+Done serving AppData
+Done serving AppData
+Sending disconnect request to swarm: SwarmID(1)
+Sending disconnect request to swarm: SwarmID(2)
+Sending disconnect request to swarm: SwarmID(0)
+Sending bye to all SwarmID(1) Neighbors…
+Sending bye to all SwarmID(2) Neighbors…
+Sending bye to all SwarmID(0) Neighbors…
+Subscriber disconnected
+Done serving AppMgr
+Done serving ApplicationLogic

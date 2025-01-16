@@ -1,0 +1,1392 @@
+warning: unused import: `CastData`
+ --> /home/dxtr/projects/swarm-consensus/src/internal.rs:1:13
+  |
+1 | use crate::{CastData, CastID, GnomeId, NeighborRequest, NeighborResponse};
+  |             ^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `crate::message::BlockID`
+ --> /home/dxtr/projects/swarm-consensus/src/neighbor.rs:1:5
+  |
+1 | use crate::message::BlockID;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::SyncData`
+  --> /home/dxtr/projects/swarm-consensus/src/neighbor.rs:23:5
+   |
+23 | use crate::SyncData;
+   |     ^^^^^^^^^^^^^^^
+
+warning: value assigned to `available_bandwith` is never read
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:1526:17
+     |
+1526 |         let mut available_bandwith = if let Ok(band) = self.band_receiver.try_recv() {
+     |                 ^^^^^^^^^^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+     = note: `#[warn(unused_assignments)]` on by default
+
+warning: unused variable: `id`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2422:58
+     |
+2422 | ...                   ChangeConfig::InsertPubkey { id, key, .. } => {
+     |                                                    ^^-
+     |                                                    |
+     |                                                    help: try removing the field
+     |
+     = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `key`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2422:62
+     |
+2422 | ...                   ChangeConfig::InsertPubkey { id, key, .. } => {
+     |                                                        ^^^-
+     |                                                        |
+     |                                                        help: try removing the field
+
+warning: unused variable: `chunk_no`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2750:59
+     |
+2750 |                         NeighborResponse::KeyRegistrySync(chunk_no, total_chunks, mut pairs) => {
+     |                                                           ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_chunk_no`
+
+warning: unused variable: `total_chunks`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2750:69
+     |
+2750 |                         NeighborResponse::KeyRegistrySync(chunk_no, total_chunks, mut pairs) => {
+     |                                                                     ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_total_chunks`
+
+warning: unused variable: `chunk_no`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2756:58
+     |
+2756 |                         NeighborResponse::CapabilitySync(chunk_no, total_chunks, mut pairs) => {
+     |                                                          ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_chunk_no`
+
+warning: unused variable: `total_chunks`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2756:68
+     |
+2756 |                         NeighborResponse::CapabilitySync(chunk_no, total_chunks, mut pairs) => {
+     |                                                                    ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_total_chunks`
+
+warning: unused variable: `chunk_no`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2768:57
+     |
+2768 |                         NeighborResponse::BroadcastSync(chunk_no, total_chunks, mut pairs) => {
+     |                                                         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_chunk_no`
+
+warning: unused variable: `total_chunks`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2768:67
+     |
+2768 |                         NeighborResponse::BroadcastSync(chunk_no, total_chunks, mut pairs) => {
+     |                                                                   ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_total_chunks`
+
+warning: unused variable: `chunk_no`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2775:57
+     |
+2775 |                         NeighborResponse::MulticastSync(chunk_no, total_chunks, mut pairs) => {
+     |                                                         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_chunk_no`
+
+warning: unused variable: `total_chunks`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2775:67
+     |
+2775 |                         NeighborResponse::MulticastSync(chunk_no, total_chunks, mut pairs) => {
+     |                                                                   ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_total_chunks`
+
+warning: unused variable: `c_id`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2776:45
+     |
+2776 | ...                   while let Some((c_id, origin)) = pairs.pop() {
+     |                                       ^^^^ help: if this is intentional, prefix it with an underscore: `_c_id`
+
+warning: unused variable: `origin`
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2776:51
+     |
+2776 | ...                   while let Some((c_id, origin)) = pairs.pop() {
+     |                                             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_origin`
+
+warning: unused variable: `sync_req_params`
+   --> /home/dxtr/projects/swarm-consensus/src/neighbor.rs:247:79
+    |
+247 |                 if let CastContent::Request(NeighborRequest::SwarmSyncRequest(sync_req_params)) =
+    |                                                                               ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_sync_req_params`
+
+warning: field `queried_neighbors` is never read
+  --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:83:5
+   |
+78 | struct NeighborDiscovery {
+   |        ----------------- field in this struct
+...
+83 |     queried_neighbors: Vec<GnomeId>,
+   |     ^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: method `query_for_new_neighbors` is never used
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:2862:8
+     |
+347  | impl Gnome {
+     | ---------- method in this implementation
+...
+2862 |     fn query_for_new_neighbors(&mut self) {
+     |        ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `insert2048` is never used
+  --> /home/dxtr/projects/swarm-consensus/src/key_registry.rs:89:4
+   |
+89 | fn insert2048(gnome_id: GnomeId, key: Vec<u8>, array: &mut [(GnomeId, Vec<u8>); 2048]) {
+   |    ^^^^^^^^^^
+
+warning: function `insert4096` is never used
+  --> /home/dxtr/projects/swarm-consensus/src/key_registry.rs:98:4
+   |
+98 | fn insert4096(gnome_id: GnomeId, key: Vec<u8>, array: &mut [(GnomeId, Vec<u8>); 4096]) {
+   |    ^^^^^^^^^^
+
+warning: function `insert8192` is never used
+   --> /home/dxtr/projects/swarm-consensus/src/key_registry.rs:107:4
+    |
+107 | fn insert8192(gnome_id: GnomeId, key: Vec<u8>, array: &mut [(GnomeId, Vec<u8>); 8192]) {
+    |    ^^^^^^^^^^
+
+warning: function `get2048` is never used
+   --> /home/dxtr/projects/swarm-consensus/src/key_registry.rs:179:4
+    |
+179 | fn get2048(gnome_id: GnomeId, array: &[(GnomeId, Vec<u8>); 2048]) -> Option<Vec<u8>> {
+    |    ^^^^^^^
+
+warning: function `get4096` is never used
+   --> /home/dxtr/projects/swarm-consensus/src/key_registry.rs:188:4
+    |
+188 | fn get4096(gnome_id: GnomeId, array: &[(GnomeId, Vec<u8>); 4096]) -> Option<Vec<u8>> {
+    |    ^^^^^^^
+
+warning: function `get8192` is never used
+   --> /home/dxtr/projects/swarm-consensus/src/key_registry.rs:197:4
+    |
+197 | fn get8192(gnome_id: GnomeId, array: &[(GnomeId, Vec<u8>); 8192]) -> Option<Vec<u8>> {
+    |    ^^^^^^^
+
+warning: function `has2048` is never used
+   --> /home/dxtr/projects/swarm-consensus/src/key_registry.rs:269:4
+    |
+269 | fn has2048(gnome_id: GnomeId, array: &[(GnomeId, Vec<u8>); 2048]) -> bool {
+    |    ^^^^^^^
+
+warning: function `has4096` is never used
+   --> /home/dxtr/projects/swarm-consensus/src/key_registry.rs:278:4
+    |
+278 | fn has4096(gnome_id: GnomeId, array: &[(GnomeId, Vec<u8>); 4096]) -> bool {
+    |    ^^^^^^^
+
+warning: function `has8192` is never used
+   --> /home/dxtr/projects/swarm-consensus/src/key_registry.rs:287:4
+    |
+287 | fn has8192(gnome_id: GnomeId, array: &[(GnomeId, Vec<u8>); 8192]) -> bool {
+    |    ^^^^^^^
+
+warning: method `send_casting` is never used
+   --> /home/dxtr/projects/swarm-consensus/src/neighbor.rs:643:8
+    |
+139 | impl Neighbor {
+    | ------------- method in this implementation
+...
+643 |     fn send_casting(&self, message: CastMessage) {
+    |        ^^^^^^^^^^^^
+
+warning: path statement with no effect
+    --> /home/dxtr/projects/swarm-consensus/src/gnome.rs:1167:13
+     |
+1167 |             any_data_processed;
+     |             ^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(path_statements)]` on by default
+
+warning: `swarm-consensus` (lib) generated 30 warnings (run `cargo fix --lib -p swarm-consensus` to apply 5 suggestions)
+warning: unused import: `std::net::Ipv4Addr`
+ --> /home/dxtr/projects/gnome/src/lib.rs:6:5
+  |
+6 | use std::net::Ipv4Addr;
+  |     ^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `crate::crypto::Encrypter`
+ --> /home/dxtr/projects/gnome/src/networking/common.rs:1:5
+  |
+1 | use crate::crypto::Encrypter;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `yield_now`
+  --> /home/dxtr/projects/gnome/src/networking/holepunch.rs:11:37
+   |
+11 | use async_std::task::{sleep, spawn, yield_now};
+   |                                     ^^^^^^^^^
+
+warning: unused import: `super::serve_socket`
+ --> /home/dxtr/projects/gnome/src/networking/tcp_client.rs:1:5
+  |
+1 | use super::serve_socket;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::net::SocketAddr`
+  --> /home/dxtr/projects/gnome/src/networking/tcp_client.rs:21:5
+   |
+21 | use std::net::SocketAddr;
+   |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `swarm_consensus::NetworkSettings`
+  --> /home/dxtr/projects/gnome/src/networking/tcp_client.rs:25:5
+   |
+25 | use swarm_consensus::NetworkSettings;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `self::common::are_we_behind_a_nat`
+  --> /home/dxtr/projects/gnome/src/networking/mod.rs:15:5
+   |
+15 | use self::common::are_we_behind_a_nat;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `self::holepunch::holepunch`
+  --> /home/dxtr/projects/gnome/src/networking/mod.rs:16:5
+   |
+16 | use self::holepunch::holepunch;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused variable: `remote_gnome_id`
+   --> /home/dxtr/projects/gnome/src/networking/client.rs:132:13
+    |
+132 |     let mut remote_gnome_id: GnomeId = GnomeId(0);
+    |             ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_remote_gnome_id`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+   --> /home/dxtr/projects/gnome/src/networking/client.rs:132:9
+    |
+132 |     let mut remote_gnome_id: GnomeId = GnomeId(0);
+    |         ----^^^^^^^^^^^^^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: unused variable: `session_key`
+   --> /home/dxtr/projects/gnome/src/networking/tcp_client.rs:181:5
+    |
+181 |     session_key: SessionKey,
+    |     ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_session_key`
+
+warning: unused variable: `swarm_extend_receiver`
+   --> /home/dxtr/projects/gnome/src/networking/tcp_client.rs:208:25
+    |
+208 |     let (shared_sender, swarm_extend_receiver) = channel();
+    |                         ^^^^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_swarm_extend_receiver`
+
+warning: unused variable: `token_recv`
+   --> /home/dxtr/projects/gnome/src/networking/tcp_client.rs:222:22
+    |
+222 |     let (token_send, token_recv) = channel();
+    |                      ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_token_recv`
+
+warning: unused variable: `token_send_two`
+   --> /home/dxtr/projects/gnome/src/networking/tcp_client.rs:223:10
+    |
+223 |     let (token_send_two, token_recv_two) = channel();
+    |          ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_token_send_two`
+
+warning: unused variable: `remote_gnome_id`
+  --> /home/dxtr/projects/gnome/src/networking/tcp_client.rs:98:13
+   |
+98 |     let mut remote_gnome_id: GnomeId = GnomeId(0);
+   |             ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_remote_gnome_id`
+
+warning: variable does not need to be mutable
+  --> /home/dxtr/projects/gnome/src/networking/tcp_client.rs:98:9
+   |
+98 |     let mut remote_gnome_id: GnomeId = GnomeId(0);
+   |         ----^^^^^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: unused variable: `session_key`
+   --> /home/dxtr/projects/gnome/src/networking/tcp_server.rs:183:5
+    |
+183 |     session_key: SessionKey,
+    |     ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_session_key`
+
+warning: unused variable: `swarm_extend_receiver`
+   --> /home/dxtr/projects/gnome/src/networking/tcp_server.rs:199:25
+    |
+199 |     let (shared_sender, swarm_extend_receiver) = channel();
+    |                         ^^^^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_swarm_extend_receiver`
+
+warning: unused variable: `token_recv`
+   --> /home/dxtr/projects/gnome/src/networking/tcp_server.rs:212:22
+    |
+212 |     let (token_send, token_recv) = channel();
+    |                      ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_token_recv`
+
+warning: unused variable: `token_send_two`
+   --> /home/dxtr/projects/gnome/src/networking/tcp_server.rs:213:10
+    |
+213 |     let (token_send_two, token_recv_two) = channel();
+    |          ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_token_send_two`
+
+warning: unused variable: `swarm_names`
+  --> /home/dxtr/projects/gnome/src/networking/tcp_server.rs:50:5
+   |
+50 |     swarm_names: Vec<SwarmName>,
+   |     ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_swarm_names`
+
+warning: variable does not need to be mutable
+  --> /home/dxtr/projects/gnome/src/networking/tcp_server.rs:73:9
+   |
+73 |     let mut swarm_names = Vec::new();
+   |         ----^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: unused variable: `holepunch_receiver`
+  --> /home/dxtr/projects/gnome/src/networking/mod.rs:60:28
+   |
+60 |     let (holepunch_sender, holepunch_receiver) = channel();
+   |                            ^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_holepunch_receiver`
+
+warning: unused variable: `r`
+   --> /home/dxtr/projects/gnome/src/manager.rs:535:13
+    |
+535 |         let r = self.to_networking.send(NotificationBundle {
+    |             ^ help: if this is intentional, prefix it with an underscore: `_r`
+
+warning: unused variable: `pub_key_pem`
+   --> /home/dxtr/projects/gnome/src/networking/common.rs:152:5
+    |
+152 |     pub_key_pem: String,
+    |     ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_pub_key_pem`
+
+warning: unused variable: `other`
+   --> /home/dxtr/projects/gnome/src/networking/stun.rs:126:9
+    |
+126 |         other => {
+    |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_other`
+
+warning: method `verify` is never used
+  --> /home/dxtr/projects/gnome/src/crypto.rs:61:12
+   |
+27 | impl Encrypter {
+   | -------------- method in this implementation
+...
+61 |     pub fn verify(&self, data: &[u8], signature: &[u8]) -> bool {
+   |            ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: field `decrypter` is never read
+  --> /home/dxtr/projects/gnome/src/manager.rs:52:5
+   |
+41 | pub struct Manager {
+   |            ------- field in this struct
+...
+52 |     decrypter: Decrypter,
+   |     ^^^^^^^^^
+
+warning: function `holepunch` is never used
+  --> /home/dxtr/projects/gnome/src/networking/holepunch.rs:48:14
+   |
+48 | pub async fn holepunch(
+   |              ^^^^^^^^^
+
+warning: function `holepunch_probe_ok` is never used
+  --> /home/dxtr/projects/gnome/src/networking/holepunch.rs:95:10
+   |
+95 | async fn holepunch_probe_ok(puncher: SocketAddr) -> bool {
+   |          ^^^^^^^^^^^^^^^^^^
+
+warning: function `holepunch_task` is never used
+   --> /home/dxtr/projects/gnome/src/networking/holepunch.rs:116:10
+    |
+116 | async fn holepunch_task(
+    |          ^^^^^^^^^^^^^^
+
+warning: function `ask_proxy_for_remote_socket` is never used
+   --> /home/dxtr/projects/gnome/src/networking/holepunch.rs:364:10
+    |
+364 | async fn ask_proxy_for_remote_socket(
+    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `MagicPorts` is never constructed
+   --> /home/dxtr/projects/gnome/src/networking/holepunch.rs:478:8
+    |
+478 | struct MagicPorts(VecDeque<u16>);
+    |        ^^^^^^^^^^
+
+warning: associated items `new`, `next`, and `is_magic` are never used
+   --> /home/dxtr/projects/gnome/src/networking/holepunch.rs:481:8
+    |
+480 | impl MagicPorts {
+    | --------------- associated items in this implementation
+481 |     fn new() -> Self {
+    |        ^^^
+...
+489 |     fn next(&mut self) -> u16 {
+    |        ^^^^
+...
+494 |     fn is_magic(&self, port: u16) -> bool {
+    |        ^^^^^^^^
+
+warning: function `timeout` is never used
+   --> /home/dxtr/projects/gnome/src/networking/holepunch.rs:499:10
+    |
+499 | async fn timeout(time: &Duration) -> Result<(), u8> {
+    |          ^^^^^^^
+
+warning: function `try_communicate` is never used
+   --> /home/dxtr/projects/gnome/src/networking/holepunch.rs:503:10
+    |
+503 | async fn try_communicate(socket: &UdpSocket, remote_addr: SocketAddr) -> Result<SocketAddr, u8> {
+    |          ^^^^^^^^^^^^^^^
+
+warning: function `punch_back` is never used
+   --> /home/dxtr/projects/gnome/src/networking/holepunch.rs:630:10
+    |
+630 | async fn punch_back(
+    |          ^^^^^^^^^^
+
+warning: method `bytes` is never used
+   --> /home/dxtr/projects/gnome/src/networking/stun.rs:352:12
+    |
+351 | impl StunAddress {
+    | ---------------- method in this implementation
+352 |     pub fn bytes(&self) -> Vec<u8> {
+    |            ^^^^^
+
+warning: method `bytes` is never used
+   --> /home/dxtr/projects/gnome/src/networking/stun.rs:375:12
+    |
+374 | impl StunChangeRequest {
+    | ---------------------- method in this implementation
+375 |     pub fn bytes(&self) -> Vec<u8> {
+    |            ^^^^^
+
+warning: fields `class`, `number`, and `reason_phrase` are never read
+   --> /home/dxtr/projects/gnome/src/networking/stun.rs:421:5
+    |
+420 | pub struct StunErrorCode {
+    |            ------------- fields in this struct
+421 |     class: StunErrorClass,
+    |     ^^^^^
+422 |     number: StunErrorNumber,
+    |     ^^^^^^
+423 |     reason_phrase: Vec<u8>,
+    |     ^^^^^^^^^^^^^
+    |
+    = note: `StunErrorCode` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: method `bytes` is never used
+   --> /home/dxtr/projects/gnome/src/networking/stun.rs:426:12
+    |
+425 | impl StunErrorCode {
+    | ------------------ method in this implementation
+426 |     pub fn bytes(&self) -> Vec<u8> {
+    |            ^^^^^
+
+warning: field `0` is never read
+   --> /home/dxtr/projects/gnome/src/networking/stun.rs:469:19
+    |
+469 |     ChangeRequest(StunChangeRequest),
+    |     ------------- ^^^^^^^^^^^^^^^^^
+    |     |
+    |     field in this variant
+    |
+    = note: `StunAttributeValue` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+469 |     ChangeRequest(()),
+    |                   ~~
+
+warning: field `0` is never read
+   --> /home/dxtr/projects/gnome/src/networking/stun.rs:470:11
+    |
+470 |     Error(StunErrorCode),
+    |     ----- ^^^^^^^^^^^^^
+    |     |
+    |     field in this variant
+    |
+    = note: `StunAttributeValue` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+470 |     Error(()),
+    |           ~~
+
+warning: field `0` is never read
+   --> /home/dxtr/projects/gnome/src/networking/stun.rs:471:13
+    |
+471 |     Unknown(StunUnknownAttributes),
+    |     ------- ^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     field in this variant
+    |
+    = note: `StunAttributeValue` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+471 |     Unknown(()),
+    |             ~~
+
+warning: field `0` is never read
+   --> /home/dxtr/projects/gnome/src/networking/stun.rs:472:16
+    |
+472 |     Unexpected(Vec<u8>),
+    |     ---------- ^^^^^^^
+    |     |
+    |     field in this variant
+    |
+    = note: `StunAttributeValue` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+    |
+472 |     Unexpected(()),
+    |                ~~
+
+warning: method `bytes` is never used
+   --> /home/dxtr/projects/gnome/src/networking/stun.rs:475:12
+    |
+474 | impl StunAttributeValue {
+    | ----------------------- method in this implementation
+475 |     pub fn bytes(&self) -> Vec<u8> {
+    |            ^^^^^
+
+warning: function `wait_for_bytes` is never used
+  --> /home/dxtr/projects/gnome/src/networking/tcp_client.rs:78:10
+   |
+78 | async fn wait_for_bytes(socket: &UdpSocket) {
+   |          ^^^^^^^^^^^^^^
+
+warning: variants `Turtle` and `Cheetah` are never constructed
+   --> /home/dxtr/projects/gnome/src/networking/token.rs:220:5
+    |
+219 | enum Category {
+    |      -------- variants in this enum
+220 |     Turtle,
+    |     ^^^^^^
+221 |     Rabbit,
+222 |     Cheetah,
+    |     ^^^^^^^
+
+warning: field `cat` is never read
+   --> /home/dxtr/projects/gnome/src/networking/token.rs:226:5
+    |
+225 | struct TokenEater {
+    |        ---------- field in this struct
+226 |     cat: Category,
+    |     ^^^
+
+warning: `gnome` (lib) generated 49 warnings (run `cargo fix --lib -p gnome` to apply 11 suggestions)
+warning: unused import: `gnome::prelude::SwarmName`
+  --> /home/dxtr/projects/dapp-lib/src/datastore.rs:10:5
+   |
+10 | use gnome::prelude::SwarmName;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `std::ascii::AsciiExt`
+ --> /home/dxtr/projects/dapp-lib/src/sync_message.rs:1:5
+  |
+1 | use std::ascii::AsciiExt;
+  |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `async_std::net::ToSocketAddrs`
+  --> /home/dxtr/projects/dapp-lib/src/lib.rs:17:5
+   |
+17 | use async_std::net::ToSocketAddrs;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated trait `std::ascii::AsciiExt`: use inherent methods instead
+ --> /home/dxtr/projects/dapp-lib/src/sync_message.rs:1:17
+  |
+1 | use std::ascii::AsciiExt;
+  |                 ^^^^^^^^
+  |
+  = note: `#[warn(deprecated)]` on by default
+
+warning: unreachable statement
+   --> /home/dxtr/projects/dapp-lib/src/lib.rs:678:21
+    |
+677 |                     panic!("THIS IS NOT FULLY IMPLEMENTED!!!");
+    |                     ------------------------------------------ any code following this expression is unreachable
+678 |                     let hash_hash_chunks = bottom_hashes_as_data_blocks.chunks_exact(128);
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unreachable statement
+    |
+    = note: `#[warn(unreachable_code)]` on by default
+
+warning: variable `next_val` is assigned to, but never used
+   --> /home/dxtr/projects/dapp-lib/src/lib.rs:397:13
+    |
+397 |     let mut next_val = 0;
+    |             ^^^^^^^^
+    |
+    = note: consider using `_next_val` instead
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `h`
+   --> /home/dxtr/projects/dapp-lib/src/lib.rs:477:29
+    |
+477 |                         for h in c.data_hashes() {
+    |                             ^ help: if this is intentional, prefix it with an underscore: `_h`
+
+warning: unused variable: `hash_hash_data`
+   --> /home/dxtr/projects/dapp-lib/src/lib.rs:609:25
+    |
+609 |                 let mut hash_hash_data = Vec::with_capacity(4);
+    |                         ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_hash_hash_data`
+
+warning: unused variable: `new_data_len`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:1219:29
+     |
+1219 |                         let new_data_len = byte_groups_iter.len() as u16;
+     |                             ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_new_data_len`
+
+warning: unused variable: `len`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:1380:34
+     |
+1380 |                         let (_t, len) = app_data.get_type_and_len(c_id).unwrap();
+     |                                  ^^^ help: if this is intentional, prefix it with an underscore: `_len`
+
+warning: unused variable: `c_id`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:1418:49
+     |
+1418 |                     SyncMessageType::InsertData(c_id, d_id) => {
+     |                                                 ^^^^ help: if this is intentional, prefix it with an underscore: `_c_id`
+
+warning: unused variable: `d_id`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:1418:55
+     |
+1418 |                     SyncMessageType::InsertData(c_id, d_id) => {
+     |                                                       ^^^^ help: if this is intentional, prefix it with an underscore: `_d_id`
+
+warning: unused variable: `c_id`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:1422:49
+     |
+1422 |                     SyncMessageType::ExtendData(c_id, d_id) => {
+     |                                                 ^^^^ help: if this is intentional, prefix it with an underscore: `_c_id`
+
+warning: unused variable: `d_id`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:1422:55
+     |
+1422 |                     SyncMessageType::ExtendData(c_id, d_id) => {
+     |                                                       ^^^^ help: if this is intentional, prefix it with an underscore: `_d_id`
+
+warning: unused variable: `upd_res`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:1875:49
+     |
+1875 | ...                   let upd_res = app_data.update_transformative_link(
+     |                           ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_upd_res`
+
+warning: unused variable: `res`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:1934:57
+     |
+1934 | ...                   let res = app_data
+     |                           ^^^ help: if this is intentional, prefix it with an underscore: `_res`
+
+warning: unused variable: `res`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:1958:49
+     |
+1958 | ...                   let res =
+     |                           ^^^ help: if this is intentional, prefix it with an underscore: `_res`
+
+warning: unused variable: `res`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:1973:49
+     |
+1973 | ...                   let res = app_data.update_transformative_link(
+     |                           ^^^ help: if this is intentional, prefix it with an underscore: `_res`
+
+warning: unused variable: `root_hash`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:2018:25
+     |
+2018 |                 let (t, root_hash) = app_data.content_root_hash(c_id).unwrap();
+     |                         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_root_hash`
+
+warning: variable does not need to be mutable
+   --> /home/dxtr/projects/dapp-lib/src/lib.rs:609:21
+    |
+609 |                 let mut hash_hash_data = Vec::with_capacity(4);
+    |                     ----^^^^^^^^^^^^^^
+    |                     |
+    |                     help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: unused variable: `c_id`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:2153:39
+     |
+2153 |                 GnomeToApp::BCastData(c_id, _data) => {
+     |                                       ^^^^ help: if this is intentional, prefix it with an underscore: `_c_id`
+
+warning: unused variable: `other`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:2176:21
+     |
+2176 |                     other => {
+     |                     ^^^^^ help: if this is intentional, prefix it with an underscore: `_other`
+
+warning: unused variable: `s_id`
+   --> /home/dxtr/projects/dapp-lib/src/lib.rs:327:41
+    |
+327 |                 ToAppMgr::ChangeContent(s_id, c_id, d_type, data_vec) => {
+    |                                         ^^^^ help: if this is intentional, prefix it with an underscore: `_s_id`
+
+warning: unused variable: `d_type`
+   --> /home/dxtr/projects/dapp-lib/src/content.rs:425:21
+    |
+425 |                 let d_type = bytes_iter.next().unwrap();
+    |                     ^^^^^^ help: if this is intentional, prefix it with an underscore: `_d_type`
+
+warning: unused variable: `update_result`
+  --> /home/dxtr/projects/dapp-lib/src/datastore.rs:61:13
+   |
+61 |         let update_result = self.update(c_id, content);
+   |             ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_update_result`
+
+warning: unused variable: `len`
+  --> /home/dxtr/projects/dapp-lib/src/datastore.rs:77:18
+   |
+77 |         let (_t, len) = self.type_and_len(c_id).unwrap();
+   |                  ^^^ help: if this is intentional, prefix it with an underscore: `_len`
+
+warning: unused variable: `c_id`
+  --> /home/dxtr/projects/dapp-lib/src/message.rs:65:33
+   |
+65 |     pub fn post_validate(&self, c_id: ContentID, app: &ApplicationData) -> bool {
+   |                                 ^^^^ help: if this is intentional, prefix it with an underscore: `_c_id`
+
+warning: unused variable: `d_len`
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:2444:13
+     |
+2444 |         let d_len = data.len();
+     |             ^^^^^ help: if this is intentional, prefix it with an underscore: `_d_len`
+
+warning: method `to_sync` is never used
+    --> /home/dxtr/projects/dapp-lib/src/lib.rs:2292:12
+     |
+2275 | impl AppMessage {
+     | --------------- method in this implementation
+...
+2292 |     pub fn to_sync(self) -> SyncData {
+     |            ^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+warning: methods `hashes` and `content_hashes` are never used
+   --> /home/dxtr/projects/dapp-lib/src/datastore.rs:433:12
+    |
+22  | impl Datastore {
+    | -------------- methods in this implementation
+...
+433 |     pub fn hashes(&self) {}
+    |            ^^^^^^
+...
+437 |     pub fn content_hashes(&self, _c_id: ContentID) {}
+    |            ^^^^^^^^^^^^^^
+
+warning: method `insert` is never used
+  --> /home/dxtr/projects/dapp-lib/src/registry.rs:13:12
+   |
+9  | impl ChangeRegistry {
+   | ------------------- method in this implementation
+...
+13 |     pub fn insert(&mut self, content_id: ContentID) {
+   |            ^^^^^^
+
+warning: `dapp-lib` (lib) generated 31 warnings (run `cargo fix --lib -p dapp-lib` to apply 4 suggestions)
+warning: unused import: `path::Path`
+ --> src/main.rs:5:22
+  |
+5 | use std::{env::args, path::Path};
+  |                      ^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `std::fmt::format`
+  --> src/tui/mod.rs:12:5
+   |
+12 | use std::fmt::format;
+   |     ^^^^^^^^^^^^^^^^
+
+warning: unused variable: `g_id`
+   --> src/logic/mod.rs:209:48
+    |
+209 | ...                   TileType::Neighbor(g_id) => {
+    |                                          ^^^^ help: if this is intentional, prefix it with an underscore: `_g_id`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `dtype`
+   --> src/logic/mod.rs:212:47
+    |
+212 | ...                   TileType::Content(dtype, c_id) => {
+    |                                         ^^^^^ help: if this is intentional, prefix it with an underscore: `_dtype`
+
+warning: unused variable: `c_id`
+   --> src/logic/mod.rs:212:54
+    |
+212 | ...                   TileType::Content(dtype, c_id) => {
+    |                                                ^^^^ help: if this is intentional, prefix it with an underscore: `_c_id`
+
+warning: unused variable: `g_id`
+   --> src/logic/mod.rs:472:48
+    |
+472 | ...                   TileType::Home(g_id) => {
+    |                                      ^^^^ help: if this is intentional, prefix it with an underscore: `_g_id`
+
+warning: unused variable: `read_only`
+   --> src/logic/mod.rs:620:37
+    |
+620 | ...                   read_only,
+    |                       ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_read_only`
+
+warning: unused variable: `d_id_opt`
+   --> src/logic/mod.rs:698:33
+    |
+698 | ...                   d_id_opt,
+    |                       ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_d_id_opt`
+
+warning: unused variable: `c_id`
+    --> src/logic/mod.rs:1028:47
+     |
+1028 |     fn run_cmenu_action_on_content(&mut self, c_id: ContentID, d_type: DataType, action: usize) {
+     |                                               ^^^^ help: if this is intentional, prefix it with an underscore: `_c_id`
+
+warning: unused variable: `d_type`
+    --> src/logic/mod.rs:1028:64
+     |
+1028 |     fn run_cmenu_action_on_content(&mut self, c_id: ContentID, d_type: DataType, action: usize) {
+     |                                                                ^^^^^^ help: if this is intentional, prefix it with an underscore: `_d_type`
+
+warning: unused variable: `other`
+  --> src/tui/ask.rs:61:21
+   |
+61 |                     other => {}
+   |                     ^^^^^ help: if this is intentional, prefix it with an underscore: `_other`
+
+warning: unused variable: `cols`
+  --> src/tui/context_menu.rs:42:14
+   |
+42 |         let (cols, rows) = mgr.screen_size();
+   |              ^^^^ help: if this is intentional, prefix it with an underscore: `_cols`
+
+warning: unused variable: `rows`
+  --> src/tui/context_menu.rs:42:20
+   |
+42 |         let (cols, rows) = mgr.screen_size();
+   |                    ^^^^ help: if this is intentional, prefix it with an underscore: `_rows`
+
+warning: value assigned to `action` is never read
+   --> src/tui/selector.rs:149:25
+    |
+149 |                 let mut action = Action::None;
+    |                         ^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` on by default
+
+warning: variable does not need to be mutable
+   --> src/tui/selector.rs:134:13
+    |
+134 |         let mut options_count = total_added;
+    |             ----^^^^^^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: unused variable: `text`
+  --> src/tui/viewer.rs:58:34
+   |
+58 |         let d_text = if let Some(text) = d_type_map.get(&d_type) {
+   |                                  ^^^^ help: if this is intentional, prefix it with an underscore: `_text`
+
+warning: unused variable: `manifest`
+  --> src/tui/viewer.rs:51:9
+   |
+51 |         manifest: &Manifest,
+   |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_manifest`
+
+warning: unused variable: `tags`
+  --> src/tui/viewer.rs:54:9
+   |
+54 |         tags: Vec<u8>,
+   |         ^^^^ help: if this is intentional, prefix it with an underscore: `_tags`
+
+warning: unused variable: `description`
+  --> src/tui/viewer.rs:55:9
+   |
+55 |         description: String,
+   |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_description`
+
+warning: unused variable: `tile_id`
+   --> src/tui/mod.rs:554:25
+    |
+554 |                     let tile_id = village.add_new_content(d_type, c_id, &mut mgr);
+    |                         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_tile_id`
+
+warning: unused variable: `d_type`
+   --> src/tui/mod.rs:557:48
+    |
+557 |                 ToPresentation::Contents(c_id, d_type, tags, text, mut data_vec) => {
+    |                                                ^^^^^^ help: if this is intentional, prefix it with an underscore: `_d_type`
+
+warning: unused variable: `tags`
+   --> src/tui/mod.rs:557:56
+    |
+557 |                 ToPresentation::Contents(c_id, d_type, tags, text, mut data_vec) => {
+    |                                                        ^^^^ help: if this is intentional, prefix it with an underscore: `_tags`
+
+warning: unused variable: `text`
+   --> src/tui/mod.rs:557:62
+    |
+557 |                 ToPresentation::Contents(c_id, d_type, tags, text, mut data_vec) => {
+    |                                                              ^^^^ help: if this is intentional, prefix it with an underscore: `_text`
+
+warning: unused variable: `data_vec`
+   --> src/tui/mod.rs:557:72
+    |
+557 |                 ToPresentation::Contents(c_id, d_type, tags, text, mut data_vec) => {
+    |                                                                        ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_data_vec`
+
+warning: variable does not need to be mutable
+   --> src/tui/mod.rs:557:68
+    |
+557 |                 ToPresentation::Contents(c_id, d_type, tags, text, mut data_vec) => {
+    |                                                                    ----^^^^^^^^
+    |                                                                    |
+    |                                                                    help: remove this `mut`
+
+warning: function `text_to_data` is never used
+    --> src/logic/mod.rs:1188:4
+     |
+1188 | fn text_to_data(text: String) -> Data {
+     |    ^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+warning: methods `set_description`, `first_hash`, `del_tags`, and `rename_tags` are never used
+   --> src/logic/manifest.rs:62:12
+    |
+52  | impl Manifest {
+    | ------------- methods in this implementation
+...
+62  |     pub fn set_description(&mut self, text: String) -> bool {
+    |            ^^^^^^^^^^^^^^^
+...
+74  |     pub fn first_hash(&self) -> u64 {
+    |            ^^^^^^^^^^
+...
+395 |     pub fn del_tags(&mut self, tags: Vec<Tag>) {
+    |            ^^^^^^^^
+...
+404 |     pub fn rename_tags(&mut self, mut tags: HashMap<Tag, Tag>) {
+    |            ^^^^^^^^^^^
+
+warning: variant `Contents` is never constructed
+   --> src/tui/mod.rs:241:5
+    |
+238 | pub enum ToPresentation {
+    |          -------------- variant in this enum
+...
+241 |     Contents(ContentID, DataType, Vec<u8>, String, Vec<Data>),
+    |     ^^^^^^^^
+
+warning: variants `CreateContent` and `UpdateContent` are never constructed
+   --> src/tui/mod.rs:267:5
+    |
+262 | pub enum FromPresentation {
+    |          ---------------- variants in this enum
+...
+267 |     CreateContent(DataType, Data),
+    |     ^^^^^^^^^^^^^
+268 |     UpdateContent(ContentID, DataType, u16, Vec<Data>),
+    |     ^^^^^^^^^^^^^
+    |
+    = note: `FromPresentation` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: field `height` is never read
+  --> src/tui/content_creator.rs:45:5
+   |
+36 | pub struct Creator {
+   |            ------- field in this struct
+...
+45 |     height: usize,
+   |     ^^^^^^
+
+warning: fields `allow_newlines`, `read_only`, and `byte_limit` are never read
+  --> src/tui/indexer.rs:14:5
+   |
+7  | pub struct Indexer {
+   |            ------- fields in this struct
+...
+14 |     allow_newlines: bool,
+   |     ^^^^^^^^^^^^^^
+15 |     read_only: bool,
+   |     ^^^^^^^^^
+16 |     byte_limit: Option<u16>,
+   |     ^^^^^^^^^^
+
+warning: field `last_updated_row` is never read
+  --> src/tui/selector.rs:34:5
+   |
+27 | pub struct Selector {
+   |            -------- field in this struct
+...
+34 |     last_updated_row: usize,
+   |     ^^^^^^^^^^^^^^^^
+
+warning: variant `Application` is never constructed
+  --> src/tui/tile.rs:12:5
+   |
+8  | pub enum TileType {
+   |          -------- variant in this enum
+...
+12 |     Application,
+   |     ^^^^^^^^^^^
+   |
+   = note: `TileType` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: struct `Viewer` is never constructed
+  --> src/tui/viewer.rs:10:12
+   |
+10 | pub struct Viewer {
+   |            ^^^^^^
+
+warning: associated items `new` and `show` are never used
+  --> src/tui/viewer.rs:17:12
+   |
+16 | impl Viewer {
+   | ----------- associated items in this implementation
+17 |     pub fn new(mgr: &mut Manager) -> Self {
+   |            ^^^
+...
+48 |     pub fn show(
+   |            ^^^^
+
+warning: `village-tui` (bin "village-tui") generated 35 warnings (run `cargo fix --bin "village-tui"` to apply 4 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.07s
+     Running `target/debug/village-tui /home/dxtr/.czat2`
+Joined `GID-0-/` swarm
+Notifying network about GID-0-/
+Joined `any /` swarm
+Waiting for user/network to provide some Neighbors for GID-0-/...
+Subscriber service started
+Received Bundle
+Added swarm in networking: GID-0-/
+Starting token dispenser service
+SwarmID(0) joined GID-0-/
+SKT CLIENT
+Waiting for direct connect requests.
+Send result: Ok(426)
+DPunch received channels for GID-0-/
+Got 256 bytes back from: 192.168.1.22:33780
+Received 256 bytes
+NAT detected, identifying...
+Waiting for STUN to respond...
+Received 454 bytes
+Got: [205, 9, 79, 31, 148, 25, 126, 169, 72, 107, 247, 14, 44, 42, 210, 122, 100, 132, 48, 132, 70, 166, 220, 118, 217, 190, 34, 7, 57, 61, 230, 143, 168, 185, 146, 226, 155, 146, 202, 8, 182, 235, 198, 100, 230, 87, 216, 30, 227, 234, 149, 153, 174, 121, 47, 193, 121, 73, 82, 67, 159, 150, 46, 137, 120, 127, 217, 146, 112, 163, 125, 43, 17, 170, 174, 216, 156, 217, 149, 245, 200, 17, 165, 158, 199, 81, 56, 163, 63, 243, 81, 228, 222, 234, 46, 121, 94, 181, 138, 166, 210, 34, 176, 241, 123, 107, 202, 244, 96, 131, 59, 143, 54, 68, 167, 230, 120, 158, 68, 225, 209, 195, 240, 101, 82, 185, 134, 39, 101, 47, 142, 47, 104, 222, 37, 180, 96, 232, 144, 204, 131, 203, 81, 208, 126, 3, 156, 48, 143, 229, 89, 36, 153, 104, 0, 106, 20, 43, 6, 13, 179, 253, 207, 215, 11, 101, 191, 242, 33, 210, 107, 29, 174, 204, 125, 215, 2, 146, 202, 8, 113, 186, 166, 77, 48, 67, 8, 54, 131, 10, 78, 85, 214, 38, 115, 173, 251, 56, 65, 4, 190, 159, 181, 157, 220, 149, 202, 200, 123, 178, 113, 154, 244, 39, 141, 114, 165, 207, 105, 43, 124, 140, 186, 205, 217, 41, 186, 138, 52, 136, 135, 187, 149, 145, 86, 118, 135, 170, 123, 85, 142, 27, 244, 105, 140, 114, 74, 78, 251, 194, 188, 189, 157, 74, 79, 76, 180, 21, 181, 83, 212, 25, 220, 99, 216, 105, 252, 124, 122, 211, 213, 235, 199, 74, 139, 180, 201, 209, 30, 15, 176, 60, 107, 184, 230, 53, 146, 211, 213, 49, 21, 192, 140, 122, 244, 191, 155, 147, 74, 166, 15, 34, 224, 71, 3, 224, 49, 234, 213, 67, 99, 84, 66, 77, 49, 95, 190, 70, 248, 182, 153, 21, 130, 124, 241, 226, 199, 128, 35, 211, 172, 231, 241, 221, 170, 129, 71, 198, 101, 194, 28, 65, 187, 57, 192, 99, 174, 165, 5, 56, 79, 47, 88, 58, 86, 239, 171, 218, 23, 123, 86, 84, 92, 210, 37, 43, 134, 189, 178, 206, 89, 239, 166, 230, 115, 145, 230, 195, 137, 228, 198, 37, 170, 250, 91, 202, 22, 63, 232, 239, 190, 71, 167, 84, 96, 105, 14, 90, 237, 217, 114, 143, 221, 240, 228, 133, 207, 94, 124, 46, 154, 163, 57, 49, 114, 115, 120, 136, 72, 6, 117, 1, 251, 109, 186, 89, 2, 47, 28, 197, 4, 30, 131, 36, 67, 155, 118, 77, 105, 33, 106, 123, 114, 249, 67, 233, 162, 234, 75, 112, 221, 21, 80, 129] 454
+Remote GnomeId: GID-e9eb84c70cd00f29
+SKT Sent 10 bytes
+Request include GID-e9eb84c70cd00f29 to GID-0-/
+SRVC Racing tasks
+Waiting for initial tokens
+Max tokens: 1600000
+Got: [107, 12, 106, 112, 105, 178, 115, 114, 134, 214, 196, 88, 134, 79, 228, 220, 120, 12, 165, 108, 2, 121, 247, 210, 142, 248, 151, 103, 230, 76, 100, 66, 97, 69, 9, 89] 36
+Subscription req add GID-e9eb84c70cd00f29 to GID-0-/
+GID-e9eb84c70cd00f29 ADD	add a new neighbor to GID-0-/
+GID-0-/ have neighbors!
+Avail bandwith: 1024
+GID-c00ae15a5355f18b >>> ST0000000000 N-0 Sync KA[1024]
+Got: [172, 28, 36, 75, 176, 201, 172, 129, 114, 23, 166, 51, 117, 146, 184, 174, 30, 220, 82, 138, 139, 44, 236, 218, 173, 77, 97, 194, 179, 242, 231, 190, 71, 26, 242, 131, 139, 0, 216, 71, 248, 209] 42
+GID-e9eb84c70cd00f29  <  ST0000000000 N-0 Sync KA[1024]
+GID-c00ae15a5355f18b >>> ST0000000001 N-1 Sync KA[1024]
+Got: [152, 143, 172, 109, 2, 152, 11, 24, 86, 208, 200, 220, 185, 137, 12, 192, 56, 206, 128, 229, 48, 87, 105, 193, 250, 123, 251, 166, 49, 92, 162, 57, 206, 205, 227, 188, 164, 44, 238, 19, 70, 172] 42
+GID-e9eb84c70cd00f29  <  ST0000000001 N-1 Sync KA[1024]
+GID-c00ae15a5355f18b >>> ST0000000002 N-2 Sync KA[819200]
+Got: [92, 88, 215, 103, 57, 79, 64, 251, 77, 87, 217, 51, 158, 82, 229, 205, 254, 32, 21, 85, 66, 242, 56, 86, 62, 225, 203, 160, 102, 17, 10, 142, 229, 85, 6, 211, 135, 249, 154, 166, 205, 63] 42
+GID-e9eb84c70cd00f29  <  ST0000000003 N-2 Sync KA[819200]
+GID-c00ae15a5355f18b >>> ST0000000004 N-3 Sync KA[819200]
+Got: [226, 95, 122, 134, 110, 97, 152, 181, 133, 244, 94, 64, 172, 214, 33, 181, 6, 133, 186, 87, 118, 247, 179, 180, 19, 174, 50, 162, 80, 45, 52, 73, 209, 162, 183, 49, 117, 15, 229, 51, 94, 17, 160, 6, 21, 251, 15, 167, 157, 166, 184, 191, 143, 89, 219, 35, 130, 93, 90, 144, 126, 90, 132, 156, 254, 253] 66
+Got: [207, 53, 56, 36, 180, 117, 129, 116, 40, 183, 18, 157, 130, 121, 35, 54, 185, 23, 165, 103, 79, 252, 110, 241, 139, 244, 153, 114, 197, 54, 181, 80, 47, 15, 131, 142, 32, 241, 190, 59, 22, 83] 42
+GID-e9eb84c70cd00f29  <  ST0000000005 N-3 Sync KA[819200]
+GID-c00ae15a5355f18b >>> ST0000000006 N-4 Sync KA[819200]
+Got: [68, 11, 31, 190, 220, 180, 232, 143, 247, 8, 138, 100, 8, 244, 225, 241, 219, 189, 184, 102, 45, 45, 164, 24, 115, 210, 73, 134, 43, 20, 72, 123, 173, 82, 38, 210, 118, 199, 5, 89, 120, 239] 42
+GID-e9eb84c70cd00f29  <  ST0000000007 N-4 Sync KA[819200]
+GID-c00ae15a5355f18b >>> ST0000000008 N-5 Sync KA[102400]
+Got: [6, 84, 225, 173, 89, 27, 99, 236, 121, 159, 107, 57, 75, 177, 19, 54, 242, 221, 204, 117, 112, 96, 33, 87, 111, 229, 153, 15, 39, 206, 78, 77, 118, 94, 130, 226, 41, 242, 250, 93, 163, 200] 42
+GID-e9eb84c70cd00f29  <  ST0000000009 N-5 Sync KA[819200]
+GID-c00ae15a5355f18b >>> ST0000000010 N-6 Sync KA[102400]
+Got: [252, 159, 23, 124, 56, 59, 40, 32, 150, 106, 69, 129, 3, 95, 36, 104, 141, 115, 84, 111, 165, 41, 71, 43, 88, 235, 146, 77, 236, 29, 102, 186, 98, 124, 98, 148, 192, 92, 255, 246, 105, 13] 42
+GID-e9eb84c70cd00f29  <  ST0000000011 N-6 Sync KA[819200]
+GID-c00ae15a5355f18b >>> ST0000000012 N-7 Sync KA[102400]
+Sync swarm time ST0000000012
+Got: [56, 157, 248, 27, 236, 55, 231, 225, 133, 236, 37, 116, 19, 103, 38, 235, 231, 229, 232, 184, 100, 122, 192, 217, 112, 169, 218, 102, 176, 159, 120, 132, 145, 160, 45, 82, 20, 228, 158, 32, 146, 107] 42
+GID-e9eb84c70cd00f29  <  ST0000000013 N-7 Sync KA[819200]
+Sent Partial response
+Sent Datastore response
+We are requested to send all first pages to neighbor.
+Only first pages of select Contents
+We should send some page hashes of Contents: 0
+Hashes [0/0] of 0 sent
+We should send some page hashes of Contents: 1
+We should send some page hashes of Contents: 2
+We should send some page hashes of Contents: 3
+We are requested to send all pages of Contents: [0, 1, 2, 3].
+Sending CID 0
+Sending CID 1
+Sending CID 2
+Sending CID 3
+Starting a new swarm, where I am Founder…
+We are requesting tags [0] for SwarmID(0) swarm
+App received request for tags: [0]
+Got: [144, 249, 69, 134, 129, 56, 195, 161, 227, 169, 86, 100, 225, 31, 118, 58, 72, 218, 187, 217, 215, 113, 137, 44, 107, 25, 71, 129, 43, 100, 142, 20, 12, 39, 221, 189, 158, 147, 47, 233, 171, 61, 198, 240, 120] 45
+Got: [107, 147, 253, 27, 36, 162, 113, 138, 79, 191, 87, 133, 35, 160, 160, 124, 221, 190, 61, 61, 223, 177, 87, 177, 36, 199, 195, 27, 213, 110, 80, 184, 116, 100, 97, 48, 217, 11, 47, 152, 150, 166, 76, 24, 1, 46] 46
+Got: [8, 251, 3, 22, 45, 64, 150, 39, 118, 157, 33, 206, 148, 207, 0, 239, 84, 139, 202, 88, 173, 17, 62, 79, 214, 172, 202, 144, 179, 31, 175, 5, 175, 2, 185, 242, 227, 31, 36, 64] 40
+Manager Received JoinSwarm(GID-c00ae15a5355f18b-/)
+No pairs found in neighboring swarms
+Joining GID-c00ae15a5355f18b-/… 
+Joined `GID-c00ae15a5355f18b-/` swarm
+Notifying network about GID-c00ae15a5355f18b-/
+Informing others about new swarm
+Waiting for user/network to provide some Neighbors for GID-c00ae15a5355f18b-/...
+Received Bundle
+Added swarm in networking: GID-c00ae15a5355f18b-/
+SwarmID(1) joined GID-c00ae15a5355f18b-/
+Swarm SwarmID(1) is now active
+Updating Datastore CID: 0, hash: 9399151345360787321
+Result: Ok(Data(Data(0), Filled(Data(9399151345360787321, [255])))), 9399151345360787321
+Requesting Manifest
+SyncResponse::Datastore [0/0] 
+Set active SwarmID(1)
+Received hashes [0/0] of 0 (len: 8)!
+Hash from Neighbor: 9399151345360787321
+New bottom hashes: [9399151345360787321]
+Updated Content 0 with hashes
+Inserting page 0 of non-Link content
+DPunch received channels for GID-c00ae15a5355f18b-/
+Got: [177, 94, 40, 47, 237, 228, 225, 238, 33, 211, 49, 39, 63, 135, 191, 155, 116, 85, 136, 185, 33, 215, 143, 217, 219, 39, 103, 227, 242, 159, 131, 54, 135, 223, 47, 208, 43, 177, 250, 61, 20, 69, 229, 231, 46, 78, 209, 90, 54] 49
+Got a message on new channel...
+Extend req: GID-c00ae15a5355f18b-/
+Got: [103, 67, 254, 0, 4, 135, 162, 55, 228, 163, 103, 126, 225, 21, 106, 56, 132, 190, 23, 113, 226, 59, 25, 168, 239, 240, 205, 79, 180, 182, 69, 170, 137, 193, 145, 209] 36
+Subscription req add GID-e9eb84c70cd00f29 to GID-c00ae15a5355f18b-/
+GID-e9eb84c70cd00f29 ADD	add a new neighbor to GID-c00ae15a5355f18b-/
+GID-c00ae15a5355f18b-/ have neighbors!
+Avail bandwith: 1024
+GID-c00ae15a5355f18b >>> ST0000000000 N-0 Sync KA[1024]
+Received ReadError for SwarmID(1) 0 AppDataNotSynced
+Requesting 0 again…
+Got: [151, 10, 84, 126, 208, 56, 136, 8, 119, 73, 128, 63, 181, 163, 169, 198, 246, 16, 248, 18, 245, 157, 203, 120, 107, 59, 125, 117, 101, 190, 134, 56, 95, 236, 105, 40, 238, 236, 200, 230, 142, 147] 42
+GID-e9eb84c70cd00f29  <  ST0000000000 N-0 Sync KA[1024]
+GID-c00ae15a5355f18b >>> ST0000000001 N-1 Sync KA[1024]
+Got: [102, 135, 112, 122, 231, 152, 217, 133, 110, 66, 57, 49, 184, 241, 85, 194, 10, 167, 51, 180, 18, 208, 113, 244, 224, 255, 238, 93, 77, 23, 165, 43, 192, 239, 44, 253, 219, 62, 227, 115, 142, 62] 42
+GID-e9eb84c70cd00f29  <  ST0000000001 N-1 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000002 N-2 Sync KA[102400]
+Got: [189, 111, 83, 203, 225, 1, 24, 105, 31, 206, 116, 79, 177, 72, 151, 251, 96, 7, 249, 181, 97, 71, 227, 104, 214, 219, 39, 172, 8, 49, 0, 89, 136, 193, 47, 85, 218, 181, 154, 205, 22, 169, 38, 193, 186, 53, 196, 135, 114, 128, 250, 126, 51, 119, 63, 117, 2, 68, 250, 216, 207, 230, 127, 96, 245, 248] 66
+Got: [229, 42, 246, 65, 78, 64, 168, 33, 114, 189, 250, 169, 244, 67, 177, 221, 192, 237, 24, 243, 229, 168, 125, 206, 145, 44, 172, 146, 21, 80, 51, 16, 36, 172, 76, 50, 172, 31, 231, 136, 78, 18] 42
+GID-e9eb84c70cd00f29  <  ST0000000003 N-2 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000004 N-3 Sync KA[102400]
+Got: [68, 12, 73, 135, 143, 215, 219, 148, 43, 38, 38, 60, 14, 205, 48, 24, 211, 155, 207, 129, 197, 197, 176, 124, 20, 178, 108, 0, 83, 120, 202, 8, 206, 37, 65, 14, 43, 8, 242, 185, 106, 242] 42
+GID-e9eb84c70cd00f29  <  ST0000000005 N-3 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000006 N-4 Sync KA[102400]
+Got: [44, 110, 156, 128, 53, 234, 249, 248, 79, 113, 185, 130, 195, 28, 198, 252, 26, 200, 138, 205, 70, 132, 134, 67, 56, 35, 248, 18, 143, 152, 155, 17, 122, 140, 176, 132, 179, 101, 18, 197, 8, 240] 42
+GID-e9eb84c70cd00f29  <  ST0000000007 N-4 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000008 N-5 Sync KA[102400]
+Got: [154, 156, 45, 189, 92, 110, 35, 67, 17, 132, 148, 45, 242, 195, 89, 194, 82, 92, 169, 34, 218, 140, 145, 219, 152, 212, 150, 235, 136, 198, 132, 124, 234, 232, 113, 154, 78, 222, 137, 38, 208, 62] 42
+GID-e9eb84c70cd00f29  <  ST0000000009 N-5 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000010 N-6 Sync KA[102400]
+Got: [214, 150, 204, 207, 215, 100, 88, 230, 84, 203, 131, 233, 140, 94, 37, 119, 67, 79, 229, 70, 117, 75, 143, 26, 82, 165, 124, 114, 79, 47, 9, 11, 31, 99, 76, 69, 191, 40, 236, 220, 213, 103] 42
+GID-e9eb84c70cd00f29  <  ST0000000011 N-6 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000012 N-7 Sync KA[102400]
+Sync swarm time ST0000000012
+Got: [121, 90, 164, 103, 138, 100, 176, 54, 156, 209, 39, 147, 124, 87, 169, 52, 82, 115, 58, 147, 160, 157, 99, 121, 229, 27, 235, 193, 104, 12, 115, 123, 73, 228, 32, 23, 55, 89, 152, 138, 99, 130] 42
+GID-e9eb84c70cd00f29  <  ST0000000013 N-7 Sync KA[102400]
+Sent Partial response
+Sent Datastore response
+We are requested to send all first pages to neighbor.
+Only first pages of select Contents
+We should send some page hashes of Contents: 0
+Hashes [0/0] of 0 sent
+We should send some page hashes of Contents: 1
+We should send some page hashes of Contents: 2
+We should send some page hashes of Contents: 3
+We are requested to send all pages of Contents: [0, 1, 2, 3].
+Sending CID 0
+Sending CID 1
+Sending CID 2
+Sending CID 3
+Got: [146, 105, 148, 237, 93, 139, 70, 25, 134, 225, 36, 20, 113, 166, 160, 42, 12, 232, 100, 67, 71, 54, 4, 40, 247, 207, 16, 58, 130, 55, 32, 26, 158, 79, 108, 30, 184, 57, 185, 87, 234, 47, 197, 112, 140] 45
+Got: [2, 156, 50, 143, 252, 109, 115, 2, 82, 221, 151, 28, 218, 169, 153, 108, 20, 161, 84, 254, 123, 138, 236, 174, 165, 90, 135, 224, 254, 43, 43, 214, 141, 156, 37, 96, 92, 66, 175, 111, 26, 29, 180, 48, 86, 116] 46
+Got: [28, 162, 215, 200, 9, 94, 121, 96, 181, 54, 129, 80, 62, 245, 31, 88, 100, 93, 179, 181, 187, 163, 23, 245, 246, 153, 198, 35, 247, 33, 4, 103, 128, 239, 4, 224, 107, 44, 217, 147] 40
+Added CMenu set: 2
+We are requesting tags [0] for SwarmID(1) swarm
+App received request for tags: [0]
+Received ReadError for SwarmID(1) 0 AppDataNotSynced
+Requesting 0 again…
+Updating Datastore CID: 0, hash: 9399151345360787321
+Result: Ok(Data(Data(0), Filled(Data(9399151345360787321, [255])))), 9399151345360787321
+SyncResponse::Datastore [0/0] 
+Received hashes [0/0] of 0 (len: 8)!
+Hash from Neighbor: 9399151345360787321
+New bottom hashes: [9399151345360787321]
+Updated Content 0 with hashes
+Inserting page 0 of non-Link content
+NAT type: Symmetric 
+Read 0, data len: 1
+Sending read result with 1 data blocks
+Received ReadSuccess SwarmID(1) 0
+Sending Manifest d_vec.len: 1 to Presentation
+Constructing manifest from: 1 Data blocks
+GID-c00ae15a5355f18b >>> ST0000000013 N-0 Sync KA[102400]
+Got: [229, 57, 229, 160, 93, 208, 9, 60, 119, 112, 165, 42, 19, 94, 246, 29, 237, 30, 240, 35, 68, 142, 115, 226, 235, 18, 57, 244, 183, 23, 235, 128, 74, 244, 198, 215, 59, 63, 89, 25, 210, 137] 42
+GID-e9eb84c70cd00f29  <  ST0000000014 N-0 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000014 N-1 Sync KA[102400]
+Got: [123, 104, 171, 148, 113, 54, 108, 105, 127, 143, 52, 145, 145, 145, 76, 210, 229, 81, 198, 224, 0, 175, 193, 154, 115, 156, 151, 131, 31, 207, 120, 203, 52, 116, 137, 225, 10, 207, 98, 145, 242, 37] 42
+GID-e9eb84c70cd00f29  <  ST0000000015 N-2 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000015 N-2 Sync KA[102400]
+Got: [102, 133, 203, 242, 248, 61, 82, 205, 10, 126, 13, 177, 252, 123, 134, 69, 43, 125, 127, 179, 90, 45, 189, 57, 24, 235, 14, 88, 227, 243, 44, 247, 38, 79, 179, 147, 75, 148, 255, 213, 9, 202] 42
+GID-e9eb84c70cd00f29  <  ST0000000016 N-3 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000016 N-3 Sync KA[102400]
+Got: [108, 199, 152, 67, 208, 165, 139, 88, 172, 114, 71, 101, 224, 64, 88, 168, 165, 222, 47, 43, 234, 89, 119, 156, 204, 109, 206, 236, 88, 239, 209, 87, 19, 222, 77, 249, 254, 2, 124, 200, 230, 212] 42
+GID-e9eb84c70cd00f29  <  ST0000000017 N-4 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000017 N-4 Sync KA[102400]
+Got: [122, 106, 125, 83, 103, 210, 139, 33, 175, 83, 35, 22, 27, 10, 89, 59, 17, 120, 101, 85, 140, 210, 252, 48, 95, 146, 75, 244, 203, 114, 175, 252, 29, 223, 203, 0, 10, 46, 104, 169, 161, 154] 42
+GID-e9eb84c70cd00f29  <  ST0000000018 N-5 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000018 N-5 Sync KA[102400]
+Got: [251, 92, 224, 96, 121, 255, 229, 188, 141, 207, 174, 202, 216, 143, 12, 87, 2, 158, 227, 84, 236, 132, 201, 87, 167, 75, 32, 86, 72, 8, 222, 222, 204, 112, 189, 0, 132, 164, 7, 11, 236, 165] 42
+GID-e9eb84c70cd00f29  <  ST0000000019 N-6 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000019 N-6 Sync KA[102400]
+Got: [82, 24, 82, 42, 44, 239, 142, 55, 155, 37, 28, 122, 44, 152, 12, 44, 98, 130, 87, 94, 127, 1, 174, 63, 206, 96, 127, 97, 123, 6, 79, 122, 201, 86, 179, 45, 87, 156, 212, 175, 205, 169] 42
+GID-e9eb84c70cd00f29  <  ST0000000020 N-7 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000020 N-7 Sync KA[102400]
+Sync swarm time ST0000000020
+Got: [248, 55, 239, 105, 154, 215, 205, 161, 118, 236, 246, 114, 138, 166, 169, 93, 97, 52, 5, 220, 142, 239, 26, 32, 201, 247, 27, 134, 249, 27, 78, 76, 189, 63, 22, 94, 248, 154, 26, 164, 254, 113] 42
+GID-e9eb84c70cd00f29  <  ST0000000014 N-0 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000013 N-0 Sync KA[102400]
+Got: [82, 151, 167, 184, 63, 190, 13, 194, 62, 52, 148, 125, 66, 141, 141, 105, 95, 235, 213, 199, 134, 101, 142, 225, 169, 49, 132, 108, 75, 90, 230, 59, 193, 110, 28, 102, 145, 24, 224, 217, 118, 165] 42
+GID-e9eb84c70cd00f29  <  ST0000000014 N-1 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000014 N-2 Sync KA[102400]
+Got: [137, 213, 191, 77, 23, 147, 99, 18, 90, 211, 183, 23, 191, 73, 90, 212, 202, 10, 172, 66, 137, 230, 28, 112, 35, 248, 39, 147, 17, 226, 40, 67, 5, 89, 186, 191, 142, 184, 180, 65, 18, 212] 42
+GID-e9eb84c70cd00f29  <  ST0000000015 N-2 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000015 N-3 Sync KA[102400]
+Got: [69, 122, 209, 32, 128, 194, 62, 148, 124, 201, 105, 14, 43, 82, 55, 68, 80, 214, 25, 208, 206, 173, 36, 210, 203, 177, 74, 13, 190, 8, 231, 126, 246, 181, 91, 5, 122, 182, 129, 250, 136, 147] 42
+GID-e9eb84c70cd00f29  <  ST0000000016 N-3 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000016 N-4 Sync KA[102400]
+Got: [152, 226, 26, 61, 6, 114, 213, 253, 101, 134, 41, 139, 223, 87, 74, 15, 50, 50, 226, 155, 0, 211, 226, 232, 254, 14, 244, 193, 61, 47, 85, 148, 101, 184, 85, 97, 144, 229, 223, 46, 70, 170] 42
+GID-e9eb84c70cd00f29  <  ST0000000017 N-4 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000017 N-5 Sync KA[102400]
+Got: [165, 91, 177, 184, 170, 212, 186, 76, 90, 123, 136, 61, 146, 8, 86, 95, 229, 74, 190, 15, 253, 89, 100, 208, 237, 245, 52, 207, 212, 83, 244, 109, 120, 218, 66, 97, 43, 243, 246, 60, 35, 128] 42
+GID-e9eb84c70cd00f29  <  ST0000000018 N-5 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000018 N-6 Sync KA[102400]
+Got: [110, 247, 70, 158, 147, 21, 130, 109, 211, 225, 109, 87, 186, 77, 185, 92, 84, 126, 115, 169, 244, 78, 76, 54, 217, 30, 198, 25, 41, 236, 170, 16, 211, 44, 151, 249, 15, 247, 107, 180, 225, 185] 42
+GID-e9eb84c70cd00f29  <  ST0000000019 N-6 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000019 N-7 Sync KA[102400]
+Sync swarm time ST0000000019
+Got: [75, 221, 168, 157, 235, 140, 61, 39, 170, 51, 50, 170, 162, 248, 179, 103, 254, 230, 209, 246, 212, 172, 140, 196, 14, 154, 152, 202, 165, 203, 235, 12, 120, 207, 62, 6, 179, 191, 209, 179, 111, 184] 42
+GID-e9eb84c70cd00f29  <  ST0000000020 N-7 Sync KA[102400]
+Got: [52, 151, 133, 20, 202, 114, 218, 220, 89, 7, 72, 8, 172, 136, 218, 48, 176, 188, 66, 121, 44, 4, 128, 119, 8, 202, 56, 128, 96, 35, 182, 180, 198, 161, 139, 146, 124, 58, 70, 220, 78, 124] 42
+GID-e9eb84c70cd00f29  <  ST0000000021 N-0 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000021 N-0 Sync KA[102400]
+Got: [168, 201, 227, 125, 137, 58, 118, 223, 20, 169, 56, 110, 154, 237, 221, 193, 158, 15, 132, 193, 126, 10, 210, 154, 162, 110, 49, 110, 69, 107, 87, 200, 88, 1, 196, 230, 103, 17, 12, 144, 214, 172] 42
+GID-e9eb84c70cd00f29  <  ST0000000022 N-1 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000022 N-2 Sync KA[102400]
+Got: [226, 138, 134, 159, 235, 31, 151, 99, 252, 111, 198, 241, 89, 236, 167, 123, 148, 207, 88, 200, 126, 238, 203, 94, 135, 63, 77, 187, 74, 139, 245, 97, 159, 224, 91, 152, 34, 177, 56, 142, 179, 176] 42
+GID-e9eb84c70cd00f29  <  ST0000000023 N-2 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000023 N-3 Sync KA[102400]
+Got: [77, 218, 28, 95, 253, 56, 239, 52, 115, 77, 42, 223, 141, 103, 206, 67, 137, 46, 180, 203, 129, 13, 54, 200, 101, 31, 155, 43, 186, 136, 15, 197, 26, 220, 28, 198, 50, 68, 175, 206, 174, 108] 42
+GID-e9eb84c70cd00f29  <  ST0000000024 N-3 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000024 N-4 Sync KA[102400]
+Got: [200, 34, 227, 215, 101, 185, 173, 242, 56, 28, 162, 29, 5, 116, 50, 14, 103, 28, 6, 195, 88, 203, 121, 251, 29, 30, 188, 205, 161, 35, 218, 214, 139, 147, 37, 218, 178, 255, 135, 226, 201, 111] 42
+GID-e9eb84c70cd00f29  <  ST0000000025 N-4 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000025 N-5 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000020 N-0 Sync KA[102400]
+Got: [107, 15, 5, 109, 99, 247, 41, 89, 54, 44, 235, 15, 49, 13, 160, 119, 223, 195, 127, 138, 5, 95, 206, 58, 22, 141, 56, 194, 97, 242, 246, 51, 132, 27, 166, 60, 26, 116, 172, 126, 220, 127] 42
+Got: [125, 135, 31, 71, 138, 234, 61, 249, 9, 187, 60, 35, 131, 13, 159, 15, 24, 86, 105, 34, 108, 41, 117, 148, 202, 185, 166, 144, 221, 164, 38, 26, 104, 93, 105, 143, 185, 249, 18, 3, 54, 2] 42
+GID-e9eb84c70cd00f29  <  ST0000000021 N-0 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000021 N-1 Sync KA[102400]
+GID-e9eb84c70cd00f29  <  ST0000000026 N-5 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000026 N-6 Sync KA[102400]
+Got: [228, 71, 12, 172, 223, 152, 129, 100, 203, 195, 227, 191, 146, 63, 203, 121, 245, 67, 224, 212, 27, 246, 21, 103, 222, 101, 30, 217, 71, 235, 43, 21, 178, 129, 80, 209, 208, 187, 100, 3, 213, 239] 42
+Got: [141, 23, 105, 196, 6, 111, 52, 61, 45, 203, 254, 231, 3, 63, 75, 68, 248, 33, 247, 44, 164, 46, 163, 108, 51, 63, 202, 91, 63, 214, 29, 58, 160, 249, 105, 230, 140, 185, 38, 115, 17, 19] 42
+GID-e9eb84c70cd00f29  <  ST0000000022 N-2 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000022 N-2 Sync KA[102400]
+GID-e9eb84c70cd00f29  <  ST0000000027 N-6 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000027 N-7 Sync KA[102400]
+Sync swarm time ST0000000027
+Got: [211, 165, 101, 40, 121, 108, 15, 41, 197, 192, 214, 11, 54, 82, 246, 84, 37, 252, 55, 146, 8, 91, 210, 227, 120, 47, 209, 106, 195, 46, 129, 71, 238, 114, 153, 163, 36, 2, 228, 135, 124, 28] 42
+Got: [30, 211, 70, 32, 205, 25, 145, 240, 48, 105, 44, 193, 45, 38, 92, 97, 251, 253, 105, 179, 8, 109, 50, 12, 229, 74, 153, 153, 46, 12, 92, 233, 178, 93, 61, 155, 150, 234, 8, 153, 101, 201] 42
+GID-e9eb84c70cd00f29  <  ST0000000023 N-3 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000023 N-3 Sync KA[102400]
+GID-e9eb84c70cd00f29  <  ST0000000028 N-7 Sync KA[102400]
+Got: [168, 90, 68, 52, 94, 208, 67, 90, 166, 145, 158, 243, 32, 195, 108, 31, 7, 89, 48, 77, 4, 104, 97, 73, 153, 138, 163, 228, 90, 203, 52, 233, 8, 68, 58, 240, 153, 62, 247, 116, 77, 31] 42
+GID-e9eb84c70cd00f29  <  ST0000000024 N-4 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000024 N-4 Sync KA[102400]
+Got: [194, 189, 156, 33, 247, 249, 229, 210, 214, 241, 54, 15, 165, 119, 234, 21, 214, 81, 6, 189, 135, 221, 115, 215, 112, 18, 53, 160, 129, 70, 188, 185, 40, 168, 166, 215, 203, 17, 140, 232, 209, 136] 42
+GID-e9eb84c70cd00f29  <  ST0000000025 N-5 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000025 N-5 Sync KA[102400]
+Got: [189, 146, 138, 248, 243, 32, 57, 123, 163, 132, 196, 119, 194, 229, 242, 73, 163, 8, 62, 8, 185, 132, 133, 40, 93, 218, 129, 19, 30, 250, 249, 243, 127, 29, 165, 91, 14, 109, 142, 220, 148, 42] 42
+GID-e9eb84c70cd00f29  <  ST0000000026 N-6 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000026 N-6 Sync KA[102400]
+Got: [62, 28, 121, 182, 186, 67, 18, 55, 27, 206, 248, 25, 182, 67, 15, 84, 120, 253, 66, 121, 26, 111, 36, 99, 2, 144, 19, 21, 154, 169, 100, 222, 105, 246, 97, 219, 144, 71, 35, 114, 1, 72] 42
+GID-e9eb84c70cd00f29  <  ST0000000027 N-7 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000027 N-7 Sync KA[102400]
+Sync swarm time ST0000000027
+GID-c00ae15a5355f18b >>> ST0000000028 N-0 Sync KA[102400]
+Got: [32, 251, 86, 52, 58, 247, 135, 23, 40, 198, 202, 12, 46, 146, 217, 227, 75, 151, 217, 168, 177, 113, 57, 171, 189, 111, 50, 61, 154, 115, 6, 42, 227, 86, 209, 245, 31, 35, 54, 10, 9, 136] 42
+GID-e9eb84c70cd00f29  <  ST0000000029 N-0 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000029 N-1 Sync KA[102400]
+Got: [48, 164, 247, 139, 102, 40, 171, 22, 31, 164, 29, 139, 237, 171, 255, 31, 207, 41, 185, 94, 22, 135, 55, 215, 94, 234, 26, 115, 62, 130, 216, 206, 24, 244, 156, 109, 27, 18, 34, 154, 87, 224] 42
+GID-e9eb84c70cd00f29  <  ST0000000030 N-2 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000030 N-2 Sync KA[102400]
+Got: [219, 223, 249, 193, 136, 11, 59, 186, 218, 148, 232, 206, 21, 230, 183, 126, 164, 75, 16, 96, 135, 229, 29, 216, 106, 180, 56, 182, 216, 142, 127, 213, 71, 157, 121, 179, 249, 150, 35, 159, 144, 80] 42
+GID-e9eb84c70cd00f29  <  ST0000000031 N-3 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000031 N-3 Sync KA[102400]
+Got: [96, 207, 252, 51, 158, 152, 124, 76, 23, 50, 184, 236, 82, 251, 219, 116, 120, 221, 253, 55, 185, 199, 194, 111, 25, 1, 232, 11, 140, 79, 18, 143, 186, 24, 75, 3, 246, 132, 88, 136, 174, 99] 42
+GID-e9eb84c70cd00f29  <  ST0000000032 N-4 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000032 N-4 Sync KA[102400]
+Got: [230, 137, 206, 135, 105, 136, 197, 168, 79, 35, 222, 159, 155, 139, 141, 53, 81, 92, 244, 88, 30, 50, 88, 21, 165, 198, 215, 197, 38, 93, 115, 248, 212, 246, 225, 11, 166, 242, 133, 131, 37, 28] 42
+GID-e9eb84c70cd00f29  <  ST0000000033 N-5 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000033 N-5 Sync KA[102400]
+Got: [118, 243, 48, 246, 61, 199, 235, 15, 31, 178, 116, 230, 115, 198, 71, 236, 67, 160, 63, 222, 215, 115, 172, 177, 61, 52, 102, 24, 150, 91, 89, 24, 95, 72, 137, 36, 188, 111, 209, 181, 209, 2] 42
+GID-e9eb84c70cd00f29  <  ST0000000034 N-6 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000034 N-6 Sync KA[102400]
+Got: [152, 237, 100, 139, 165, 172, 91, 196, 40, 211, 128, 45, 14, 219, 117, 111, 142, 155, 254, 28, 98, 195, 30, 184, 213, 15, 177, 109, 20, 244, 199, 222, 32, 179, 195, 50, 236, 224, 118, 125, 0, 143] 42
+GID-e9eb84c70cd00f29  <  ST0000000035 N-7 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000035 N-7 Sync KA[102400]
+Sync swarm time ST0000000035
+Got: [159, 76, 120, 158, 226, 209, 16, 41, 149, 253, 49, 198, 85, 104, 27, 138, 35, 189, 174, 2, 132, 7, 230, 85, 177, 53, 53, 84, 245, 38, 3, 250, 239, 106, 137, 17, 106, 203, 35, 7, 55, 44] 42
+GID-e9eb84c70cd00f29  <  ST0000000028 N-0 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000028 N-0 Sync KA[102400]
+Got: [164, 34, 236, 180, 155, 109, 187, 211, 186, 170, 208, 205, 174, 181, 36, 239, 123, 149, 3, 178, 83, 76, 134, 72, 33, 58, 101, 156, 14, 69, 93, 8, 38, 178, 233, 84, 218, 245, 229, 139, 36, 151] 42
+GID-e9eb84c70cd00f29  <  ST0000000029 N-1 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000029 N-2 Sync KA[102400]
+Got: [145, 52, 99, 115, 104, 12, 111, 22, 246, 151, 216, 35, 193, 90, 119, 93, 199, 17, 252, 193, 75, 43, 95, 152, 222, 165, 244, 200, 213, 149, 242, 146, 247, 18, 128, 4, 61, 138, 224, 131, 189, 192] 42
+GID-e9eb84c70cd00f29  <  ST0000000030 N-2 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000030 N-3 Sync KA[102400]
+Got: [168, 20, 160, 136, 248, 185, 126, 27, 222, 231, 124, 87, 108, 152, 8, 124, 44, 80, 101, 198, 216, 240, 26, 107, 112, 149, 191, 175, 215, 36, 110, 226, 13, 97, 138, 0, 17, 151, 194, 236, 192, 203] 42
+GID-e9eb84c70cd00f29  <  ST0000000031 N-3 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000031 N-4 Sync KA[102400]
+Got: [242, 76, 64, 67, 237, 189, 13, 194, 143, 229, 8, 146, 19, 42, 174, 104, 94, 78, 54, 179, 33, 228, 174, 91, 253, 91, 122, 253, 34, 59, 64, 221, 99, 181, 213, 9, 232, 4, 129, 0, 10, 123] 42
+GID-e9eb84c70cd00f29  <  ST0000000032 N-4 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000032 N-5 Sync KA[102400]
+Got: [18, 222, 222, 251, 205, 251, 116, 18, 250, 160, 105, 211, 79, 9, 247, 46, 156, 208, 208, 228, 129, 217, 47, 14, 91, 124, 197, 129, 188, 158, 239, 51, 145, 96, 31, 100, 164, 117, 164, 218, 111, 44] 42
+GID-e9eb84c70cd00f29  <  ST0000000033 N-5 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000033 N-6 Sync KA[102400]
+Got: [57, 183, 35, 149, 253, 200, 97, 166, 139, 117, 151, 153, 45, 244, 32, 16, 100, 36, 101, 26, 190, 43, 42, 178, 191, 229, 3, 164, 114, 113, 234, 0, 20, 95, 85, 112, 148, 182, 41, 128, 177, 90] 42
+GID-e9eb84c70cd00f29  <  ST0000000034 N-6 Sync KA[102400]
+GID-c00ae15a5355f18b >>> ST0000000034 N-7 Sync KA[102400]
+Sync swarm time ST0000000034
+Got: [78, 174, 79, 205, 124, 15, 72, 194, 134, 218, 33, 176, 140, 226, 116, 21, 38, 133, 155, 168, 8, 70, 105, 247, 108, 224, 97, 192, 121, 255, 32, 238, 15, 15, 82, 203, 231, 132, 226, 76, 7, 118] 42
+GID-e9eb84c70cd00f29  <  ST0000000035 N-7 Sync KA[102400]
+Done serving TUI
+Done serving AppData
+Sending disconnect request to swarm: SwarmID(0)
+Sending disconnect request to swarm: SwarmID(1)
+Sending bye to all SwarmID(1) Neighbors…
+Sending bye to all SwarmID(0) Neighbors…
+Subscriber disconnected
+Done serving AppMgr
+Done serving ApplicationLogic

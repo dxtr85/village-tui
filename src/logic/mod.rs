@@ -911,10 +911,20 @@ impl ApplicationLogic {
                         }
                     }
                     ToApp::ReadSuccess(s_id, c_id, d_type, d_vec) => {
-                        // eprintln!("Received ReadSuccess {:?} {}", s_id, c_id);
+                        // eprintln!(
+                        //     "Received ReadSuccess {:?} CID-{} (len: {})",
+                        //     s_id,
+                        //     c_id,
+                        //     d_vec.len()
+                        // );
                         if s_id == self.active_swarm.swarm_id {
+                            // eprintln!("processing it");
                             self.process_data(c_id, d_type, d_vec);
                         } else {
+                            // eprintln!(
+                            //     "shelving it (active swarm: {:?})",
+                            //     self.active_swarm.swarm_id
+                            // );
                             self.pending_notifications
                                 .entry(s_id)
                                 .or_insert(vec![])
@@ -922,10 +932,10 @@ impl ApplicationLogic {
                         }
                     }
                     ToApp::ReadError(s_id, c_id, error) => {
-                        eprintln!("Received ReadError for {:?} {} {}", s_id, c_id, error);
+                        eprintln!("Received ReadError for {:?} CID-{}: {}", s_id, c_id, error);
                         if matches!(error, AppError::AppDataNotSynced) && c_id == 0 {
                             //TODO: some delay would be nice
-                            eprintln!("Requesting {} again…", c_id);
+                            eprintln!("Requesting CID-{} again…", c_id);
                             let _ = self.to_app_mgr_send.send(ToAppMgr::ReadData(s_id, c_id));
                         }
                         if s_id == self.active_swarm.swarm_id {
