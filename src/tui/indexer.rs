@@ -7,6 +7,8 @@ use super::button::Button;
 pub struct Indexer {
     pub g_id: usize,
     display_id: usize,
+    header_chunks: Vec<Vec<String>>,
+    chunk_idx: usize,
     buttons: Vec<Button>,
     visible_buttons: usize,
     cursor_position: usize,
@@ -48,6 +50,8 @@ impl Indexer {
             g_id,
             display_id,
             buttons,
+            header_chunks: vec![],
+            chunk_idx: 0,
             visible_buttons,
             cursor_position: 0,
             max_position: (cols - 2, rows - 2),
@@ -67,14 +71,38 @@ impl Indexer {
         self.buttons[self.cursor_position].deselect(mgr, false);
         if matches!(direction, Direction::Up) {
             if self.cursor_position == 0 {
-                self.cursor_position = self.visible_buttons - 1;
+                let chunks_count = self.header_chunks.len();
+                if chunks_count > 1 {
+                    let curr_idx = self.chunk_idx;
+                    // eprintln!("ccount: {}(curr idx: {})", chunks_count, curr_idx);
+                    self.chunk_idx = if curr_idx == 0 {
+                        chunks_count - 1
+                    } else {
+                        curr_idx - 1
+                    };
+                    // eprintln!("cidx: {}", self.chunk_idx);
+                    self.draw_buttons(mgr);
+                } else {
+                    self.cursor_position = self.visible_buttons - 1;
+                }
             } else {
                 self.cursor_position -= 1;
             }
             self.buttons[self.cursor_position].select(mgr, false);
         } else {
             if self.cursor_position == self.visible_buttons - 1 {
-                self.cursor_position = 0;
+                let chunks_count = self.header_chunks.len();
+                if chunks_count > 1 {
+                    let curr_idx = self.chunk_idx;
+                    self.chunk_idx = if curr_idx + 1 < chunks_count {
+                        curr_idx + 1
+                    } else {
+                        0
+                    };
+                    self.draw_buttons(mgr);
+                } else {
+                    self.cursor_position = 0;
+                }
             } else {
                 self.cursor_position += 1;
             }
@@ -103,14 +131,38 @@ impl Indexer {
         mgr: &mut Manager,
     ) -> Option<usize> {
         mgr.restore_display(self.display_id, true);
-        self.cursor_position = 0;
-        self.set_title(mgr, title);
+        self.header_chunks = vec![];
         let h_len = headers.len();
         let b_len = self.buttons.len();
-        self.visible_buttons = if h_len < b_len { h_len } else { b_len };
+        let mut curr_chunk = Vec::with_capacity(b_len);
+        let mut curr_size = 0;
+        let mut head_iter = headers.iter();
+        while let Some(text) = head_iter.next() {
+            curr_chunk.push(text.clone());
+            curr_size += 1;
+            if curr_size >= b_len {
+                curr_size = 0;
+                let cc = std::mem::replace(&mut curr_chunk, Vec::with_capacity(b_len));
+                self.header_chunks.push(cc);
+            }
+        }
+        if !curr_chunk.is_empty() {
+            self.header_chunks.push(curr_chunk);
+        }
+        self.set_title(mgr, title);
+        self.chunk_idx = 0;
+        self.draw_buttons(mgr);
+        let result = self.run(mgr);
+        mgr.restore_display(main_display, true);
+        result
+    }
+
+    fn draw_buttons(&mut self, mgr: &mut Manager) {
+        self.cursor_position = 0;
+        self.visible_buttons = self.header_chunks[self.chunk_idx].len();
         // eprintln!("Indexer visible buttons: {}", self.visible_buttons);
         for i in 0..self.buttons.len() {
-            if let Some(name) = headers.get(i) {
+            if let Some(name) = self.header_chunks[self.chunk_idx].get(i) {
                 self.buttons[i].rename(mgr, name);
                 self.buttons[i].show(mgr);
             } else {
@@ -119,11 +171,7 @@ impl Indexer {
                 self.buttons[i].hide(mgr);
             }
         }
-        let result = self.run(mgr);
-        mgr.restore_display(main_display, true);
-        result
     }
-
     pub fn run(&mut self, mgr: &mut Manager) -> Option<usize> {
         self.buttons[self.cursor_position].select(mgr, false);
         loop {
@@ -132,7 +180,15 @@ impl Indexer {
                     Key::Up | Key::CtrlP => self.move_selection(Direction::Up, mgr),
                     Key::Down | Key::CtrlN => self.move_selection(Direction::Down, mgr),
                     Key::Tab => break,
-                    Key::Enter => return Some(self.cursor_position),
+                    Key::Enter => {
+                        // eprintln!(
+                        //     "chunk_idx: {}, but len: {}, cursor pos: {}",
+                        //     self.chunk_idx,
+                        //     self.buttons.len(),
+                        //     self.cursor_position
+                        // );
+                        return Some((self.chunk_idx * self.buttons.len()) + self.cursor_position);
+                    }
                     other => {
                         eprintln!("Unsupperted key pressed: {:?}", other);
                     }
