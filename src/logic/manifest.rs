@@ -1,12 +1,19 @@
 use crate::Data;
 use dapp_lib::prelude::AppType;
+use dapp_lib::prelude::Nat;
+use dapp_lib::prelude::NetworkSettings;
+use dapp_lib::prelude::PortAllocationRule;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::hash::{DefaultHasher, Hasher};
+use std::net::IpAddr;
+use std::net::Ipv4Addr;
+use std::net::Ipv6Addr;
 
 #[derive(Clone)]
 pub struct Manifest {
     pub app_type: AppType,
+    pub pub_ips: Vec<(IpAddr, u16, Nat, (PortAllocationRule, i8))>,
     pub description: String,
     pub tags: HashMap<u8, Tag>,
     pub d_types: HashMap<u8, Tag>,
@@ -53,6 +60,7 @@ impl Manifest {
     pub fn new(app_type: AppType, tags: HashMap<u8, Tag>) -> Self {
         Manifest {
             app_type,
+            pub_ips: vec![],
             description: String::new(),
             tags,
             d_types: HashMap::new(),
@@ -112,6 +120,7 @@ impl Manifest {
         if data_count == 0 {
             return Manifest {
                 app_type: AppType::Other(0),
+                pub_ips: vec![],
                 description: String::new(),
                 tags: HashMap::new(),
                 d_types: HashMap::new(),
@@ -124,6 +133,7 @@ impl Manifest {
         if data_count == 1 && iter.len() == 1 {
             return Manifest {
                 app_type: AppType::from(iter.next().unwrap()),
+                pub_ips: vec![],
                 description: String::new(),
                 tags: HashMap::new(),
                 d_types: HashMap::new(),
@@ -166,7 +176,32 @@ impl Manifest {
         };
 
         let mut d_types = HashMap::with_capacity(dt_page_count << 5);
-        // let _tags_len = iter.next().unwrap();
+        let mut pub_ips = vec![];
+        // First byte in UTF-8 encoded String can not start with a 1 bit, so we are good
+        if let Some(next_byte) = iter.clone().peekable().next() {
+            if next_byte == 255 || next_byte == 254 || next_byte == 253 || next_byte == 252 {
+                match iter.next().unwrap() {
+                    255 => {
+                        //TODO:255 we have IPv4 & IPv6
+                        // first read IPv4 address, port,Nat,PortAllocationRule,step
+                        pub_ips.push(read_ipv4(&mut iter));
+                        // second read IPv6 address and port, we assume all IPv6 to be public
+                        pub_ips.push(read_ipv6(&mut iter));
+                    }
+                    254 => {
+                        //     254 IPv6 only
+                        pub_ips.push(read_ipv6(&mut iter));
+                    }
+                    253 => {
+                        //     253 IPv4 only
+                        pub_ips.push(read_ipv4(&mut iter));
+                    }
+                    _ => {
+                        //     252 No Public IPs defined
+                    }
+                }
+            }
+        }
         let description = String::from_utf8(iter.collect()).unwrap();
 
         let mut current_tag_id: u8 = 0;
@@ -226,6 +261,7 @@ impl Manifest {
         // TODO: read other data if any!
         Self {
             app_type,
+            pub_ips,
             description,
             tags,
             d_types,
@@ -255,6 +291,71 @@ impl Manifest {
         // TODO: index of other data after Data type definitions, 0 if none
         res.push(0);
         res.push(0);
+        match self.pub_ips.len() {
+            0 => res.push(252),
+            1 => {
+                let (pub_ip, port, nat, (rule, delta)) = self.pub_ips[0];
+                match pub_ip {
+                    IpAddr::V4(ip) => {
+                        res.push(253);
+                        for octet in ip.octets() {
+                            res.push(octet);
+                        }
+                        for byte in port.to_be_bytes() {
+                            res.push(byte);
+                        }
+                        res.push(nat as u8);
+                        res.push(rule as u8);
+                        res.push(delta as u8);
+                    }
+                    IpAddr::V6(ip) => {
+                        res.push(254);
+                        for octet in ip.octets() {
+                            res.push(octet);
+                        }
+                        for byte in port.to_be_bytes() {
+                            res.push(byte);
+                        }
+                        res.push(nat as u8);
+                        res.push(rule as u8);
+                        res.push(delta as u8);
+                    }
+                }
+            }
+            2 => {
+                res.push(255);
+                let (ip4, ip6) = if self.pub_ips[0].0.is_ipv4() {
+                    (self.pub_ips[0], self.pub_ips[1])
+                } else {
+                    (self.pub_ips[1], self.pub_ips[0])
+                };
+                if let (IpAddr::V4(ip), port, nat, (rule, delta)) = ip4 {
+                    for octet in ip.octets() {
+                        res.push(octet);
+                    }
+                    for byte in port.to_be_bytes() {
+                        res.push(byte);
+                    }
+                    res.push(nat as u8);
+                    res.push(rule as u8);
+                    res.push(delta as u8);
+                }
+                if let (IpAddr::V6(ip), port, nat, (rule, delta)) = ip6 {
+                    for octet in ip.octets() {
+                        res.push(octet);
+                    }
+                    for byte in port.to_be_bytes() {
+                        res.push(byte);
+                    }
+                    res.push(nat as u8);
+                    res.push(rule as u8);
+                    res.push(delta as u8);
+                }
+            }
+            other => {
+                eprintln!("Too many public IPs: {}", other);
+            }
+        }
         for byte in self.description.bytes() {
             res.push(byte);
         }
@@ -441,4 +542,122 @@ impl Manifest {
         }
         type_names
     }
+
+    pub fn update_pub_ips(
+        &mut self,
+        ips: Vec<(IpAddr, u16, Nat, (PortAllocationRule, i8))>,
+    ) -> bool {
+        eprintln!("We should update Public IPs with \n{:?}", ips);
+        if self.pub_ips.is_empty() {
+            self.pub_ips = ips;
+            eprintln!("Pub IPs updated 1");
+            return true;
+        }
+        let mut ips_to_add = vec![];
+        for ip in ips {
+            if !self.pub_ips.contains(&ip) {
+                ips_to_add.push(ip);
+            }
+        }
+        if ips_to_add.is_empty() {
+            eprintln!("Public IPs are up to date");
+            return false;
+        }
+        // We need to replace old IPv4 with new IPv4 only
+        // and old IPv6 with new IPv6 only, other replacements are not allowed!
+        // we can not have more than two Public IPs one for each protocol version
+
+        eprintln!("We should add some IPs: \n{:?}", ips_to_add);
+        let mut ip4idx = None;
+        let mut ip6idx = None;
+        for (idx, (ip, _p, _n, _r)) in self.pub_ips.iter().enumerate() {
+            if ip.is_ipv4() {
+                ip4idx = Some(idx);
+            } else {
+                ip6idx = Some(idx);
+            }
+        }
+        for ip in ips_to_add {
+            if ip.0.is_ipv4() {
+                if let Some(idx) = ip4idx {
+                    self.pub_ips[idx] = ip;
+                } else {
+                    self.pub_ips.push(ip);
+                    // Just in case we were given two IP4s
+                    ip4idx = Some(self.pub_ips.len() - 1);
+                }
+            } else {
+                if let Some(idx) = ip6idx {
+                    self.pub_ips[idx] = ip;
+                } else {
+                    self.pub_ips.push(ip);
+                    // Just in case we were given two IP6s
+                    ip6idx = Some(self.pub_ips.len() - 1);
+                }
+            }
+        }
+        eprintln!("Pub IPs updated 2");
+        true
+    }
+}
+fn read_ipv4<T>(iter: &mut T) -> (IpAddr, u16, Nat, (PortAllocationRule, i8))
+where
+    T: Iterator<Item = u8>,
+{
+    let ip1 = iter.next().unwrap();
+    let ip2 = iter.next().unwrap();
+    let ip3 = iter.next().unwrap();
+    let ip4 = iter.next().unwrap();
+    let port1 = iter.next().unwrap();
+    let port2 = iter.next().unwrap();
+    let nat = iter.next().unwrap();
+    let port_alloc = iter.next().unwrap();
+    let port_step = iter.next().unwrap() as i8;
+    (
+        IpAddr::V4(Ipv4Addr::new(ip1, ip2, ip3, ip4)),
+        u16::from_be_bytes([port1, port2]),
+        Nat::from(nat),
+        (PortAllocationRule::from(port_alloc), port_step),
+    )
+}
+fn read_ipv6<T>(iter: &mut T) -> (IpAddr, u16, Nat, (PortAllocationRule, i8))
+where
+    T: Iterator<Item = u8>,
+{
+    let ip1 = iter.next().unwrap();
+    let ip2 = iter.next().unwrap();
+    let ip3 = iter.next().unwrap();
+    let ip4 = iter.next().unwrap();
+    let ip5 = iter.next().unwrap();
+    let ip6 = iter.next().unwrap();
+    let ip7 = iter.next().unwrap();
+    let ip8 = iter.next().unwrap();
+    let ip9 = iter.next().unwrap();
+    let ip10 = iter.next().unwrap();
+    let ip11 = iter.next().unwrap();
+    let ip12 = iter.next().unwrap();
+    let ip13 = iter.next().unwrap();
+    let ip14 = iter.next().unwrap();
+    let ip15 = iter.next().unwrap();
+    let ip16 = iter.next().unwrap();
+    let port1 = iter.next().unwrap();
+    let port2 = iter.next().unwrap();
+    let nat = iter.next().unwrap();
+    let port_alloc = iter.next().unwrap();
+    let port_step = iter.next().unwrap() as i8;
+    (
+        IpAddr::V6(Ipv6Addr::new(
+            u16::from_be_bytes([ip1, ip2]),
+            u16::from_be_bytes([ip3, ip4]),
+            u16::from_be_bytes([ip5, ip6]),
+            u16::from_be_bytes([ip7, ip8]),
+            u16::from_be_bytes([ip9, ip10]),
+            u16::from_be_bytes([ip11, ip12]),
+            u16::from_be_bytes([ip13, ip14]),
+            u16::from_be_bytes([ip15, ip16]),
+        )),
+        u16::from_be_bytes([port1, port2]),
+        Nat::from(nat),
+        (PortAllocationRule::from(port_alloc), port_step),
+    )
 }

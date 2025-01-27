@@ -6,6 +6,7 @@ use std::{env::args, path::Path};
 mod config;
 mod logic;
 mod tui;
+use config::Configuration;
 use logic::ApplicationLogic;
 use tui::{instantiate_tui_mgr, serve_tui_mgr};
 
@@ -17,7 +18,6 @@ async fn main() {
     } else {
         PathBuf::new()
     };
-    let config = Configuration::new(dir.clone());
 
     let (to_presentation_msg_send, to_presentation_msg_recv) = channel();
     let (from_presentation_msg_send, from_presentation_msg_recv) = channel();
@@ -26,11 +26,18 @@ async fn main() {
 
     let tui_mgr = instantiate_tui_mgr();
 
+    let mut config = Configuration::new(&dir).await;
+    let storage_neighbors = if config.storage_neighbors.is_empty() {
+        vec![]
+    } else {
+        std::mem::replace(&mut config.storage_neighbors, vec![])
+    };
     let my_id = initialize(
         to_application_send.clone(),
         to_app_mgr_send.clone(),
         to_app_mgr_recv,
         dir.clone(),
+        storage_neighbors,
     );
     let mut logic = ApplicationLogic::new(
         my_id,
@@ -48,7 +55,7 @@ async fn main() {
             tui_mgr,
             from_presentation_msg_send,
             to_presentation_msg_recv,
-            dir,
+            config,
         )
     });
     logic.run().await;

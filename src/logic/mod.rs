@@ -4,6 +4,7 @@ use dapp_lib::prelude::SwarmID;
 use dapp_lib::prelude::*;
 use dapp_lib::ToAppMgr;
 use std::collections::HashMap;
+use std::net::IpAddr;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
@@ -44,6 +45,7 @@ struct SwarmShell {
 
 pub struct ApplicationLogic {
     my_id: GnomeId,
+    pub_ips: Vec<(IpAddr, u16, Nat, (PortAllocationRule, i8))>,
     state: TuiState,
     active_swarm: SwarmShell,
     to_app_mgr_send: Sender<ToAppMgr>,
@@ -66,6 +68,7 @@ impl ApplicationLogic {
     ) -> Self {
         ApplicationLogic {
             my_id,
+            pub_ips: vec![],
             state: TuiState::Village,
             active_swarm: SwarmShell {
                 swarm_id: SwarmID(0),
@@ -828,6 +831,15 @@ impl ApplicationLogic {
                         }
                         let _ = self.to_app_mgr_send.send(ToAppMgr::ListNeighbors);
                     }
+                    ToApp::MyPublicIPs(ip_list) => {
+                        //TODO: push this to my swarm's Manifest after syncing
+                        eprintln!("\nApplication got Pub IPs:\n{:?}\n", ip_list);
+                        for ip_tuple in ip_list {
+                            if !self.pub_ips.contains(&ip_tuple) {
+                                self.pub_ips.push(ip_tuple);
+                            }
+                        }
+                    }
                     ToApp::GetCIDsForTags(s_id, n_id, tags, all_first_pages) => {
                         eprintln!("App received request for tags: {:?}", tags);
                         for (c_id, data) in all_first_pages {
@@ -962,6 +974,20 @@ impl ApplicationLogic {
             // );
             let manifest = Manifest::from(d_vec);
             self.active_swarm.manifest = manifest;
+            if self.my_id == self.active_swarm.founder_id && !self.pub_ips.is_empty() {
+                let ips = std::mem::replace(&mut self.pub_ips, vec![]);
+                if self.active_swarm.manifest.update_pub_ips(ips) {
+                    //TODO: sync Manifest with Swarm
+                    eprintln!("Now we should sync updated Manifest to Swarm");
+                    let data_vec = self.active_swarm.manifest.to_data();
+                    let _ = self.to_app_mgr_send.send(ToAppMgr::ChangeContent(
+                        self.active_swarm.swarm_id,
+                        0,
+                        DataType::Data(0),
+                        data_vec,
+                    ));
+                }
+            }
         } else {
             match &self.state {
                 TuiState::ReadRequestForIndexer(rc_id) | TuiState::RemovePage(rc_id) => {
@@ -1056,6 +1082,24 @@ impl ApplicationLogic {
             description,
         ));
     }
+    fn show_public_ips(&self) {
+        eprintln!("We should show Public IPs");
+        self.active_swarm.founder_id;
+        let mut public_ips = String::with_capacity(256);
+        for (ip, port, nat, (rule, delta)) in &self.active_swarm.manifest.pub_ips {
+            public_ips.push_str(&format!(
+                "IP: {} PORT: {} NAT: {:?} Port alloc: {:?}({})",
+                ip, port, nat, rule, delta
+            ));
+        }
+        let _ = self.to_tui.send(ToPresentation::DisplayEditor(
+            (true, false), // (read_only, can_edit)
+            format!("Publiczne IP dla {}", self.active_swarm.founder_id),
+            Some(public_ips),
+            false, // allow_newlines
+            None,  // byte_limit
+        ));
+    }
 
     fn run_cmenu_action_on_content(&mut self, c_id: ContentID, d_type: DataType, action: usize) {
         match action {
@@ -1126,6 +1170,9 @@ impl ApplicationLogic {
             }
             5 => {
                 self.run_creator();
+            }
+            6 => {
+                self.show_public_ips();
             }
             _other => {
                 //TODO
@@ -1223,6 +1270,6 @@ impl ApplicationLogic {
         false
     }
 }
-fn text_to_data(text: String) -> Data {
-    Data::new(text.try_into().unwrap()).unwrap()
-}
+// fn text_to_data(text: String) -> Data {
+//     Data::new(text.try_into().unwrap()).unwrap()
+// }

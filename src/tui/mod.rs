@@ -310,9 +310,8 @@ pub fn serve_tui_mgr(
     mut mgr: Manager,
     to_app: Sender<FromPresentation>,
     to_tui_recv: Receiver<ToPresentation>,
-    config_dir: PathBuf,
+    config: Configuration,
 ) {
-    let config = Configuration::new(&config_dir);
     let s_size = mgr.screen_size();
     let mut village = VillageLayout::new(s_size);
     let mut neighboring_villages = HashMap::new();
@@ -341,8 +340,8 @@ pub fn serve_tui_mgr(
             " Data types".to_string(),
             " Add TAG".to_string(),
             " Add data type".to_string(),
-            " Create new...".to_string(),
-            " Pięć".to_string(),
+            " Create new…".to_string(),
+            " Public IPs".to_string(),
             " Sześć".to_string(),
             " Konstantynopol".to_string(),
         ],
@@ -374,89 +373,69 @@ pub fn serve_tui_mgr(
                     // TODO: move following code elsewhere
                     // let action = c_menu.show(&mut mgr, set_id, village.cm_position());
                     // eprintln!("Sel: {}", action);
-                    let action = 0;
-                    match action {
-                        1 => {
-                            // eprintln!("Requesting manifest");
-                            // manifest_req = 1;
-                            let _ = to_app.send(FromPresentation::ContentInquiry(0));
-                        }
-                        2 => {
-                            // manifest_req = 2;
-                            // eprintln!("Requesting manifest");
-                            let _ = to_app.send(FromPresentation::ContentInquiry(0));
-                        }
-                        3 => {
-                            // eprintln!("Adding new TAG");
-                            let edit_result = editor.serve(
-                                // input_display,
-                                main_display,
-                                " Max size: 32  Oneline  Define new Tag name    (TAB to finish)",
-                                None,
-                                // true,
-                                false,
-                                // None,
-                                Some(32),
-                                &mut mgr,
-                            );
-                            if let Some(text) = edit_result {
-                                if !text.is_empty() {
-                                    eprintln!("Got: '{}'", text);
-                                    let tags = vec![Tag::new(text).unwrap()];
-                                    let _ = to_app.send(FromPresentation::AddTags(tags));
-                                }
-                            }
-                        }
-                        4 => {
-                            // eprintln!("Adding new DataType");
-                            let edit_result = editor.serve(
-                                // input_display,
-                                main_display,
-                                // &mut editor,
-                                " Max size: 32  Oneline  Define new DataType   (TAB to finish)",
-                                None,
-                                // true,
-                                false,
-                                // None,
-                                Some(32),
-                                &mut mgr,
-                            );
-                            if let Some(text) = edit_result {
-                                if !text.is_empty() {
-                                    eprintln!("Got: '{}'", text);
-                                    let _ = to_app.send(FromPresentation::AddDataType(
-                                        Tag::new(text).unwrap(),
-                                    ));
-                                }
-                            }
-                        }
-                        5 => {
-                            // let read_only = my_id != manifest.;
-                            // let read_only = !am_i_founder;
-                            // let d_type = None;
-                            // if let Some((d_type, data)) = creator.show(
-                            //     &mut mgr,
-                            //     &manifest,
-                            //     &mut selector,
-                            //     read_only,
-                            //     d_type,
-                            //     vec![],
-                            //     String::new(),
-                            //     main_display,
-                            //     input_display,
-                            //     &mut editor,
-                            // ) {
-                            //     //TODO
-                            //     eprintln!("We have some work to do {:?} {}", d_type, data.len());
-                            //     let _ = to_app.send(FromPresentation::CreateContent(d_type, data));
-                            // } else {
-                            //     eprintln!("Nothing to do from creator");
-                            // };
-                        }
-                        other => {
-                            eprintln!("A: {}", other);
-                        }
-                    }
+                    // let action = 0;
+                    // match action {
+                    //     1 => {
+                    //         // eprintln!("Requesting manifest");
+                    //         // manifest_req = 1;
+                    //         let _ = to_app.send(FromPresentation::ContentInquiry(0));
+                    //     }
+                    //     2 => {
+                    //         // manifest_req = 2;
+                    //         // eprintln!("Requesting manifest");
+                    //         let _ = to_app.send(FromPresentation::ContentInquiry(0));
+                    //     }
+                    //     3 => {
+                    //         // eprintln!("Adding new TAG");
+                    //         let edit_result = editor.serve(
+                    //             // input_display,
+                    //             main_display,
+                    //             " Max size: 32  Oneline  Define new Tag name    (TAB to finish)",
+                    //             None,
+                    //             // true,
+                    //             false,
+                    //             // None,
+                    //             Some(32),
+                    //             &mut mgr,
+                    //         );
+                    //         if let Some(text) = edit_result {
+                    //             if !text.is_empty() {
+                    //                 eprintln!("Got: '{}'", text);
+                    //                 let tags = vec![Tag::new(text).unwrap()];
+                    //                 let _ = to_app.send(FromPresentation::AddTags(tags));
+                    //             }
+                    //         }
+                    //     }
+                    //     4 => {
+                    //         // eprintln!("Adding new DataType");
+                    //         let edit_result = editor.serve(
+                    //             // input_display,
+                    //             main_display,
+                    //             // &mut editor,
+                    //             " Max size: 32  Oneline  Define new DataType   (TAB to finish)",
+                    //             None,
+                    //             // true,
+                    //             false,
+                    //             // None,
+                    //             Some(32),
+                    //             &mut mgr,
+                    //         );
+                    //         if let Some(text) = edit_result {
+                    //             if !text.is_empty() {
+                    //                 eprintln!("Got: '{}'", text);
+                    //                 let _ = to_app.send(FromPresentation::AddDataType(
+                    //                     Tag::new(text).unwrap(),
+                    //                 ));
+                    //             }
+                    //         }
+                    //     }
+                    //     6 => {
+                    //         eprintln!("Should show Public IPs");
+                    //     }
+                    //     other => {
+                    //         eprintln!("Context menu option: {}", other);
+                    //     }
+                    // }
                 }
                 Key::Left | Key::H | Key::CtrlB => village.select_next(Direction::Left, &mut mgr),
                 Key::Right | Key::L | Key::CtrlF => village.select_next(Direction::Right, &mut mgr),
