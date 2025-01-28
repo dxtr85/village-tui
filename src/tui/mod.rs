@@ -258,6 +258,7 @@ pub enum ToPresentation {
         String, //Tags
     ),
     DisplayIndexer(Vec<String>),
+    SwapTiles(GnomeId),
 }
 
 #[derive(Clone)]
@@ -342,8 +343,8 @@ pub fn serve_tui_mgr(
             " Add data type".to_string(),
             " Create new…".to_string(),
             " Public IPs".to_string(),
-            " Sześć".to_string(),
-            " Konstantynopol".to_string(),
+            " Active Swarms".to_string(),
+            " Known Swarms".to_string(),
         ],
     );
     let _set_id = c_menu.add_set(
@@ -636,6 +637,9 @@ pub fn serve_tui_mgr(
                     //TODO
                     let c_result = creator.show(&mut mgr, read_only, d_type, tags, description);
                     let _ = to_app.send(FromPresentation::CreatorResult(c_result));
+                }
+                ToPresentation::SwapTiles(g_id) => {
+                    swap_tiles(g_id, &mut village, &mut neighboring_villages, &mut mgr);
                 }
                 ToPresentation::ReadError(c_id, error) => {
                     if question.ask(

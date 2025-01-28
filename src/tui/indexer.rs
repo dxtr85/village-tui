@@ -179,6 +179,16 @@ impl Indexer {
                 match key {
                     Key::Up | Key::CtrlP => self.move_selection(Direction::Up, mgr),
                     Key::Down | Key::CtrlN => self.move_selection(Direction::Down, mgr),
+                    Key::CtrlA => {
+                        self.buttons[self.cursor_position].deselect(mgr, false);
+                        self.cursor_position = 0;
+                        self.buttons[0].select(mgr, false);
+                    }
+                    Key::CtrlE => {
+                        self.buttons[self.cursor_position].deselect(mgr, false);
+                        self.cursor_position = self.visible_buttons - 1;
+                        self.buttons[self.cursor_position].select(mgr, false);
+                    }
                     Key::Tab => break,
                     Key::Enter => {
                         // eprintln!(

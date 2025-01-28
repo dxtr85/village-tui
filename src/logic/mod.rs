@@ -4,6 +4,7 @@ use dapp_lib::prelude::SwarmID;
 use dapp_lib::prelude::*;
 use dapp_lib::ToAppMgr;
 use std::collections::HashMap;
+use std::fmt::format;
 use std::net::IpAddr;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
@@ -35,6 +36,7 @@ enum TuiState {
         Vec<String>,
         Vec<String>,
     ),
+    ShowActiveSwarms(Vec<(GnomeId, SwarmID)>),
 }
 
 struct SwarmShell {
@@ -794,6 +796,23 @@ impl ApplicationLogic {
                                     eprintln!("Going back to Village");
                                 }
                             }
+                            TuiState::ShowActiveSwarms(mapping) => {
+                                if let Some(idx) = i_result {
+                                    eprintln!("Now we should activate swarm with id: {:?}", idx);
+                                    //TODO: we need a mapping from idx -> gnome_id
+                                    if let Some((gnome_id, _s_id)) = mapping.get(idx) {
+                                        new_state = Some(TuiState::Village);
+                                        let _ = self
+                                            .to_app_mgr_send
+                                            .send(ToAppMgr::SetActiveApp(*gnome_id));
+                                        let _ =
+                                            self.to_tui.send(ToPresentation::SwapTiles(*gnome_id));
+                                    }
+                                } else {
+                                    eprintln!("Going back to Village");
+                                    self.state = TuiState::Village;
+                                }
+                            }
                             other => {
                                 eprintln!("Got Indexing response when in state {:?}", other);
                             }
@@ -839,6 +858,17 @@ impl ApplicationLogic {
                                 self.pub_ips.push(ip_tuple);
                             }
                         }
+                    }
+                    ToApp::GnomeToSwarmMapping(mapping) => {
+                        // TODO: show after mgr responds with a list
+                        let mut map_vec = Vec::with_capacity(mapping.len());
+                        let mut name_vec = Vec::with_capacity(mapping.len());
+                        for (g_id, s_id) in mapping {
+                            map_vec.push((g_id, s_id));
+                            name_vec.push(format!("Swarm ID {} Founder {}", s_id.0, g_id));
+                        }
+                        self.state = TuiState::ShowActiveSwarms(map_vec);
+                        self.show_active_swarms(name_vec);
                     }
                     ToApp::GetCIDsForTags(s_id, n_id, tags, all_first_pages) => {
                         eprintln!("App received request for tags: {:?}", tags);
@@ -1083,14 +1113,14 @@ impl ApplicationLogic {
         ));
     }
     fn show_public_ips(&self) {
-        eprintln!("We should show Public IPs");
-        self.active_swarm.founder_id;
+        // eprintln!("We should show Public IPs");
         let mut public_ips = String::with_capacity(256);
         for (ip, port, nat, (rule, delta)) in &self.active_swarm.manifest.pub_ips {
             public_ips.push_str(&format!(
                 "IP: {} PORT: {} NAT: {:?} Port alloc: {:?}({})",
                 ip, port, nat, rule, delta
             ));
+            public_ips.push('\n');
         }
         let _ = self.to_tui.send(ToPresentation::DisplayEditor(
             (true, false), // (read_only, can_edit)
@@ -1099,6 +1129,13 @@ impl ApplicationLogic {
             false, // allow_newlines
             None,  // byte_limit
         ));
+    }
+    fn show_active_swarms(&mut self, active_swarms: Vec<String>) {
+        // eprintln!("We should show active Swarms");
+        // eprintln!("We should create mapping swarm_id => gnome_id");
+        let _ = self
+            .to_tui
+            .send(ToPresentation::DisplayIndexer(active_swarms));
     }
 
     fn run_cmenu_action_on_content(&mut self, c_id: ContentID, d_type: DataType, action: usize) {
@@ -1173,6 +1210,16 @@ impl ApplicationLogic {
             }
             6 => {
                 self.show_public_ips();
+            }
+            7 => {
+                eprintln!("Show active Swarms");
+                self.state = TuiState::ShowActiveSwarms(vec![]);
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::ProvideGnomeToSwarmMapping);
+            }
+            7 => {
+                eprintln!("Show known Swarms");
             }
             _other => {
                 //TODO
