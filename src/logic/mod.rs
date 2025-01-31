@@ -4,6 +4,7 @@ use dapp_lib::prelude::SwarmID;
 use dapp_lib::prelude::*;
 use dapp_lib::ToAppMgr;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fmt::format;
 use std::net::IpAddr;
 use std::sync::mpsc::Receiver;
@@ -43,6 +44,86 @@ struct SwarmShell {
     swarm_id: SwarmID,
     founder_id: GnomeId,
     manifest: Manifest,
+    tag_to_cid: HashMap<Tag, HashSet<(ContentID, DataType)>>,
+}
+impl SwarmShell {
+    pub fn new(swarm_id: SwarmID, founder_id: GnomeId, app_type: AppType) -> Self {
+        SwarmShell {
+            swarm_id,
+            founder_id,
+            manifest: Manifest::new(app_type, HashMap::new()),
+            tag_to_cid: HashMap::new(),
+        }
+    }
+    //TODO: we need to define logic for tag_to_cid
+    // When joining a Swarm, after sync we read all main pages
+    // For each CID main page we insert that CID for every entry
+    //   matching Tag it has on his main page
+    // When content has changed we update every entry in tag_to_cid,
+    //   in order to match actual state.
+    // If a Tag was added/deleted and if corresponding Street is visible
+    //   we send proper notification ToPresentation
+    pub fn update_tag_to_cid(
+        &mut self,
+        c_id: ContentID,
+        d_type: DataType,
+        tags: Vec<Tag>,
+    ) -> (Vec<Tag>, Vec<Tag>) {
+        eprintln!("update_tag_to_cid {}: {:?}", c_id, tags);
+        let mut newly_added = vec![];
+        let mut removed = vec![];
+        let to_add = (c_id, d_type);
+        if tags.is_empty() {
+            return (vec![Tag::empty()], vec![]);
+        }
+        for new_tag in &tags {
+            eprintln!("processing {:?}", new_tag);
+            if let Some(cids) = self.tag_to_cid.get_mut(new_tag) {
+                eprintln!("found");
+                //todo
+                if cids.contains(&to_add) {
+                    eprintln!("contains");
+                    // Do nothing
+                } else {
+                    eprintln!("inserting");
+                    let _ = cids.insert(to_add);
+                    newly_added.push(new_tag.clone());
+                }
+            } else {
+                let mut hsadd = HashSet::new();
+                hsadd.insert(to_add);
+                eprintln!("hash set: {:?}", hsadd);
+                let res = self.tag_to_cid.insert(new_tag.clone(), hsadd);
+                eprintln!("not found,insert result: {:?}", res);
+                newly_added.push(new_tag.clone());
+            }
+        }
+        eprintln!("1 tag_to_cid: {:?}", self.tag_to_cid);
+        for (e_tag, cids) in self.tag_to_cid.iter_mut() {
+            if cids.contains(&to_add) {
+                if tags.contains(e_tag) {
+                    // Do nothing all is fine
+                } else {
+                    let _ = cids.remove(&to_add);
+                    removed.push(e_tag.clone());
+                }
+                // } else {
+                //     if tags.contains(e_tag) {
+                //         let _ = cids.insert(to_add);
+                //         newly_added.push(e_tag.clone());
+                //     } else {
+                //         // Do nothing all is fine
+                //     }
+            }
+        }
+        eprintln!("2 tag_to_cid: {:?}", self.tag_to_cid);
+        eprintln!("added: {:?}, removed: {:?}", newly_added, removed);
+        (newly_added, removed)
+    }
+
+    pub fn get_cids_for_tag(&self, tag: Tag) -> Vec<ContentID> {
+        vec![]
+    }
 }
 
 pub struct ApplicationLogic {
@@ -57,6 +138,7 @@ pub struct ApplicationLogic {
     to_user_send: Sender<ToApp>,
     to_app: Receiver<ToApp>,
     pending_notifications: HashMap<SwarmID, Vec<ToApp>>,
+    visible_streets: (usize, Vec<Tag>), // (how many streets visible at once, visible street names),
 }
 impl ApplicationLogic {
     pub fn new(
@@ -72,11 +154,7 @@ impl ApplicationLogic {
             my_id,
             pub_ips: vec![],
             state: TuiState::Village,
-            active_swarm: SwarmShell {
-                swarm_id: SwarmID(0),
-                founder_id: my_id,
-                manifest: Manifest::new(AppType::Catalog, HashMap::new()),
-            },
+            active_swarm: SwarmShell::new(SwarmID(0), my_id, AppType::Catalog),
             to_app_mgr_send,
             to_tui: to_tui_send,
             from_tui_send,
@@ -84,6 +162,7 @@ impl ApplicationLogic {
             to_user_send,
             to_app: to_user_recv,
             pending_notifications: HashMap::new(),
+            visible_streets: (0, vec![]),
         }
     }
     pub async fn run(&mut self) {
@@ -95,6 +174,11 @@ impl ApplicationLogic {
             sleep(dur).await;
             if let Ok(from_tui) = self.from_tui_recv.try_recv() {
                 match from_tui {
+                    FromPresentation::VisibleStreetsCount(v_streets) => {
+                        //TODO: store this in order to know what information to send
+                        eprintln!("OK we see {} streets at once", v_streets);
+                        self.visible_streets.0 = v_streets as usize;
+                    }
                     FromPresentation::TileSelected(tile) => {
                         match tile {
                             TileType::Home(g_id) => {
@@ -835,11 +919,7 @@ impl ApplicationLogic {
                             }
                         }
                         eprintln!("Set active {:?}", s_id);
-                        self.active_swarm = SwarmShell {
-                            swarm_id: s_id,
-                            founder_id: f_id,
-                            manifest: Manifest::new(AppType::Catalog, HashMap::new()),
-                        };
+                        self.active_swarm = SwarmShell::new(s_id, f_id, AppType::Catalog);
                         if let Some(pending_notifications) = self
                             .pending_notifications
                             .remove(&self.active_swarm.swarm_id)
@@ -921,12 +1001,10 @@ impl ApplicationLogic {
                                 .push(ToApp::Neighbors(s_id, neighbors));
                         }
                     }
-                    ToApp::NewContent(s_id, c_id, d_type) => {
+                    ToApp::NewContent(s_id, c_id, d_type, main_page) => {
+                        //TODO: read tags from main page
                         if s_id == self.active_swarm.swarm_id && home_swarm_enforced {
-                            // eprintln!("ToApp::NewContent({:?},{:?})", c_id, d_type);
-                            let _ = self
-                                .to_tui
-                                .send(ToPresentation::AppendContent(c_id, d_type));
+                            self.update_active_content_tags(s_id, c_id, d_type, main_page);
                         } else {
                             eprintln!(
                                 "Not sending new content, because my {:?} != {:?}",
@@ -935,15 +1013,24 @@ impl ApplicationLogic {
                             self.pending_notifications
                                 .entry(s_id)
                                 .or_insert(vec![])
-                                .push(ToApp::NewContent(s_id, c_id, d_type));
+                                .push(ToApp::NewContent(s_id, c_id, d_type, main_page));
                         }
                     }
-                    ToApp::ContentChanged(s_id, c_id) => {
+                    ToApp::ContentChanged(s_id, c_id, d_type, main_page_option) => {
                         if c_id == 0 {
                             eprintln!("Requesting ReadData for CID-0");
                             let _ = self.to_app_mgr_send.send(ToAppMgr::ReadData(s_id, c_id));
                         }
                         if s_id == self.active_swarm.swarm_id && home_swarm_enforced {
+                            if let Some(main_page) = main_page_option {
+                                if main_page.is_empty() && main_page.get_hash() > 0 {
+                                    eprintln!("We should check if Tags have changed");
+                                    let _ =
+                                        self.to_app_mgr_send.send(ToAppMgr::ReadData(s_id, c_id));
+                                } else {
+                                    self.update_active_content_tags(s_id, c_id, d_type, main_page);
+                                }
+                            }
                             eprintln!("recv ToApp::ContentChanged({:?})", c_id);
                         } else {
                             eprintln!(
@@ -1003,11 +1090,43 @@ impl ApplicationLogic {
             //     d_vec.len()
             // );
             let manifest = Manifest::from(d_vec);
+            eprintln!("Process data manifest tags: {:?}", manifest.tags);
+            let mut streets_left_to_present = self.visible_streets.0;
+            let mut street_names = Vec::with_capacity(streets_left_to_present);
+            let mut street_idx = 0;
+            eprintln!("Streets left to present: {}", streets_left_to_present);
+            while streets_left_to_present > 0 {
+                // for street_name in manifest.tags.values() {
+                if let Some(street_name) = manifest.tags.get(&street_idx) {
+                    street_names.push(street_name.clone());
+                    streets_left_to_present = streets_left_to_present - 1;
+                    street_idx += 1;
+                } else {
+                    // eprintln!("Was expecting more streets!");
+                    break;
+                }
+            }
+            if street_names.is_empty() {
+                street_names.push(Tag::empty());
+            }
+            // for i in 0..streets_left_to_present {
+            //     street_names.push(Tag(format!("Generic street #{}", i)));
+            // }
+            self.visible_streets.1 = street_names.clone();
             self.active_swarm.manifest = manifest;
+            eprintln!("Sending StreetNames: {:?}", street_names);
+            let _ = self.to_tui.send(ToPresentation::StreetNames(street_names));
+            if let Some(pending_notifications) = self
+                .pending_notifications
+                .remove(&self.active_swarm.swarm_id)
+            {
+                for note in pending_notifications.into_iter() {
+                    let _ = self.to_user_send.send(note);
+                }
+            }
             if self.my_id == self.active_swarm.founder_id && !self.pub_ips.is_empty() {
                 let ips = std::mem::replace(&mut self.pub_ips, vec![]);
                 if self.active_swarm.manifest.update_pub_ips(ips) {
-                    //TODO: sync Manifest with Swarm
                     eprintln!("Now we should sync updated Manifest to Swarm");
                     let data_vec = self.active_swarm.manifest.to_data();
                     let _ = self.to_app_mgr_send.send(ToAppMgr::ChangeContent(
@@ -1033,16 +1152,21 @@ impl ApplicationLogic {
                         let mut all_headers = Vec::with_capacity(d_vec.len());
                         let mut description = String::new();
                         let first_data = d_vec.remove(0);
+                        let tag_ids = read_tags(first_data.clone());
                         let mut bytes = first_data.bytes();
-                        let how_many_tags = bytes.remove(0);
-                        let mut tag_ids = Vec::with_capacity(how_many_tags as usize);
-                        for _i in 0..how_many_tags {
-                            if !bytes.is_empty() {
-                                tag_ids.push(bytes.remove(0));
-                            } else {
-                                eprintln!("This should not happen!");
-                            }
+                        let _ = bytes.remove(0);
+                        for _i in 0..tag_ids.len() {
+                            let _ = bytes.remove(0);
                         }
+                        // let how_many_tags = bytes.remove(0);
+                        // let mut tag_ids = Vec::with_capacity(how_many_tags as usize);
+                        // for _i in 0..how_many_tags {
+                        //     if !bytes.is_empty() {
+                        //         tag_ids.push(bytes.remove(0));
+                        //     } else {
+                        //         eprintln!("This should not happen!");
+                        //     }
+                        // }
                         description.push_str(&String::from_utf8(bytes).unwrap());
                         let mut header = String::new();
                         if !description.is_empty() {
@@ -1099,6 +1223,54 @@ impl ApplicationLogic {
         }
     }
 
+    fn update_active_content_tags(
+        &mut self,
+        s_id: SwarmID,
+        c_id: ContentID,
+        d_type: DataType,
+        main_page: Data,
+    ) {
+        // eprintln!("ToApp::NewContent({:?},{:?})", c_id, d_type);
+        eprintln!("CID-{} Main page: {:?}", c_id, main_page);
+        let tag_ids = read_tags(main_page.clone());
+        let ids_len = tag_ids.len();
+        eprintln!("{} tag ids: {:?}", c_id, tag_ids);
+        eprintln!("Manifest tags: {:?}", self.active_swarm.manifest.tags);
+        let mut tags = Vec::with_capacity(tag_ids.len());
+        for id in tag_ids {
+            if let Some(tag) = self.active_swarm.manifest.tags.get(&id) {
+                tags.push(tag.clone());
+            }
+        }
+        if tags.len() != ids_len {
+            eprintln!("Manifest not synced, shelving NewContent message");
+            self.pending_notifications
+                .entry(s_id)
+                .or_insert(vec![])
+                .push(ToApp::NewContent(s_id, c_id, d_type, main_page));
+        } else {
+            let (added, removed) = self.active_swarm.update_tag_to_cid(c_id, d_type, tags);
+            eprintln!("added: {:?}\nremoved: {:?}", added, removed);
+            if !added.is_empty() {
+                let _ = self
+                    .to_tui
+                    .send(ToPresentation::AppendContent(c_id, d_type, added));
+            }
+            if !removed.is_empty() {
+                let mut visible_removed = vec![];
+                for str_name in &self.visible_streets.1 {
+                    if removed.contains(&str_name) {
+                        visible_removed.push(str_name.clone());
+                    }
+                }
+                if !visible_removed.is_empty() {
+                    let _ = self
+                        .to_tui
+                        .send(ToPresentation::HideContent(c_id, visible_removed));
+                }
+            }
+        }
+    }
     fn run_creator(&mut self) {
         self.state = TuiState::Creator(None, false, DataType::Data(0), String::new(), vec![]);
         let read_only = false;
@@ -1317,6 +1489,19 @@ impl ApplicationLogic {
         false
     }
 }
-// fn text_to_data(text: String) -> Data {
-//     Data::new(text.try_into().unwrap()).unwrap()
-// }
+fn read_tags(data: Data) -> Vec<u8> {
+    if data.is_empty() {
+        return vec![];
+    }
+    let mut bytes = data.bytes();
+    let how_many_tags = bytes.remove(0);
+    let mut tag_ids = Vec::with_capacity(how_many_tags as usize);
+    for _i in 0..how_many_tags {
+        if !bytes.is_empty() {
+            tag_ids.push(bytes.remove(0));
+        } else {
+            eprintln!("This should not happen!");
+        }
+    }
+    tag_ids
+}

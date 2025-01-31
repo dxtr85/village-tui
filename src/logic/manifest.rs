@@ -37,6 +37,9 @@ pub struct Manifest {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Tag(pub String);
 impl Tag {
+    pub fn empty() -> Self {
+        Tag(String::new())
+    }
     pub fn new(name: String) -> Result<Self, ()> {
         if name.len() <= 32 {
             Ok(Tag(name))
@@ -547,7 +550,7 @@ impl Manifest {
         &mut self,
         ips: Vec<(IpAddr, u16, Nat, (PortAllocationRule, i8))>,
     ) -> bool {
-        eprintln!("We should update Public IPs with \n{:?}", ips);
+        // eprintln!("We should update Public IPs with \n{:?}", ips);
         if self.pub_ips.is_empty() {
             self.pub_ips = ips;
             eprintln!("Pub IPs updated 1");
@@ -560,7 +563,7 @@ impl Manifest {
             }
         }
         if ips_to_add.is_empty() {
-            eprintln!("Public IPs are up to date");
+            // eprintln!("Public IPs are up to date");
             return false;
         }
         // We need to replace old IPv4 with new IPv4 only

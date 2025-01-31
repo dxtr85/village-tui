@@ -14,6 +14,14 @@ pub enum TileType {
     Application,
     Content(DataType, ContentID),
 }
+impl TileType {
+    pub fn is_content(&self, c_id: ContentID) -> bool {
+        match self {
+            Self::Content(_d_type, content_id) => *content_id == c_id,
+            _other => false,
+        }
+    }
+}
 
 pub struct Tile {
     //TODO

@@ -9,8 +9,7 @@ use dapp_lib::prelude::DataType;
 use dapp_lib::prelude::GnomeId;
 use dapp_lib::Data;
 use std::collections::HashMap;
-use std::fmt::format;
-use std::path::PathBuf;
+// use std::fmt::format;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
@@ -44,6 +43,7 @@ pub struct VillageLayout {
     selected_tile: (u8, u8),
     tiles: HashMap<(u8, u8), Tile>,
     neighbors: HashMap<GnomeId, (u8, u8)>,
+    street_to_rows: HashMap<Tag, Vec<u8>>,
 }
 
 impl VillageLayout {
@@ -58,10 +58,16 @@ impl VillageLayout {
             selected_tile: (2, 1),
             tiles: HashMap::new(),
             neighbors: HashMap::new(),
+            street_to_rows: HashMap::new(),
         }
     }
 
-    pub fn initialize(&mut self, owner_id: GnomeId, mgr: &mut Manager, config: Configuration) {
+    pub fn initialize(
+        &mut self,
+        owner_id: GnomeId,
+        mgr: &mut Manager,
+        config: Configuration,
+    ) -> u8 {
         self.my_id = owner_id;
         for col in 0..self.tiles_in_row {
             for row in 0..self.visible_rows {
@@ -84,8 +90,15 @@ impl VillageLayout {
         if let Some(tile) = self.tiles.get_mut(&self.home_tile) {
             tile.set_to_home(owner_id, true, owner_id == self.my_id, mgr);
         }
+        self.visible_rows >> 1
     }
     pub fn reset_tiles(&mut self, owner_id: GnomeId, mgr: &mut Manager) {
+        let visible_streets = self.visible_rows >> 1;
+        let mut str_names = Vec::with_capacity(visible_streets as usize);
+        for _i in 0..visible_streets {
+            str_names.push(Tag::empty());
+        }
+        self.set_street_names(str_names, mgr);
         for tile in self.tiles.values_mut() {
             tile.set_to_field(mgr);
         }
@@ -95,6 +108,34 @@ impl VillageLayout {
         self.selected_tile = self.home_tile;
     }
 
+    fn set_street_names(&mut self, str_names: Vec<Tag>, mgr: &mut Manager) {
+        let visible_streets = (self.visible_rows >> 1);
+        let mut g = Glyph::plain();
+        self.street_to_rows = HashMap::new();
+        for i in 0..visible_streets {
+            if let Some(str_name) = str_names.get(i as usize) {
+                //TODO: print this name on screen
+                let mut ci = 0;
+                for c in str_name.0.chars() {
+                    g.set_char(c);
+                    mgr.set_glyph(0, g, 32 + ci, (14 * i as usize) + 7);
+                    ci += 1;
+                }
+                g.set_char(' ');
+                for cii in ci..32 {
+                    mgr.set_glyph(0, g, 32 + cii, (14 * i as usize) + 7);
+                }
+                self.street_to_rows
+                    .insert(str_name.clone(), vec![2 * i, 1 + (2 * i)]);
+            } else {
+                g.set_char(' ');
+                for cii in 0..32 {
+                    mgr.set_glyph(0, g, 32 + cii, (14 * i as usize) + 7);
+                }
+            }
+        }
+        // eprintln!("Presentation got street names:\n{:?}", str_names);
+    }
     pub fn get_tile_headers(&self) -> Vec<((u8, u8), TileType)> {
         let mut result =
             Vec::with_capacity(self.tiles_in_row as usize * self.visible_rows as usize);
@@ -143,10 +184,11 @@ impl VillageLayout {
         if let Some(tile_location) = self.neighbors.get(&n_id) {
             *tile_location
         } else {
-            let tile_id = self.next_field_tile();
+            let tile_id = self.next_neighbor_field_tile();
             self.neighbors.insert(n_id, tile_id);
-            let tile = self.tiles.get_mut(&tile_id).unwrap();
-            tile.set_to_neighbor(n_id, false, mgr);
+            if let Some(tile) = self.tiles.get_mut(&tile_id) {
+                tile.set_to_neighbor(n_id, false, mgr);
+            }
             tile_id
         }
     }
@@ -155,21 +197,94 @@ impl VillageLayout {
         &mut self,
         d_type: DataType,
         c_id: ContentID,
+        tags: Vec<Tag>,
+        // street_to_rows: &HashMap<Tag, Vec<u8>>,
         mgr: &mut Manager,
-    ) -> (u8, u8) {
-        let tile_id = self.next_field_tile();
-        // eprintln!("Next id: {:?}", tile_id);
-        let tile = self.tiles.get_mut(&tile_id).unwrap();
-        tile.set_to_content(d_type, c_id, false, mgr);
-        tile_id
-    }
-    fn next_field_tile(&self) -> (u8, u8) {
-        for (k, v) in &self.tiles {
-            if matches!(v.tile_type, TileType::Field) {
-                return *k;
+        // ) -> (u8, u8) {
+    ) {
+        eprintln!("add_new_content tags: {:?}", tags);
+        eprintln!("street to rows: {:?}", self.street_to_rows);
+        for tag in tags {
+            if let Some(restricted_rows) = self.street_to_rows.get(&tag) {
+                eprintln!("rest rows: {:?}", restricted_rows);
+                let tile_id = self.next_field_tile(restricted_rows);
+                eprintln!("Next id: {:?}", tile_id);
+                if let Some(tile) = self.tiles.get_mut(&tile_id) {
+                    tile.set_to_content(d_type, c_id, false, mgr);
+                }
             }
         }
-        return (0, 0);
+        // tile_id
+    }
+
+    fn hide_content(&mut self, c_id: ContentID, tags: Vec<Tag>, mgr: &mut Manager) {
+        //TODO: find tiles and change them to field
+        eprintln!("We should hide CID-{} from: {:?}", c_id, tags);
+        for tag in tags {
+            eprintln!("hiding tag {:?}", tag);
+            if let Some(rows) = self.street_to_rows.get(&tag) {
+                eprintln!("searching among rows: {:?}", rows);
+                'outer: for row in rows {
+                    for column in 2..self.tiles_in_row {
+                        if let Some(tile) = self.tiles.get_mut(&(*row, column)) {
+                            eprintln!("Tile: {:?}", tile.tile_type);
+                            if tile.tile_type.is_content(c_id) {
+                                eprintln!("found it");
+                                tile.set_to_field(mgr);
+                                break 'outer;
+                            }
+                        }
+                    }
+                }
+            } else {
+                eprintln!("no rows to search in");
+            }
+        }
+    }
+    fn next_neighbor_field_tile(&self) -> (u8, u8) {
+        for y in 0..self.visible_rows {
+            if let Some(tile) = self.tiles.get(&(0, y)) {
+                if matches!(tile.tile_type, TileType::Field) {
+                    // return (0, y);
+                    return (y, 0);
+                }
+            } else if let Some(tile) = self.tiles.get(&(1, y)) {
+                if matches!(tile.tile_type, TileType::Field) {
+                    // return (1, y);
+                    return (y, 1);
+                }
+            }
+        }
+        (255, 255)
+    }
+
+    fn next_field_tile(&self, restricted_rows: &Vec<u8>) -> (u8, u8) {
+        // if is_neighbor {
+        //     for y in 0..self.visible_rows {
+        //         if let Some(tile) = self.tiles.get(&(0, y)) {
+        //             if matches!(tile.tile_type, TileType::Field) {
+        //                 // return (0, y);
+        //                 return (y, 0);
+        //             }
+        //         } else if let Some(tile) = self.tiles.get(&(1, y)) {
+        //             if matches!(tile.tile_type, TileType::Field) {
+        //                 // return (1, y);
+        //                 return (y, 1);
+        //             }
+        //         }
+        //     }
+        // }
+        // for y in 0..self.visible_rows {
+        for y in restricted_rows {
+            for x in 2..self.tiles_in_row {
+                if let Some(tile) = self.tiles.get(&(x, *y)) {
+                    if matches!(tile.tile_type, TileType::Field) {
+                        return (*y, x);
+                    }
+                }
+            }
+        }
+        return (255, 255);
     }
     pub fn select_next(&mut self, direction: Direction, mgr: &mut Manager) {
         let new_index = match direction {
@@ -239,7 +354,8 @@ pub enum Direction {
 
 pub enum ToPresentation {
     Neighbors(Vec<GnomeId>),
-    AppendContent(ContentID, DataType),
+    AppendContent(ContentID, DataType, Vec<Tag>),
+    HideContent(ContentID, Vec<Tag>),
     Contents(ContentID, DataType, Vec<u8>, String, Vec<Data>),
     ReadError(ContentID, AppError),
     DisplaySelector(bool, String, Vec<String>, Vec<usize>), //bool indicates if we are founder of active swarm
@@ -259,6 +375,7 @@ pub enum ToPresentation {
     ),
     DisplayIndexer(Vec<String>),
     SwapTiles(GnomeId),
+    StreetNames(Vec<Tag>),
 }
 
 #[derive(Clone)]
@@ -279,6 +396,7 @@ pub enum FromPresentation {
     EditResult(Option<String>),
     IndexResult(Option<usize>),
     CreatorResult(CreatorResult),
+    VisibleStreetsCount(u8),
 }
 
 pub fn instantiate_tui_mgr() -> Manager {
@@ -301,7 +419,8 @@ pub fn instantiate_tui_mgr() -> Manager {
     let mut library = HashMap::new();
     library.insert(0, frame);
     let bg = Graphic::new(cols, rows, 0, library, None);
-    mgr.add_graphic(bg, 1, (0, 0)).unwrap();
+    let res = mgr.add_graphic(bg, 1, (0, 0));
+    eprintln!("TUI background index: {:?}", res);
     mgr
 }
 
@@ -316,7 +435,9 @@ pub fn serve_tui_mgr(
     let s_size = mgr.screen_size();
     let mut village = VillageLayout::new(s_size);
     let mut neighboring_villages = HashMap::new();
-    village.initialize(my_id, &mut mgr, config);
+    let visible_streets = village.initialize(my_id, &mut mgr, config);
+    // let mut street_to_rows = HashMap::new();
+    let _ = to_app.send(FromPresentation::VisibleStreetsCount(visible_streets));
 
     // let mut tiles_mapping = HashMap::<(u8, u8), TileType>::new();
     // eprintln!("Serving TUI Manager scr size: {}x{}", s_size.0, s_size.1);
@@ -370,73 +491,6 @@ pub fn serve_tui_mgr(
                     // TODO: minimize logic in tui - simply send a Selected message to logic
                     //       and wait for instructions
                     let _ = to_app.send(FromPresentation::ShowContextMenu(village.get_selection()));
-
-                    // TODO: move following code elsewhere
-                    // let action = c_menu.show(&mut mgr, set_id, village.cm_position());
-                    // eprintln!("Sel: {}", action);
-                    // let action = 0;
-                    // match action {
-                    //     1 => {
-                    //         // eprintln!("Requesting manifest");
-                    //         // manifest_req = 1;
-                    //         let _ = to_app.send(FromPresentation::ContentInquiry(0));
-                    //     }
-                    //     2 => {
-                    //         // manifest_req = 2;
-                    //         // eprintln!("Requesting manifest");
-                    //         let _ = to_app.send(FromPresentation::ContentInquiry(0));
-                    //     }
-                    //     3 => {
-                    //         // eprintln!("Adding new TAG");
-                    //         let edit_result = editor.serve(
-                    //             // input_display,
-                    //             main_display,
-                    //             " Max size: 32  Oneline  Define new Tag name    (TAB to finish)",
-                    //             None,
-                    //             // true,
-                    //             false,
-                    //             // None,
-                    //             Some(32),
-                    //             &mut mgr,
-                    //         );
-                    //         if let Some(text) = edit_result {
-                    //             if !text.is_empty() {
-                    //                 eprintln!("Got: '{}'", text);
-                    //                 let tags = vec![Tag::new(text).unwrap()];
-                    //                 let _ = to_app.send(FromPresentation::AddTags(tags));
-                    //             }
-                    //         }
-                    //     }
-                    //     4 => {
-                    //         // eprintln!("Adding new DataType");
-                    //         let edit_result = editor.serve(
-                    //             // input_display,
-                    //             main_display,
-                    //             // &mut editor,
-                    //             " Max size: 32  Oneline  Define new DataType   (TAB to finish)",
-                    //             None,
-                    //             // true,
-                    //             false,
-                    //             // None,
-                    //             Some(32),
-                    //             &mut mgr,
-                    //         );
-                    //         if let Some(text) = edit_result {
-                    //             if !text.is_empty() {
-                    //                 eprintln!("Got: '{}'", text);
-                    //                 let _ = to_app.send(FromPresentation::AddDataType(
-                    //                     Tag::new(text).unwrap(),
-                    //                 ));
-                    //             }
-                    //         }
-                    //     }
-                    //     6 => {
-                    //         eprintln!("Should show Public IPs");
-                    //     }
-                    //     other => {
-                    //         eprintln!("Context menu option: {}", other);
-                    //     }
-                    // }
                 }
                 Key::Left | Key::H | Key::CtrlB => village.select_next(Direction::Left, &mut mgr),
                 Key::Right | Key::L | Key::CtrlF => village.select_next(Direction::Right, &mut mgr),
@@ -465,52 +519,7 @@ pub fn serve_tui_mgr(
                     if let TileType::Neighbor(g_id) = &tile {
                         swap_tiles(*g_id, &mut village, &mut neighboring_villages, &mut mgr);
                     }
-                    //         let _ = to_app.send(FromPresentation::NeighborSelected(n_id));
                     let _ = to_app.send(FromPresentation::TileSelected(tile));
-                    //TODO: we need to be aware of what context we are in to determine what
-                    // match{
-                    //     TileType::Home(owner) => {
-                    //         if owner != village.my_id {
-                    //             let _action = c_menu.show(&mut mgr, 0, village.cm_position());
-                    //             continue;
-                    //         }
-                    //         // if let Some((d_type, data)) = creator.show(
-                    //         //     &mut mgr,
-                    //         //     &manifest,
-                    //         //     &mut selector,
-                    //         //     false,
-                    //         //     None,
-                    //         //     vec![],
-                    //         //     String::new(),
-                    //         //     main_display,
-                    //         //     input_display,
-                    //         //     &mut editor,
-                    //         // ) {
-                    //         //     //TODO
-                    //         //     eprintln!("We have some work to do {:?} {}", d_type, data.len());
-                    //         //     let _ = to_app.send(FromPresentation::CreateContent(d_type, data));
-                    //         // } else {
-                    //         //     eprintln!("Nothing to do from creator");
-                    //         // };
-                    //     }
-                    //     TileType::Neighbor(n_id) => {
-                    //         let _ = to_app.send(FromPresentation::NeighborSelected(n_id));
-                    //         swap_tiles(n_id, &mut village, &mut neighboring_villages, &mut mgr);
-                    //     }
-                    //     TileType::Field => {
-                    //         print!("What?");
-                    //     }
-                    //     TileType::Content(_d_type, c_id) => {
-                    //         // if let Some((c_id, d_type)) = tiles_mapping.get(&village.selected_tile)
-                    //         // {
-                    //         // println!("Something: {:?}", c_data);
-                    //         let _ = to_app.send(FromPresentation::ContentInquiry(c_id));
-                    //         // }
-                    //     }
-                    //     _ => {
-                    //         //TODO
-                    //     }
-                    // }
                 }
                 other => {
                     // eprintln!("Send to app: {} terminate: {}", other, terminate);
@@ -523,6 +532,9 @@ pub fn serve_tui_mgr(
         }
         if let Ok(to_tui) = to_tui_recv.try_recv() {
             match to_tui {
+                ToPresentation::StreetNames(str_names) => {
+                    village.set_street_names(str_names, &mut mgr);
+                }
                 ToPresentation::DisplayCMenu(set_id) => {
                     let action = c_menu.show(&mut mgr, set_id, village.cm_position());
                     let _ = to_app.send(FromPresentation::CMenuAction(action));
@@ -533,10 +545,16 @@ pub fn serve_tui_mgr(
                         let _tile_id = village.add_new_neighbor(neighbor, &mut mgr);
                     }
                 }
-                ToPresentation::AppendContent(c_id, d_type) => {
-                    eprintln!("ToPresentation::AppendContent({:?}, {:?})", c_id, d_type);
-                    let tile_id = village.add_new_content(d_type, c_id, &mut mgr);
+                ToPresentation::AppendContent(c_id, d_type, tags) => {
+                    eprintln!(
+                        "ToPresentation::AppendContent({:?}, {:?})\nTags: {:?}",
+                        c_id, d_type, tags
+                    );
+                    village.add_new_content(d_type, c_id, tags, &mut mgr);
                     // tiles_mapping.insert(tile_id, TileType::Content(d_type, c_id));
+                }
+                ToPresentation::HideContent(c_id, tags) => {
+                    village.hide_content(c_id, tags, &mut mgr);
                 }
                 ToPresentation::Contents(c_id, d_type, tags, text, mut data_vec) => {
                     eprintln!("Showing Contents of {}", c_id,);
