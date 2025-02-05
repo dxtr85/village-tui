@@ -11,6 +11,7 @@ use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 mod manifest;
+use crate::tui::Direction;
 use crate::tui::{CreatorResult, FromPresentation, TileType, ToPresentation};
 pub use manifest::Manifest;
 pub use manifest::Tag;
@@ -44,8 +45,10 @@ struct SwarmShell {
     swarm_id: SwarmID,
     founder_id: GnomeId,
     manifest: Manifest,
-    tag_to_cid: HashMap<Tag, HashSet<(ContentID, DataType)>>,
+    tag_to_cid: HashMap<Tag, HashSet<(DataType, ContentID)>>,
+    tag_ring: Vec<Vec<Tag>>,
 }
+
 impl SwarmShell {
     pub fn new(swarm_id: SwarmID, founder_id: GnomeId, app_type: AppType) -> Self {
         SwarmShell {
@@ -53,6 +56,7 @@ impl SwarmShell {
             founder_id,
             manifest: Manifest::new(app_type, HashMap::new()),
             tag_to_cid: HashMap::new(),
+            tag_ring: Vec::new(),
         }
     }
     //TODO: we need to define logic for tag_to_cid
@@ -72,9 +76,19 @@ impl SwarmShell {
         eprintln!("update_tag_to_cid {}: {:?}", c_id, tags);
         let mut newly_added = vec![];
         let mut removed = vec![];
-        let to_add = (c_id, d_type);
+        let to_add = (d_type, c_id);
         if tags.is_empty() {
-            return (vec![Tag::empty()], vec![]);
+            if let Some(set) = self.tag_to_cid.get_mut(&Tag::empty()) {
+                if set.insert((d_type, c_id)) {
+                    newly_added.push(Tag::empty());
+                }
+            } else {
+                let mut set = HashSet::new();
+                set.insert((d_type, c_id));
+                self.tag_to_cid.insert(Tag::empty(), set);
+                newly_added.push(Tag::empty());
+            }
+            return (newly_added, removed);
         }
         for new_tag in &tags {
             eprintln!("processing {:?}", new_tag);
@@ -98,7 +112,7 @@ impl SwarmShell {
                 newly_added.push(new_tag.clone());
             }
         }
-        eprintln!("1 tag_to_cid: {:?}", self.tag_to_cid);
+        // eprintln!("before tag_to_cid: {:?}", self.tag_to_cid);
         for (e_tag, cids) in self.tag_to_cid.iter_mut() {
             if cids.contains(&to_add) {
                 if tags.contains(e_tag) {
@@ -116,13 +130,16 @@ impl SwarmShell {
                 //     }
             }
         }
-        eprintln!("2 tag_to_cid: {:?}", self.tag_to_cid);
-        eprintln!("added: {:?}, removed: {:?}", newly_added, removed);
+        // eprintln!("after tag_to_cid: {:?}", self.tag_to_cid);
         (newly_added, removed)
     }
 
-    pub fn get_cids_for_tag(&self, tag: Tag) -> Vec<ContentID> {
-        vec![]
+    pub fn get_cids_for_tag(&self, tag: Tag) -> HashSet<(DataType, ContentID)> {
+        if let Some(contents) = self.tag_to_cid.get(&tag) {
+            contents.clone()
+        } else {
+            HashSet::new()
+        }
     }
 }
 
@@ -198,6 +215,55 @@ impl ApplicationLogic {
                             TileType::Content(dtype, c_id) => {
                                 self.query_content_for_indexer(c_id);
                                 eprintln!("About to show CID {} dtype: {:?}", c_id, dtype);
+                            }
+                        }
+                    }
+                    FromPresentation::CursorOutOfScreen(direction) => {
+                        match direction {
+                            Direction::Up => {
+                                //TODO
+                                eprintln!("We should draw new streets on screen UP");
+                                if self.active_swarm.tag_ring.len() > 1 {
+                                    let prev_names = self.active_swarm.tag_ring.remove(0);
+                                    self.active_swarm.tag_ring.push(prev_names);
+                                    let street_names = self.active_swarm.tag_ring[0].clone();
+                                    self.visible_streets.1 = street_names.clone();
+                                    eprintln!("Sending StreetNames: {:?}", street_names);
+                                    let mut streets_with_contents = vec![];
+                                    for street in street_names {
+                                        let contents =
+                                            self.active_swarm.get_cids_for_tag(street.clone());
+                                        streets_with_contents.push((street, contents));
+                                    }
+                                    let _ = self
+                                        .to_tui
+                                        .send(ToPresentation::StreetNames(streets_with_contents));
+                                }
+                            }
+                            Direction::Down => {
+                                //TODO
+                                eprintln!("We should draw new streets on screen DOWN");
+                                if self.active_swarm.tag_ring.len() > 1 {
+                                    let street_names = self.active_swarm.tag_ring.pop().unwrap();
+                                    self.active_swarm.tag_ring.insert(0, street_names.clone());
+                                    self.visible_streets.1 = street_names.clone();
+                                    eprintln!("Sending StreetNames: {:?}", street_names);
+                                    let mut streets_with_contents = vec![];
+                                    for street in street_names {
+                                        let contents =
+                                            self.active_swarm.get_cids_for_tag(street.clone());
+                                        streets_with_contents.push((street, contents));
+                                    }
+                                    let _ = self
+                                        .to_tui
+                                        .send(ToPresentation::StreetNames(streets_with_contents));
+                                }
+                            }
+                            Direction::Left => {
+                                //TODO
+                            }
+                            Direction::Right => {
+                                //TODO
                             }
                         }
                     }
@@ -910,10 +976,11 @@ impl ApplicationLogic {
             while let Ok(msg) = self.to_app.try_recv() {
                 match msg {
                     ToApp::ActiveSwarm(f_id, s_id) => {
+                        eprintln!("Requesting Manifest");
+                        let _ = self.to_app_mgr_send.send(ToAppMgr::ReadData(s_id, 0));
+                        let _ = self.to_app_mgr_send.send(ToAppMgr::ReadAllFirstPages(s_id));
                         if !home_swarm_enforced {
                             home_swarm_enforced = true;
-                            eprintln!("Requesting Manifest");
-                            let _ = self.to_app_mgr_send.send(ToAppMgr::ReadData(s_id, 0));
                             for msg in buffered_from_tui.iter_mut() {
                                 let _ = self.from_tui_send.send(msg.clone());
                             }
@@ -1074,6 +1141,23 @@ impl ApplicationLogic {
                             }
                         }
                     }
+                    ToApp::FirstPages(s_id, first_pages) => {
+                        //TODO: we need to store this information in SwarmShell
+                        // we also need to know what Contents are already displayed
+                        // and we should only send ToPresentation those contents
+                        // that are not already visible, but should be
+                        if s_id == self.active_swarm.swarm_id {
+                            eprintln!("App received first pages: {}", first_pages.len());
+                            for (c_id, d_type, main_page) in first_pages {
+                                self.update_active_content_tags(s_id, c_id, d_type, main_page);
+                            }
+                        } else {
+                            self.pending_notifications
+                                .entry(s_id)
+                                .or_insert(vec![])
+                                .push(ToApp::FirstPages(s_id, first_pages));
+                        }
+                    }
                     ToApp::Disconnected => {
                         eprintln!("Done serving ApplicationLogic");
                         break 'outer;
@@ -1091,31 +1175,64 @@ impl ApplicationLogic {
             // );
             let manifest = Manifest::from(d_vec);
             eprintln!("Process data manifest tags: {:?}", manifest.tags);
-            let mut streets_left_to_present = self.visible_streets.0;
-            let mut street_names = Vec::with_capacity(streets_left_to_present);
-            let mut street_idx = 0;
-            eprintln!("Streets left to present: {}", streets_left_to_present);
-            while streets_left_to_present > 0 {
+            // let mut streets_left_to_present = self.visible_streets.0;
+            // let mut street_names = Vec::with_capacity(streets_left_to_present);
+            // let mut street_idx = 0;
+            // eprintln!("Streets left to present: {}", streets_left_to_present);
+            // while streets_left_to_present > 0 {
+            let mut tag_ring = vec![];
+            let mut tag_set = vec![];
+            let mut remaining_to_add = self.visible_streets.0;
+            // for tag in manifest.tags.values(){
+
+            // }
+            for street_idx in 0..=255 {
                 // for street_name in manifest.tags.values() {
                 if let Some(street_name) = manifest.tags.get(&street_idx) {
-                    street_names.push(street_name.clone());
-                    streets_left_to_present = streets_left_to_present - 1;
-                    street_idx += 1;
-                } else {
-                    // eprintln!("Was expecting more streets!");
-                    break;
+                    if remaining_to_add > 0 {
+                        remaining_to_add -= 1;
+                        tag_set.push(street_name.clone());
+                    } else {
+                        tag_ring.push(tag_set);
+                        tag_set = vec![street_name.clone()];
+                        remaining_to_add = self.visible_streets.0 - 1;
+                    }
+                    //     street_names.push(street_name.clone());
+                    //     streets_left_to_present = streets_left_to_present - 1;
+                    //     street_idx += 1;
+                    // } else {
+                    //     // eprintln!("Was expecting more streets!");
+                    //     break;
                 }
             }
-            if street_names.is_empty() {
-                street_names.push(Tag::empty());
+            if remaining_to_add > 0 {
+                tag_set.push(Tag::empty());
+                tag_ring.push(tag_set);
+            } else {
+                tag_ring.push(tag_set);
+                tag_ring.push(vec![Tag::empty()]);
             }
+            let street_names = tag_ring[0].clone();
+            // if street_names.is_empty() {
+            //     street_names.push(Tag::empty());
+            // }
             // for i in 0..streets_left_to_present {
             //     street_names.push(Tag(format!("Generic street #{}", i)));
             // }
-            self.visible_streets.1 = street_names.clone();
             self.active_swarm.manifest = manifest;
-            eprintln!("Sending StreetNames: {:?}", street_names);
-            let _ = self.to_tui.send(ToPresentation::StreetNames(street_names));
+            self.active_swarm.tag_ring = tag_ring;
+            if street_names != self.visible_streets.1 {
+                self.visible_streets.1 = street_names.clone();
+                eprintln!("Sending StreetNames: {:?}", street_names);
+                let mut streets_with_contents = vec![];
+                for street in street_names {
+                    let contents = self.active_swarm.get_cids_for_tag(street.clone());
+                    streets_with_contents.push((street, contents));
+                }
+                let _ = self
+                    .to_tui
+                    .send(ToPresentation::StreetNames(streets_with_contents));
+            }
             if let Some(pending_notifications) = self
                 .pending_notifications
                 .remove(&self.active_swarm.swarm_id)
@@ -1231,11 +1348,11 @@ impl ApplicationLogic {
         main_page: Data,
     ) {
         // eprintln!("ToApp::NewContent({:?},{:?})", c_id, d_type);
-        eprintln!("CID-{} Main page: {:?}", c_id, main_page);
+        // eprintln!("CID-{} Main page: {:?}", c_id, main_page);
         let tag_ids = read_tags(main_page.clone());
         let ids_len = tag_ids.len();
-        eprintln!("{} tag ids: {:?}", c_id, tag_ids);
-        eprintln!("Manifest tags: {:?}", self.active_swarm.manifest.tags);
+        // eprintln!("{} tag ids: {:?}", c_id, tag_ids);
+        // eprintln!("Manifest tags: {:?}", self.active_swarm.manifest.tags);
         let mut tags = Vec::with_capacity(tag_ids.len());
         for id in tag_ids {
             if let Some(tag) = self.active_swarm.manifest.tags.get(&id) {

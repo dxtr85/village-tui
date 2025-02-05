@@ -21,6 +21,12 @@ impl TileType {
             _other => false,
         }
     }
+    pub fn is_field(&self) -> bool {
+        match self {
+            Self::Field => true,
+            _other => false,
+        }
+    }
 }
 
 pub struct Tile {
