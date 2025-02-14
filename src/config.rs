@@ -22,6 +22,7 @@ impl Configuration {
         // eprintln!("My id str: {}", my_id_str);
         let stored_swarms = list_directories_in_pathbuf(d_path);
         let mut storage_neighbors = vec![];
+        let mut added_gids = vec![];
         let mut next_v4 = true;
         for sswarm in stored_swarms {
             let sstr = sswarm.to_string_lossy();
@@ -51,55 +52,78 @@ impl Configuration {
                 let data_vec = vec![c_zero.read_data(0).unwrap()];
                 eprintln!("Building Manifest from single data page (for larger manifests this will probably crash)");
                 let manifest = Manifest::from(data_vec);
-                let pubiplen = manifest.pub_ips.len();
+                let mut pubiplen = manifest.pub_ips.len();
                 for pub_ip in manifest.pub_ips {
+                    if pub_ip.1 == 0 {
+                        // This way we will add other IP to our list
+                        if pubiplen > 1 {
+                            pubiplen = 1;
+                        }
+                        // We can only communicate with hosts that have control over their
+                        // pub port
+                        continue;
+                    }
                     if pub_ip.0.is_ipv4() {
                         if next_v4 {
-                            eprintln!("Add V4 neighbor");
-                            storage_neighbors.push((
-                                g_id,
-                                NetworkSettings {
-                                    pub_ip: pub_ip.0,
-                                    pub_port: pub_ip.1,
-                                    nat_type: pub_ip.2,
-                                    port_allocation: pub_ip.3,
-                                },
-                            ));
-                            next_v4 = false;
+                            if !added_gids.contains(&g_id) {
+                                eprintln!("Add V4 neighbor {}:{}", pub_ip.0, pub_ip.1);
+                                added_gids.push(g_id);
+                                storage_neighbors.push((
+                                    g_id,
+                                    NetworkSettings {
+                                        pub_ip: pub_ip.0,
+                                        pub_port: pub_ip.1,
+                                        nat_type: pub_ip.2,
+                                        port_allocation: pub_ip.3,
+                                    },
+                                ));
+                                next_v4 = false;
+                            }
                         } else if pubiplen == 1 {
-                            storage_neighbors.push((
-                                g_id,
-                                NetworkSettings {
-                                    pub_ip: pub_ip.0,
-                                    pub_port: pub_ip.1,
-                                    nat_type: pub_ip.2,
-                                    port_allocation: pub_ip.3,
-                                },
-                            ));
+                            if !added_gids.contains(&g_id) {
+                                eprintln!("Add neighbor {}:{}", pub_ip.0, pub_ip.1);
+                                added_gids.push(g_id);
+                                storage_neighbors.push((
+                                    g_id,
+                                    NetworkSettings {
+                                        pub_ip: pub_ip.0,
+                                        pub_port: pub_ip.1,
+                                        nat_type: pub_ip.2,
+                                        port_allocation: pub_ip.3,
+                                    },
+                                ));
+                            }
                         }
                     } else {
                         if next_v4 && pubiplen == 1 {
-                            storage_neighbors.push((
-                                g_id,
-                                NetworkSettings {
-                                    pub_ip: pub_ip.0,
-                                    pub_port: pub_ip.1,
-                                    nat_type: pub_ip.2,
-                                    port_allocation: pub_ip.3,
-                                },
-                            ));
+                            if !added_gids.contains(&g_id) {
+                                eprintln!("Add a neighbor {}:{}", pub_ip.0, pub_ip.1);
+                                added_gids.push(g_id);
+                                storage_neighbors.push((
+                                    g_id,
+                                    NetworkSettings {
+                                        pub_ip: pub_ip.0,
+                                        pub_port: pub_ip.1,
+                                        nat_type: pub_ip.2,
+                                        port_allocation: pub_ip.3,
+                                    },
+                                ));
+                            }
                         } else {
-                            eprintln!("Add V6 neighbor");
-                            storage_neighbors.push((
-                                g_id,
-                                NetworkSettings {
-                                    pub_ip: pub_ip.0,
-                                    pub_port: pub_ip.1,
-                                    nat_type: pub_ip.2,
-                                    port_allocation: pub_ip.3,
-                                },
-                            ));
-                            next_v4 = true;
+                            if !added_gids.contains(&g_id) {
+                                eprintln!("Add V6 neighbor {}:{}", pub_ip.0, pub_ip.1);
+                                added_gids.push(g_id);
+                                storage_neighbors.push((
+                                    g_id,
+                                    NetworkSettings {
+                                        pub_ip: pub_ip.0,
+                                        pub_port: pub_ip.1,
+                                        nat_type: pub_ip.2,
+                                        port_allocation: pub_ip.3,
+                                    },
+                                ));
+                                next_v4 = true;
+                            }
                         }
                     }
                 }
