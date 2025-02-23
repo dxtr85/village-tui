@@ -1,6 +1,7 @@
 use animaterm::prelude::*;
 use async_std::task::sleep;
 use dapp_lib::prelude::SwarmID;
+use dapp_lib::prelude::SwarmName;
 use dapp_lib::prelude::*;
 use dapp_lib::ToAppMgr;
 use std::collections::HashMap;
@@ -154,7 +155,8 @@ pub struct ApplicationLogic {
     from_tui_recv: Receiver<FromPresentation>,
     to_user_send: Sender<ToApp>,
     to_app: Receiver<ToApp>,
-    pending_notifications: HashMap<SwarmID, Vec<ToApp>>,
+    pending_notifications: HashMap<SwarmID, Vec<ToApp>>, //TODO: clear pending
+    // when given SwarmID was disconnected
     visible_streets: (usize, Vec<Tag>), // (how many streets visible at once, visible street names),
 }
 impl ApplicationLogic {
@@ -985,7 +987,7 @@ impl ApplicationLogic {
                                 let _ = self.from_tui_send.send(msg.clone());
                             }
                         }
-                        eprintln!("Set active {:?}", s_id);
+                        eprintln!("Set active {}", s_id);
                         self.active_swarm = SwarmShell::new(s_id, f_id, AppType::Catalog);
                         if let Some(pending_notifications) = self
                             .pending_notifications
@@ -1008,6 +1010,12 @@ impl ApplicationLogic {
                     }
                     ToApp::GnomeToSwarmMapping(mapping) => {
                         // TODO: show after mgr responds with a list
+                        if mapping.is_empty() {
+                            //TODO: display a notification
+                            // that there are no synced swarms available
+                            self.state = TuiState::Village;
+                            continue;
+                        }
                         let mut map_vec = Vec::with_capacity(mapping.len());
                         let mut name_vec = Vec::with_capacity(mapping.len());
                         for (g_id, s_id) in mapping {
@@ -1059,7 +1067,7 @@ impl ApplicationLogic {
                             }
                         } else {
                             eprintln!(
-                                "Not sending neighbors, because my {:?} != {:?}",
+                                "Not sending neighbors, because my {} != {}",
                                 self.active_swarm.swarm_id, s_id
                             );
                             self.pending_notifications
@@ -1074,7 +1082,7 @@ impl ApplicationLogic {
                             self.update_active_content_tags(s_id, c_id, d_type, main_page);
                         } else {
                             eprintln!(
-                                "Not sending new content, because my {:?} != {:?}",
+                                "Not sending new content, because my {} != {}",
                                 self.active_swarm.swarm_id, s_id
                             );
                             self.pending_notifications
@@ -1108,7 +1116,7 @@ impl ApplicationLogic {
                     }
                     ToApp::ReadSuccess(s_id, c_id, d_type, d_vec) => {
                         // eprintln!(
-                        //     "Received ReadSuccess {:?} CID-{} (len: {})",
+                        //     "Received ReadSuccess {} CID-{} (len: {})",
                         //     s_id,
                         //     c_id,
                         //     d_vec.len()
@@ -1128,7 +1136,7 @@ impl ApplicationLogic {
                         }
                     }
                     ToApp::ReadError(s_id, c_id, error) => {
-                        eprintln!("Received ReadError for {:?} CID-{}: {}", s_id, c_id, error);
+                        eprintln!("Received ReadError for {} CID-{}: {}", s_id, c_id, error);
                         if matches!(error, AppError::AppDataNotSynced) && c_id == 0 {
                             //TODO: some delay would be nice
                             eprintln!("Requesting CID-{} again…", c_id);
@@ -1158,7 +1166,13 @@ impl ApplicationLogic {
                                 .push(ToApp::FirstPages(s_id, first_pages));
                         }
                     }
-                    ToApp::Disconnected => {
+                    ToApp::Disconnected(is_reconnecting, s_id, s_name) => {
+                        self.swarm_disconnected(is_reconnecting, s_id, s_name)
+                        // TODO: maybe later we can allow offline read-only mode
+                        // but for now we need to implement something simple
+                        //
+                    }
+                    ToApp::Quit => {
                         eprintln!("Done serving ApplicationLogic");
                         break 'outer;
                     }
@@ -1426,7 +1440,51 @@ impl ApplicationLogic {
             .to_tui
             .send(ToPresentation::DisplayIndexer(active_swarms));
     }
-
+    fn swarm_disconnected(&mut self, is_reconnecting: bool, s_id: SwarmID, s_name: SwarmName) {
+        if self.active_swarm.swarm_id == s_id {
+            self.state = TuiState::ShowActiveSwarms(vec![]);
+            let _ = self
+                .to_app_mgr_send
+                .send(ToAppMgr::ProvideGnomeToSwarmMapping);
+            // TODO: In this case if active swarm != our own swarm
+            // we can simply switch to our own & send a notification
+            // that current swarm got disconnected
+            // If our own swarm is not operational or
+            // if it was our own swarm then we could provide user
+            // with a list of swarms that are still operational
+            // to choose from.
+            // If the number of operational swarms has changed while
+            // we were being presented that list, it should get updated.
+            // And when the list becomes empty we might
+            // close swarm selector and post a note
+            // informing that all swarms are disconnected, also
+            // if the list is empty we simply reset presentation layer
+            // to display only greenfields
+            //
+            // When reconnecting we could also lookup our storage for
+            // public IPs to connect to
+            eprintln!(
+                "Active {} {} disconnected (Reconnecting: {})",
+                s_id, s_name, is_reconnecting
+            );
+        } else if s_name.founder == self.my_id {
+            // TODO: Here our owned swarm got disconnected,
+            // but our current swarm is operational,
+            // so we might just post a notification
+            eprintln!(
+                "Owned {} {} disconnected (Reconnecting: {})",
+                s_id, s_name, is_reconnecting
+            );
+        } else {
+            // Here we log that a swarm got disconnected, but we do not
+            // need to inform user about it, since this should be
+            // common occurence
+            eprintln!(
+                "{} {} disconnected (Reconnecting: {})",
+                s_id, s_name, is_reconnecting
+            );
+        }
+    }
     fn run_cmenu_action_on_content(&mut self, c_id: ContentID, d_type: DataType, action: usize) {
         match action {
             1 => {

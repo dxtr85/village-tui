@@ -25,9 +25,9 @@ impl Indexer {
         let mut buttons = Vec::with_capacity(visible_buttons);
         for i in 0..visible_buttons {
             let button = Button::new(
-                (cols, 3),
+                (cols-2, 3),
                 0,
-                (0, (i as isize + 1) * 3),
+                (1, (i as isize + 1) * 3),
                 &format!("Nagłówek {} z {}zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", i, visible_buttons - 1),
                 None,
                 mgr,
