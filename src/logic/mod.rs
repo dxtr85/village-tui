@@ -1,4 +1,5 @@
 use animaterm::prelude::*;
+use async_std::channel::Receiver as AReceiver;
 use async_std::channel::Sender as ASender;
 use async_std::task::sleep;
 use dapp_lib::prelude::SwarmID;
@@ -15,6 +16,7 @@ use std::time::Duration;
 mod manifest;
 use crate::tui::Direction;
 use crate::tui::{CreatorResult, FromPresentation, TileType, ToPresentation};
+use crate::InternalMsg;
 pub use manifest::Manifest;
 pub use manifest::Tag;
 
@@ -152,23 +154,27 @@ pub struct ApplicationLogic {
     active_swarm: SwarmShell,
     to_app_mgr_send: ASender<ToAppMgr>,
     to_tui: Sender<ToPresentation>,
-    from_tui_send: Sender<FromPresentation>,
-    from_tui_recv: Receiver<FromPresentation>,
-    to_user_send: Sender<ToApp>,
-    to_app: Receiver<ToApp>,
+    // from_tui_send: Sender<FromPresentation>,
+    // from_tui_recv: Receiver<FromPresentation>,
+    to_user_send: ASender<InternalMsg>,
+    to_app: AReceiver<InternalMsg>,
     pending_notifications: HashMap<SwarmID, Vec<ToApp>>, //TODO: clear pending
     // when given SwarmID was disconnected
     visible_streets: (usize, Vec<Tag>), // (how many streets visible at once, visible street names),
+    home_swarm_enforced: bool,
+    buffered_from_tui: Vec<FromPresentation>,
 }
 impl ApplicationLogic {
     pub fn new(
         my_id: GnomeId,
         to_app_mgr_send: ASender<ToAppMgr>,
         to_tui_send: Sender<ToPresentation>,
-        from_tui_send: Sender<FromPresentation>,
-        from_tui_recv: Receiver<FromPresentation>,
-        to_user_send: Sender<ToApp>,
-        to_user_recv: Receiver<ToApp>,
+        // from_tui_send: Sender<FromPresentation>,
+        // from_tui_recv: Receiver<FromPresentation>,
+        // to_user_send: Sender<ToApp>,
+        // to_user_recv: Receiver<ToApp>,
+        to_user_send: ASender<InternalMsg>,
+        to_user_recv: AReceiver<InternalMsg>,
     ) -> Self {
         ApplicationLogic {
             my_id,
@@ -177,1056 +183,1116 @@ impl ApplicationLogic {
             active_swarm: SwarmShell::new(SwarmID(0), GnomeId::any(), AppType::Catalog),
             to_app_mgr_send,
             to_tui: to_tui_send,
-            from_tui_send,
-            from_tui_recv,
+            // from_tui_send,
+            // from_tui_recv,
             to_user_send,
             to_app: to_user_recv,
             pending_notifications: HashMap::new(),
             visible_streets: (0, vec![]),
+            home_swarm_enforced: false,
+            buffered_from_tui: vec![],
         }
     }
     pub async fn run(&mut self) {
-        let dur = Duration::from_millis(32);
-        let mut home_swarm_enforced = false;
+        // let dur = Duration::from_millis(32);
+        // let mut home_swarm_enforced = false;
 
-        let mut buffered_from_tui = vec![];
+        // let mut buffered_from_tui = vec![];
         'outer: loop {
-            sleep(dur).await;
-            if let Ok(from_tui) = self.from_tui_recv.try_recv() {
-                match from_tui {
-                    FromPresentation::VisibleStreetsCount(v_streets) => {
-                        //TODO: store this in order to know what information to send
-                        eprintln!("OK we see {} streets at once", v_streets);
-                        self.visible_streets.0 = v_streets as usize;
-                    }
-                    FromPresentation::TileSelected(tile) => {
-                        match tile {
-                            TileType::Home(g_id) => {
-                                if g_id == self.my_id {
-                                    self.run_creator();
-                                }
-                            }
-                            TileType::Neighbor(g_id) => {
-                                let _ = self
-                                    .to_app_mgr_send
-                                    .send(ToAppMgr::SetActiveApp(g_id))
-                                    .await;
-                            }
-                            TileType::Field => {
-                                // TODO: do anything?
-                            }
-                            TileType::Application => {
-                                //TODO
-                            }
-                            TileType::Content(dtype, c_id) => {
-                                self.query_content_for_indexer(c_id).await;
-                                eprintln!("About to show CID {} dtype: {:?}", c_id, dtype);
-                            }
-                        }
-                    }
-                    FromPresentation::CursorOutOfScreen(direction) => {
-                        match direction {
-                            Direction::Up => {
-                                //TODO
-                                eprintln!("We should draw new streets on screen UP");
-                                if self.active_swarm.tag_ring.len() > 1 {
-                                    let prev_names = self.active_swarm.tag_ring.remove(0);
-                                    self.active_swarm.tag_ring.push(prev_names);
-                                    let street_names = self.active_swarm.tag_ring[0].clone();
-                                    self.visible_streets.1 = street_names.clone();
-                                    eprintln!("Sending StreetNames: {:?}", street_names);
-                                    let mut streets_with_contents = vec![];
-                                    for street in street_names {
-                                        let contents =
-                                            self.active_swarm.get_cids_for_tag(street.clone());
-                                        streets_with_contents.push((street, contents));
-                                    }
-                                    let _ = self
-                                        .to_tui
-                                        .send(ToPresentation::StreetNames(streets_with_contents));
-                                }
-                            }
-                            Direction::Down => {
-                                //TODO
-                                eprintln!("We should draw new streets on screen DOWN");
-                                if self.active_swarm.tag_ring.len() > 1 {
-                                    let street_names = self.active_swarm.tag_ring.pop().unwrap();
-                                    self.active_swarm.tag_ring.insert(0, street_names.clone());
-                                    self.visible_streets.1 = street_names.clone();
-                                    eprintln!("Sending StreetNames: {:?}", street_names);
-                                    let mut streets_with_contents = vec![];
-                                    for street in street_names {
-                                        let contents =
-                                            self.active_swarm.get_cids_for_tag(street.clone());
-                                        streets_with_contents.push((street, contents));
-                                    }
-                                    let _ = self
-                                        .to_tui
-                                        .send(ToPresentation::StreetNames(streets_with_contents));
-                                }
-                            }
-                            Direction::Left => {
-                                //TODO
-                            }
-                            Direction::Right => {
-                                //TODO
-                            }
-                        }
-                    }
-                    FromPresentation::CreateContent(d_type, data) => {
-                        if !home_swarm_enforced {
-                            eprintln!("Push back AppendContent");
-                            buffered_from_tui.push(FromPresentation::CreateContent(d_type, data));
-                            continue;
-                        }
-                        //TODO: we need to sync this data with Swarm
-                        //TODO: we need to create logic that converts user data like String
-                        //      into SyncData|CastData before we can send it to Swarm
-                        eprintln!("Requesting AppendContent {}", data.get_hash());
-                        let _ = self
-                            .to_app_mgr_send
-                            .send(ToAppMgr::AppendContent(
-                                self.active_swarm.swarm_id,
-                                d_type,
-                                data,
-                            ))
-                            .await;
-                    }
-                    FromPresentation::UpdateContent(c_id, d_type, d_id, data) => {
-                        if !home_swarm_enforced {
-                            eprintln!("Push back AppendContent");
-                            buffered_from_tui
-                                .push(FromPresentation::UpdateContent(c_id, d_type, d_id, data));
-                            continue;
-                        }
-                        eprintln!("Requesting ChangeContent");
-                        let _ = self
-                            .to_app_mgr_send
-                            .send(ToAppMgr::ChangeContent(
-                                self.active_swarm.swarm_id,
-                                c_id,
-                                d_type,
-                                data,
-                            ))
-                            .await;
-                    }
-                    FromPresentation::AddTags(tags) => {
-                        eprintln!("Received FromPresentation::AddTags({:?})", tags);
-                        // TODO: first check if we can add a tag for given swarm
-                        // and also check if given tag is not already added
-                        //TODO: we need to temporarily add given tag to manifest,
-                        // calculate hashes, and request app manager to modify or add Data
-                        // blocks to datastore for given swarm
-                        if self.active_swarm.manifest.add_tags(tags) {
-                            // Now our manifest is out of sync with swarm
-                            // we need to sync it with swarm.
+            // sleep(dur).await;
+            // if let Ok(from_tui) = self.from_tui_recv.try_recv() {}
+            while let Ok(internal_msg) = self.to_app.recv().await {
+                match internal_msg {
+                    InternalMsg::User(msg) => match msg {
+                        ToApp::ActiveSwarm(f_id, s_id) => {
+                            eprintln!("Requesting Manifest");
+                            let _ = self.to_app_mgr_send.send(ToAppMgr::ReadData(s_id, 0)).await;
                             let _ = self
                                 .to_app_mgr_send
-                                .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, 0))
+                                .send(ToAppMgr::ReadAllFirstPages(s_id))
                                 .await;
-                            // TODO: Probably it is better to hide this functionality from user
-                            // and instead send a list of Data objects to update/create
-                            let data_vec = self.active_swarm.manifest.to_data();
-                            // TODO: this is not the data we want to send!
-                            eprintln!("app logic received add tags request,\nsending change content to app mgr…");
-                            let _ = self
-                                .to_app_mgr_send
-                                .send(ToAppMgr::ChangeContent(
-                                    self.active_swarm.swarm_id,
-                                    0,
-                                    DataType::Data(0),
-                                    data_vec,
-                                ))
-                                .await;
-                        }
-                    }
-                    FromPresentation::AddDataType(tag) => {
-                        eprintln!("Received FromPresentation::AddDataType({})", tag.0);
-                        // TODO: first check if we can add a tag for given swarm
-                        // and also check if given tag is not already added
-                        //TODO: we need to temporarily add given tag to manifest,
-                        // calculate hashes, and request app manager to modify or add Data
-                        // blocks to datastore for given swarm
-                        // if let Some(mut manifest) = self.active_swarm.manifest.take() {
-                        if self.active_swarm.manifest.add_data_type(tag) {
-                            // Now our manifest is out of sync with swarm
-                            // we need to sync it with swarm.
-                            let _ = self
-                                .to_app_mgr_send
-                                .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, 0))
-                                .await;
-                            // TODO: Probably it is better to hide this functionality from user
-                            // and instead send a list of Data objects to update/create
-                            let data_vec = self.active_swarm.manifest.to_data();
-                            // TODO: this is not the data we want to send!
-                            eprintln!("app logic received add data type request,\nsending change content to app mgr…");
-                            let _ = self
-                                .to_app_mgr_send
-                                .send(ToAppMgr::ChangeContent(
-                                    self.active_swarm.swarm_id,
-                                    0,
-                                    DataType::Data(0),
-                                    data_vec,
-                                ))
-                                .await;
-                        }
-                    }
-                    FromPresentation::NeighborSelected(gnome_id) => {
-                        eprintln!("Selected neighbor: {:?}", gnome_id);
-                        let _ = self
-                            .to_app_mgr_send
-                            .send(ToAppMgr::SetActiveApp(gnome_id))
-                            .await;
-                    }
-                    FromPresentation::ShowContextMenu(ttype) => {
-                        self.state = TuiState::ContextMenuOn(ttype);
-                        match ttype {
-                            TileType::Home(_g_id) => {
-                                //TODO: select proper set_id depending on g_id value
-                                let _ = self.to_tui.send(ToPresentation::DisplayCMenu(1));
-                            }
-                            TileType::Neighbor(g_id) => {
-                                //TODO
-                            }
-                            TileType::Content(dtype, c_id) => {
-                                //TODO
-                                let _ = self.to_tui.send(ToPresentation::DisplayCMenu(2));
-                            }
-                            TileType::Field => {
-                                //TODO
-                            }
-                            TileType::Application => {
-                                //TODO
-                            }
-                        }
-                    }
-                    FromPresentation::SelectedIndices(indices) => {
-                        eprintln!(
-                            "FromPresentation::SelectedIndices({:?}), {:?}",
-                            indices, self.state
-                        );
-                        let mut new_state = TuiState::Village;
-                        match &self.state {
-                            TuiState::CreatorSelectTags(
-                                c_id_opt,
-                                read_only,
-                                dtype,
-                                descr,
-                                prev_indices,
-                            ) => {
-                                if !read_only {
-                                    let mut indices_u8 = Vec::with_capacity(indices.len());
-                                    for idx in &indices {
-                                        indices_u8.push(*idx as u8);
-                                    }
-                                    new_state = TuiState::Creator(
-                                        *c_id_opt,
-                                        false,
-                                        *dtype,
-                                        descr.clone(),
-                                        indices_u8.clone(),
-                                    );
-                                    let read_only = false;
-                                    let tag_names =
-                                        self.active_swarm.manifest.tags_string(&indices_u8);
-                                    let dtype_name =
-                                        self.active_swarm.manifest.dtype_string(dtype.byte());
-
-                                    let _ = self.to_tui.send(ToPresentation::DisplayCreator(
-                                        read_only,
-                                        dtype_name,
-                                        descr.clone(),
-                                        tag_names,
-                                    ));
-                                } else {
-                                    new_state = TuiState::Creator(
-                                        *c_id_opt,
-                                        *read_only,
-                                        *dtype,
-                                        descr.clone(),
-                                        prev_indices.clone(),
-                                    );
-                                    if !indices.is_empty() {
-                                        eprintln!(
-                                            "We should show street tagged with: {:?}",
-                                            self.active_swarm
-                                                .manifest
-                                                .tag_names(Some(vec![prev_indices[indices[0]]])) // Above has to be doubly de-indexed!
-                                        );
-                                    }
-                                    let tag_names =
-                                        self.active_swarm.manifest.tags_string(&prev_indices);
-                                    let dtype_name =
-                                        self.active_swarm.manifest.dtype_string(dtype.byte());
-
-                                    let _ = self.to_tui.send(ToPresentation::DisplayCreator(
-                                        true,
-                                        dtype_name,
-                                        descr.clone(),
-                                        tag_names,
-                                    ));
+                            if !self.home_swarm_enforced {
+                                self.home_swarm_enforced = true;
+                                for msg in self.buffered_from_tui.iter_mut() {
+                                    // let _ = self.from_tui_send.send(msg.clone());
+                                    let _ =
+                                        self.to_user_send.send(InternalMsg::Tui(msg.clone())).await;
                                 }
                             }
-                            TuiState::CreatorSelectDtype(
-                                c_id_opt,
-                                read_only,
-                                dtype,
-                                descr,
-                                tags,
-                            ) => {
-                                if indices.len() != 1 {
-                                    eprintln!("Incorrect indices size for DType change");
+                            eprintln!("Set active {}", s_id);
+                            self.active_swarm = SwarmShell::new(s_id, f_id, AppType::Catalog);
+                            if let Some(pending_notifications) = self
+                                .pending_notifications
+                                .remove(&self.active_swarm.swarm_id)
+                            {
+                                for note in pending_notifications.into_iter() {
+                                    let _ = self.to_user_send.send(InternalMsg::User(note)).await;
+                                }
+                            }
+                            let _ = self.to_app_mgr_send.send(ToAppMgr::ListNeighbors).await;
+                        }
+                        ToApp::MyPublicIPs(ip_list) => {
+                            //TODO: push this to my swarm's Manifest after syncing
+                            eprintln!("\nApplication got Pub IPs:\n{:?}\n", ip_list);
+                            for ip_tuple in ip_list {
+                                if !self.pub_ips.contains(&ip_tuple) {
+                                    self.pub_ips.push(ip_tuple);
+                                }
+                            }
+                        }
+                        ToApp::GnomeToSwarmMapping(mapping) => {
+                            // TODO: show after mgr responds with a list
+                            if mapping.is_empty() {
+                                //TODO: display a notification
+                                // that there are no synced swarms available
+                                self.state = TuiState::Village;
+                                continue;
+                            }
+                            let mut map_vec = Vec::with_capacity(mapping.len());
+                            let mut name_vec = Vec::with_capacity(mapping.len());
+                            for (g_id, s_id) in mapping {
+                                map_vec.push((g_id, s_id));
+                                name_vec.push(format!("Swarm ID {} Founder {}", s_id.0, g_id));
+                            }
+                            self.state = TuiState::ShowActiveSwarms(map_vec);
+                            self.show_active_swarms(name_vec);
+                        }
+                        ToApp::GetCIDsForTags(s_id, n_id, tags, all_first_pages) => {
+                            eprintln!("App received request for tags: {:?}", tags);
+                            for (c_id, data) in all_first_pages {
+                                let mut tags_iter = data.ref_bytes().iter();
+                                let tags_count = tags_iter.next().unwrap();
+                                if *tags_count == 0 {
                                     continue;
                                 }
-
-                                if c_id_opt.is_some() {
-                                    eprintln!("cid is some");
-                                    new_state = TuiState::Creator(
-                                        *c_id_opt,
-                                        *read_only,
-                                        *dtype,
-                                        descr.clone(),
-                                        tags.clone(),
-                                    );
-                                    let tag_names = self.active_swarm.manifest.tags_string(&tags);
-                                    let dtype_name =
-                                        self.active_swarm.manifest.dtype_string(dtype.byte());
-                                    eprintln!("{} new dtype_name: {}", dtype.byte(), dtype_name);
-
-                                    let _ = self.to_tui.send(ToPresentation::DisplayCreator(
-                                        *read_only,
-                                        dtype_name,
-                                        descr.clone(),
-                                        tag_names,
-                                    ));
-                                } else {
-                                    eprintln!("cid is none");
-                                    new_state = TuiState::Creator(
-                                        *c_id_opt,
-                                        *read_only,
-                                        DataType::from(indices[0] as u8),
-                                        descr.clone(),
-                                        tags.clone(),
-                                    );
-                                    let read_only = false;
-                                    let tag_names = self.active_swarm.manifest.tags_string(tags);
-                                    let dtype_name =
-                                        self.active_swarm.manifest.dtype_string(indices[0] as u8);
-                                    eprintln!("DType name: '{}'", dtype_name);
-
-                                    let _ = self.to_tui.send(ToPresentation::DisplayCreator(
-                                        read_only,
-                                        dtype_name,
-                                        descr.clone(),
-                                        tag_names,
-                                    ));
+                                for _i in 0..*tags_count {
+                                    let tag = tags_iter.next().unwrap();
+                                    if tags.contains(tag) {
+                                        let _ = self
+                                            .to_app_mgr_send
+                                            .send(ToAppMgr::CIDsForTag(
+                                                s_id, n_id, *tag, c_id, data,
+                                            ))
+                                            .await;
+                                        break;
+                                    }
                                 }
-                            }
-                            other => {
-                                eprintln!("{:?} got Selected indices", other);
                             }
                         }
-                        eprintln!("Setting state to: {:?}", new_state);
-                        self.state = new_state;
-                    }
-
-                    FromPresentation::EditResult(e_result) => {
-                        let mut new_state = TuiState::Village;
-                        let prev_state = std::mem::replace(&mut self.state, TuiState::Village);
-                        match prev_state {
-                            TuiState::AddTag => {
-                                if let Some(text) = e_result {
+                        ToApp::Neighbors(s_id, neighbors) => {
+                            if !self.home_swarm_enforced {
+                                let _ = self
+                                    .to_app_mgr_send
+                                    .send(ToAppMgr::SetActiveApp(self.my_id))
+                                    .await;
+                            }
+                            if s_id == self.active_swarm.swarm_id {
+                                if self.my_id == self.active_swarm.founder_id {
+                                    let _ = self.to_tui.send(ToPresentation::Neighbors(neighbors));
+                                } else {
+                                    //TODO: here we need to insert our id as a Neighbor, and remove Swarm's founder from Neighbor list
+                                    let mut new_neighbors = vec![self.my_id];
+                                    for n in neighbors {
+                                        if n == self.active_swarm.founder_id {
+                                            eprintln!("Removing founder from neighbors list");
+                                            continue;
+                                        }
+                                        new_neighbors.push(n);
+                                    }
                                     let _ =
-                                        self.from_tui_send.send(FromPresentation::AddTags(vec![
-                                            Tag::new(text).unwrap(),
-                                        ]));
+                                        self.to_tui.send(ToPresentation::Neighbors(new_neighbors));
+                                }
+                            } else {
+                                eprintln!(
+                                    "Not sending neighbors, because my {} != {}",
+                                    self.active_swarm.swarm_id, s_id
+                                );
+                                self.pending_notifications
+                                    .entry(s_id)
+                                    .or_insert(vec![])
+                                    .push(ToApp::Neighbors(s_id, neighbors));
+                            }
+                        }
+                        ToApp::NewContent(s_id, c_id, d_type, main_page) => {
+                            //TODO: read tags from main page
+                            if s_id == self.active_swarm.swarm_id && self.home_swarm_enforced {
+                                self.update_active_content_tags(s_id, c_id, d_type, main_page);
+                            } else {
+                                eprintln!(
+                                    "Not sending new content, because my {} != {}",
+                                    self.active_swarm.swarm_id, s_id
+                                );
+                                self.pending_notifications
+                                    .entry(s_id)
+                                    .or_insert(vec![])
+                                    .push(ToApp::NewContent(s_id, c_id, d_type, main_page));
+                            }
+                        }
+                        ToApp::ContentChanged(s_id, c_id, d_type, main_page_option) => {
+                            if c_id == 0 {
+                                eprintln!("Requesting ReadData for CID-0");
+                                let _ = self
+                                    .to_app_mgr_send
+                                    .send(ToAppMgr::ReadData(s_id, c_id))
+                                    .await;
+                            }
+                            if s_id == self.active_swarm.swarm_id && self.home_swarm_enforced {
+                                if let Some(main_page) = main_page_option {
+                                    if main_page.is_empty() && main_page.get_hash() > 0 {
+                                        eprintln!("We should check if Tags have changed");
+                                        let _ = self
+                                            .to_app_mgr_send
+                                            .send(ToAppMgr::ReadData(s_id, c_id))
+                                            .await;
+                                    } else {
+                                        self.update_active_content_tags(
+                                            s_id, c_id, d_type, main_page,
+                                        );
+                                    }
+                                }
+                                eprintln!("recv ToApp::ContentChanged({:?})", c_id);
+                            } else {
+                                eprintln!(
+                                    "Not sending changed content, because my {:?} != {:?}",
+                                    self.active_swarm.swarm_id, s_id
+                                );
+                            }
+                        }
+                        ToApp::ReadSuccess(s_id, c_id, d_type, d_vec) => {
+                            // eprintln!(
+                            //     "Received ReadSuccess {} CID-{} (len: {})",
+                            //     s_id,
+                            //     c_id,
+                            //     d_vec.len()
+                            // );
+                            if s_id == self.active_swarm.swarm_id {
+                                // eprintln!("processing it");
+                                self.process_data(c_id, d_type, d_vec).await;
+                            } else {
+                                // eprintln!(
+                                //     "shelving it (active swarm: {:?})",
+                                //     self.active_swarm.swarm_id
+                                // );
+                                self.pending_notifications
+                                    .entry(s_id)
+                                    .or_insert(vec![])
+                                    .push(ToApp::ReadSuccess(s_id, c_id, d_type, d_vec));
+                            }
+                        }
+                        ToApp::ReadError(s_id, c_id, error) => {
+                            eprintln!("Received ReadError for {} CID-{}: {}", s_id, c_id, error);
+                            if matches!(error, AppError::AppDataNotSynced) && c_id == 0 {
+                                //TODO: some delay would be nice
+                                eprintln!("Requesting CID-{} again…", c_id);
+                                let _ = self
+                                    .to_app_mgr_send
+                                    .send(ToAppMgr::ReadData(s_id, c_id))
+                                    .await;
+                            }
+                            if s_id == self.active_swarm.swarm_id {
+                                if c_id == 0 && self.my_id == self.active_swarm.founder_id {
+                                } else {
+                                    let _ =
+                                        self.to_tui.send(ToPresentation::ReadError(c_id, error));
                                 }
                             }
-                            TuiState::AddDType => {
-                                if let Some(text) = e_result {
-                                    let _ = self.from_tui_send.send(FromPresentation::AddDataType(
-                                        Tag::new(text).unwrap(),
-                                    ));
+                        }
+                        ToApp::FirstPages(s_id, first_pages) => {
+                            //TODO: we need to store this information in SwarmShell
+                            // we also need to know what Contents are already displayed
+                            // and we should only send ToPresentation those contents
+                            // that are not already visible, but should be
+                            if s_id == self.active_swarm.swarm_id {
+                                eprintln!("App received first pages: {}", first_pages.len());
+                                for (c_id, d_type, main_page) in first_pages {
+                                    self.update_active_content_tags(s_id, c_id, d_type, main_page);
                                 }
+                            } else {
+                                self.pending_notifications
+                                    .entry(s_id)
+                                    .or_insert(vec![])
+                                    .push(ToApp::FirstPages(s_id, first_pages));
                             }
-                            TuiState::AppendData(c_id) => {
-                                if let Some(text) = e_result {
-                                    let data = Data::new(text.bytes().collect()).unwrap();
+                        }
+                        ToApp::Disconnected(is_reconnecting, s_id, s_name) => {
+                            self.swarm_disconnected(is_reconnecting, s_id, s_name).await
+                            // TODO: maybe later we can allow offline read-only mode
+                            // but for now we need to implement something simple
+                            //
+                        }
+                        ToApp::Quit => {
+                            eprintln!("Done serving ApplicationLogic");
+                            break 'outer;
+                        }
+                    },
+                    InternalMsg::Tui(from_tui) => match from_tui {
+                        FromPresentation::VisibleStreetsCount(v_streets) => {
+                            //TODO: store this in order to know what information to send
+                            eprintln!("OK we see {} streets at once", v_streets);
+                            self.visible_streets.0 = v_streets as usize;
+                        }
+                        FromPresentation::TileSelected(tile) => {
+                            match tile {
+                                TileType::Home(g_id) => {
+                                    if g_id == self.my_id {
+                                        self.run_creator();
+                                    }
+                                }
+                                TileType::Neighbor(g_id) => {
                                     let _ = self
                                         .to_app_mgr_send
-                                        .send(ToAppMgr::AppendData(
-                                            self.active_swarm.swarm_id,
-                                            c_id,
-                                            data,
-                                        ))
+                                        .send(ToAppMgr::SetActiveApp(g_id))
                                         .await;
                                 }
+                                TileType::Field => {
+                                    // TODO: do anything?
+                                }
+                                TileType::Application => {
+                                    //TODO
+                                }
+                                TileType::Content(dtype, c_id) => {
+                                    self.query_content_for_indexer(c_id).await;
+                                    eprintln!("About to show CID {} dtype: {:?}", c_id, dtype);
+                                }
                             }
-                            TuiState::CreatorDisplayDescription(
-                                c_id_opt,
-                                read_only,
-                                dtype,
-                                prev_descr,
-                                tag_ids,
-                            ) => {
-                                if let Some(text) = e_result {
-                                    eprintln!(
-                                        "Got some text after Edit from Creator {}",
-                                        read_only
-                                    );
-                                    let tag_names =
-                                        self.active_swarm.manifest.tags_string(&tag_ids);
-                                    let dtype_name =
-                                        self.active_swarm.manifest.dtype_string(dtype.byte());
-                                    if !read_only {
-                                        new_state = TuiState::Creator(
-                                            c_id_opt,
-                                            read_only,
-                                            dtype,
-                                            text.clone(),
-                                            tag_ids.clone(),
-                                        );
-                                        eprintln!("Requesting display creator again");
-                                        let _ = self.to_tui.send(ToPresentation::DisplayCreator(
-                                            read_only, dtype_name, text, tag_names,
+                        }
+                        FromPresentation::CursorOutOfScreen(direction) => {
+                            match direction {
+                                Direction::Up => {
+                                    //TODO
+                                    eprintln!("We should draw new streets on screen UP");
+                                    if self.active_swarm.tag_ring.len() > 1 {
+                                        let prev_names = self.active_swarm.tag_ring.remove(0);
+                                        self.active_swarm.tag_ring.push(prev_names);
+                                        let street_names = self.active_swarm.tag_ring[0].clone();
+                                        self.visible_streets.1 = street_names.clone();
+                                        eprintln!("Sending StreetNames: {:?}", street_names);
+                                        let mut streets_with_contents = vec![];
+                                        for street in street_names {
+                                            let contents =
+                                                self.active_swarm.get_cids_for_tag(street.clone());
+                                            streets_with_contents.push((street, contents));
+                                        }
+                                        let _ = self.to_tui.send(ToPresentation::StreetNames(
+                                            streets_with_contents,
                                         ));
-                                    } else {
+                                    }
+                                }
+                                Direction::Down => {
+                                    //TODO
+                                    eprintln!("We should draw new streets on screen DOWN");
+                                    if self.active_swarm.tag_ring.len() > 1 {
+                                        let street_names =
+                                            self.active_swarm.tag_ring.pop().unwrap();
+                                        self.active_swarm.tag_ring.insert(0, street_names.clone());
+                                        self.visible_streets.1 = street_names.clone();
+                                        eprintln!("Sending StreetNames: {:?}", street_names);
+                                        let mut streets_with_contents = vec![];
+                                        for street in street_names {
+                                            let contents =
+                                                self.active_swarm.get_cids_for_tag(street.clone());
+                                            streets_with_contents.push((street, contents));
+                                        }
+                                        let _ = self.to_tui.send(ToPresentation::StreetNames(
+                                            streets_with_contents,
+                                        ));
+                                    }
+                                }
+                                Direction::Left => {
+                                    //TODO
+                                }
+                                Direction::Right => {
+                                    //TODO
+                                }
+                            }
+                        }
+                        FromPresentation::CreateContent(d_type, data) => {
+                            if !self.home_swarm_enforced {
+                                eprintln!("Push back AppendContent");
+                                self.buffered_from_tui
+                                    .push(FromPresentation::CreateContent(d_type, data));
+                                continue;
+                            }
+                            //TODO: we need to sync this data with Swarm
+                            //TODO: we need to create logic that converts user data like String
+                            //      into SyncData|CastData before we can send it to Swarm
+                            eprintln!("Requesting AppendContent {}", data.get_hash());
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::AppendContent(
+                                    self.active_swarm.swarm_id,
+                                    d_type,
+                                    data,
+                                ))
+                                .await;
+                        }
+                        FromPresentation::UpdateContent(c_id, d_type, d_id, data) => {
+                            if !self.home_swarm_enforced {
+                                eprintln!("Push back AppendContent");
+                                self.buffered_from_tui.push(FromPresentation::UpdateContent(
+                                    c_id, d_type, d_id, data,
+                                ));
+                                continue;
+                            }
+                            eprintln!("Requesting ChangeContent");
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::ChangeContent(
+                                    self.active_swarm.swarm_id,
+                                    c_id,
+                                    d_type,
+                                    data,
+                                ))
+                                .await;
+                        }
+                        FromPresentation::AddTags(tags) => {
+                            eprintln!("Received FromPresentation::AddTags({:?})", tags);
+                            // TODO: first check if we can add a tag for given swarm
+                            // and also check if given tag is not already added
+                            //TODO: we need to temporarily add given tag to manifest,
+                            // calculate hashes, and request app manager to modify or add Data
+                            // blocks to datastore for given swarm
+                            if self.active_swarm.manifest.add_tags(tags) {
+                                // Now our manifest is out of sync with swarm
+                                // we need to sync it with swarm.
+                                let _ = self
+                                    .to_app_mgr_send
+                                    .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, 0))
+                                    .await;
+                                // TODO: Probably it is better to hide this functionality from user
+                                // and instead send a list of Data objects to update/create
+                                let data_vec = self.active_swarm.manifest.to_data();
+                                // TODO: this is not the data we want to send!
+                                eprintln!("app logic received add tags request,\nsending change content to app mgr…");
+                                let _ = self
+                                    .to_app_mgr_send
+                                    .send(ToAppMgr::ChangeContent(
+                                        self.active_swarm.swarm_id,
+                                        0,
+                                        DataType::Data(0),
+                                        data_vec,
+                                    ))
+                                    .await;
+                            }
+                        }
+                        FromPresentation::AddDataType(tag) => {
+                            eprintln!("Received FromPresentation::AddDataType({})", tag.0);
+                            // TODO: first check if we can add a tag for given swarm
+                            // and also check if given tag is not already added
+                            //TODO: we need to temporarily add given tag to manifest,
+                            // calculate hashes, and request app manager to modify or add Data
+                            // blocks to datastore for given swarm
+                            // if let Some(mut manifest) = self.active_swarm.manifest.take() {
+                            if self.active_swarm.manifest.add_data_type(tag) {
+                                // Now our manifest is out of sync with swarm
+                                // we need to sync it with swarm.
+                                let _ = self
+                                    .to_app_mgr_send
+                                    .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, 0))
+                                    .await;
+                                // TODO: Probably it is better to hide this functionality from user
+                                // and instead send a list of Data objects to update/create
+                                let data_vec = self.active_swarm.manifest.to_data();
+                                // TODO: this is not the data we want to send!
+                                eprintln!("app logic received add data type request,\nsending change content to app mgr…");
+                                let _ = self
+                                    .to_app_mgr_send
+                                    .send(ToAppMgr::ChangeContent(
+                                        self.active_swarm.swarm_id,
+                                        0,
+                                        DataType::Data(0),
+                                        data_vec,
+                                    ))
+                                    .await;
+                            }
+                        }
+                        FromPresentation::NeighborSelected(gnome_id) => {
+                            eprintln!("Selected neighbor: {:?}", gnome_id);
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::SetActiveApp(gnome_id))
+                                .await;
+                        }
+                        FromPresentation::ShowContextMenu(ttype) => {
+                            self.state = TuiState::ContextMenuOn(ttype);
+                            match ttype {
+                                TileType::Home(_g_id) => {
+                                    //TODO: select proper set_id depending on g_id value
+                                    let _ = self.to_tui.send(ToPresentation::DisplayCMenu(1));
+                                }
+                                TileType::Neighbor(g_id) => {
+                                    //TODO
+                                }
+                                TileType::Content(dtype, c_id) => {
+                                    //TODO
+                                    let _ = self.to_tui.send(ToPresentation::DisplayCMenu(2));
+                                }
+                                TileType::Field => {
+                                    //TODO
+                                }
+                                TileType::Application => {
+                                    //TODO
+                                }
+                            }
+                        }
+                        FromPresentation::SelectedIndices(indices) => {
+                            eprintln!(
+                                "FromPresentation::SelectedIndices({:?}), {:?}",
+                                indices, self.state
+                            );
+                            let mut new_state = TuiState::Village;
+                            match &self.state {
+                                TuiState::CreatorSelectTags(
+                                    c_id_opt,
+                                    read_only,
+                                    dtype,
+                                    descr,
+                                    prev_indices,
+                                ) => {
+                                    if !read_only {
+                                        let mut indices_u8 = Vec::with_capacity(indices.len());
+                                        for idx in &indices {
+                                            indices_u8.push(*idx as u8);
+                                        }
                                         new_state = TuiState::Creator(
-                                            c_id_opt,
-                                            read_only,
-                                            dtype,
-                                            prev_descr.clone(),
-                                            tag_ids.clone(),
+                                            *c_id_opt,
+                                            false,
+                                            *dtype,
+                                            descr.clone(),
+                                            indices_u8.clone(),
                                         );
+                                        let read_only = false;
+                                        let tag_names =
+                                            self.active_swarm.manifest.tags_string(&indices_u8);
+                                        let dtype_name =
+                                            self.active_swarm.manifest.dtype_string(dtype.byte());
+
                                         let _ = self.to_tui.send(ToPresentation::DisplayCreator(
                                             read_only,
                                             dtype_name,
-                                            prev_descr.clone(),
+                                            descr.clone(),
+                                            tag_names,
+                                        ));
+                                    } else {
+                                        new_state = TuiState::Creator(
+                                            *c_id_opt,
+                                            *read_only,
+                                            *dtype,
+                                            descr.clone(),
+                                            prev_indices.clone(),
+                                        );
+                                        if !indices.is_empty() {
+                                            eprintln!(
+                                                "We should show street tagged with: {:?}",
+                                                self.active_swarm.manifest.tag_names(Some(vec![
+                                                    prev_indices[indices[0]]
+                                                ])) // Above has to be doubly de-indexed!
+                                            );
+                                        }
+                                        let tag_names =
+                                            self.active_swarm.manifest.tags_string(&prev_indices);
+                                        let dtype_name =
+                                            self.active_swarm.manifest.dtype_string(dtype.byte());
+
+                                        let _ = self.to_tui.send(ToPresentation::DisplayCreator(
+                                            true,
+                                            dtype_name,
+                                            descr.clone(),
                                             tag_names,
                                         ));
                                     }
                                 }
+                                TuiState::CreatorSelectDtype(
+                                    c_id_opt,
+                                    read_only,
+                                    dtype,
+                                    descr,
+                                    tags,
+                                ) => {
+                                    if indices.len() != 1 {
+                                        eprintln!("Incorrect indices size for DType change");
+                                        continue;
+                                    }
+
+                                    if c_id_opt.is_some() {
+                                        eprintln!("cid is some");
+                                        new_state = TuiState::Creator(
+                                            *c_id_opt,
+                                            *read_only,
+                                            *dtype,
+                                            descr.clone(),
+                                            tags.clone(),
+                                        );
+                                        let tag_names =
+                                            self.active_swarm.manifest.tags_string(&tags);
+                                        let dtype_name =
+                                            self.active_swarm.manifest.dtype_string(dtype.byte());
+                                        eprintln!(
+                                            "{} new dtype_name: {}",
+                                            dtype.byte(),
+                                            dtype_name
+                                        );
+
+                                        let _ = self.to_tui.send(ToPresentation::DisplayCreator(
+                                            *read_only,
+                                            dtype_name,
+                                            descr.clone(),
+                                            tag_names,
+                                        ));
+                                    } else {
+                                        eprintln!("cid is none");
+                                        new_state = TuiState::Creator(
+                                            *c_id_opt,
+                                            *read_only,
+                                            DataType::from(indices[0] as u8),
+                                            descr.clone(),
+                                            tags.clone(),
+                                        );
+                                        let read_only = false;
+                                        let tag_names =
+                                            self.active_swarm.manifest.tags_string(tags);
+                                        let dtype_name = self
+                                            .active_swarm
+                                            .manifest
+                                            .dtype_string(indices[0] as u8);
+                                        eprintln!("DType name: '{}'", dtype_name);
+
+                                        let _ = self.to_tui.send(ToPresentation::DisplayCreator(
+                                            read_only,
+                                            dtype_name,
+                                            descr.clone(),
+                                            tag_names,
+                                        ));
+                                    }
+                                }
+                                other => {
+                                    eprintln!("{:?} got Selected indices", other);
+                                }
                             }
-                            TuiState::Indexing(
-                                c_id,
-                                d_id_opt,
-                                d_type,
-                                tag_ids,
-                                descr,
-                                all_headers,
-                                notes,
-                            ) => {
-                                if let Some(text) = e_result {
-                                    eprintln!("Got edit result while indexing");
-                                    if let Some(d_id) = d_id_opt {
+                            eprintln!("Setting state to: {:?}", new_state);
+                            self.state = new_state;
+                        }
+
+                        FromPresentation::EditResult(e_result) => {
+                            let mut new_state = TuiState::Village;
+                            let prev_state = std::mem::replace(&mut self.state, TuiState::Village);
+                            match prev_state {
+                                TuiState::AddTag => {
+                                    if let Some(text) = e_result {
+                                        // let _ =
+                                        //     self.from_tui_send.send(FromPresentation::AddTags(vec![
+                                        //         Tag::new(text).unwrap(),
+                                        //     ]));
+                                        let _ = self
+                                            .to_user_send
+                                            .send(InternalMsg::Tui(FromPresentation::AddTags(
+                                                vec![Tag::new(text).unwrap()],
+                                            )))
+                                            .await;
+                                    }
+                                }
+                                TuiState::AddDType => {
+                                    if let Some(text) = e_result {
+                                        // let _ = self.from_tui_send.send(FromPresentation::AddDataType(
+                                        //     Tag::new(text).unwrap(),
+                                        // ));
+                                        let _ = self
+                                            .to_user_send
+                                            .send(InternalMsg::Tui(FromPresentation::AddDataType(
+                                                Tag::new(text).unwrap(),
+                                            )))
+                                            .await;
+                                    }
+                                }
+                                TuiState::AppendData(c_id) => {
+                                    if let Some(text) = e_result {
                                         let data = Data::new(text.bytes().collect()).unwrap();
                                         let _ = self
                                             .to_app_mgr_send
-                                            .send(ToAppMgr::UpdateData(
+                                            .send(ToAppMgr::AppendData(
                                                 self.active_swarm.swarm_id,
                                                 c_id,
-                                                d_id,
                                                 data,
                                             ))
                                             .await;
                                     }
-                                } else {
-                                    new_state = TuiState::Indexing(
-                                        c_id,
-                                        d_id_opt,
-                                        d_type,
-                                        tag_ids,
-                                        descr,
-                                        all_headers.clone(),
-                                        notes,
-                                    );
-                                    let _ = self
-                                        .to_tui
-                                        .send(ToPresentation::DisplayIndexer(all_headers));
                                 }
-                            }
-                            _other => {
-                                eprintln!("Unexpected EditResult");
-                            }
-                        }
-                        self.state = new_state;
-                    }
-                    FromPresentation::CMenuAction(action) => {
-                        let prev_state = std::mem::replace(&mut self.state, TuiState::Village);
-                        match prev_state {
-                            TuiState::ContextMenuOn(ttype) => match ttype {
-                                TileType::Home(g_id) => {
-                                    self.run_cmenu_action_on_home(action).await;
-                                }
-                                TileType::Content(d_type, c_id) => {
-                                    self.run_cmenu_action_on_content(c_id, d_type, action).await;
-                                }
-                                other => {
-                                    eprintln!(
-                                        "{:?} tile does not support Context Menu action",
-                                        other
-                                    );
-                                    self.state = TuiState::ContextMenuOn(other);
-                                }
-                            },
-                            other => {
-                                eprintln!("{:?} state does not support Context Menu action", other);
-                                self.state = other;
-                            }
-                        }
-                    }
-                    FromPresentation::CreatorResult(c_result) => {
-                        //TODO
-                        match c_result {
-                            CreatorResult::SelectDType => {
-                                // TODO send request to presentation to show selector
-                                let new_state;
-                                match &self.state {
-                                    TuiState::Creator(
-                                        c_id_opt,
-                                        read_only,
-                                        dtype,
-                                        descr,
-                                        tag_ids,
-                                    ) => {
-                                        new_state = TuiState::CreatorSelectDtype(
-                                            *c_id_opt,
-                                            *read_only,
-                                            *dtype,
-                                            descr.clone(),
-                                            tag_ids.clone(),
+                                TuiState::CreatorDisplayDescription(
+                                    c_id_opt,
+                                    read_only,
+                                    dtype,
+                                    prev_descr,
+                                    tag_ids,
+                                ) => {
+                                    if let Some(text) = e_result {
+                                        eprintln!(
+                                            "Got some text after Edit from Creator {}",
+                                            read_only
                                         );
-                                        let _ = self.to_tui.send(ToPresentation::DisplaySelector(
-                                            true,
-                                            "Catalog Application's Data Types".to_string(),
-                                            self.active_swarm.manifest.dtype_names(),
-                                            vec![dtype.byte() as usize],
-                                        ));
+                                        let tag_names =
+                                            self.active_swarm.manifest.tags_string(&tag_ids);
+                                        let dtype_name =
+                                            self.active_swarm.manifest.dtype_string(dtype.byte());
+                                        if !read_only {
+                                            new_state = TuiState::Creator(
+                                                c_id_opt,
+                                                read_only,
+                                                dtype,
+                                                text.clone(),
+                                                tag_ids.clone(),
+                                            );
+                                            eprintln!("Requesting display creator again");
+                                            let _ =
+                                                self.to_tui.send(ToPresentation::DisplayCreator(
+                                                    read_only, dtype_name, text, tag_names,
+                                                ));
+                                        } else {
+                                            new_state = TuiState::Creator(
+                                                c_id_opt,
+                                                read_only,
+                                                dtype,
+                                                prev_descr.clone(),
+                                                tag_ids.clone(),
+                                            );
+                                            let _ =
+                                                self.to_tui.send(ToPresentation::DisplayCreator(
+                                                    read_only,
+                                                    dtype_name,
+                                                    prev_descr.clone(),
+                                                    tag_names,
+                                                ));
+                                        }
+                                    }
+                                }
+                                TuiState::Indexing(
+                                    c_id,
+                                    d_id_opt,
+                                    d_type,
+                                    tag_ids,
+                                    descr,
+                                    all_headers,
+                                    notes,
+                                ) => {
+                                    if let Some(text) = e_result {
+                                        eprintln!("Got edit result while indexing");
+                                        if let Some(d_id) = d_id_opt {
+                                            let data = Data::new(text.bytes().collect()).unwrap();
+                                            let _ = self
+                                                .to_app_mgr_send
+                                                .send(ToAppMgr::UpdateData(
+                                                    self.active_swarm.swarm_id,
+                                                    c_id,
+                                                    d_id,
+                                                    data,
+                                                ))
+                                                .await;
+                                        }
+                                    } else {
+                                        new_state = TuiState::Indexing(
+                                            c_id,
+                                            d_id_opt,
+                                            d_type,
+                                            tag_ids,
+                                            descr,
+                                            all_headers.clone(),
+                                            notes,
+                                        );
+                                        let _ = self
+                                            .to_tui
+                                            .send(ToPresentation::DisplayIndexer(all_headers));
+                                    }
+                                }
+                                _other => {
+                                    eprintln!("Unexpected EditResult");
+                                }
+                            }
+                            self.state = new_state;
+                        }
+                        FromPresentation::CMenuAction(action) => {
+                            let prev_state = std::mem::replace(&mut self.state, TuiState::Village);
+                            match prev_state {
+                                TuiState::ContextMenuOn(ttype) => match ttype {
+                                    TileType::Home(g_id) => {
+                                        self.run_cmenu_action_on_home(action).await;
+                                    }
+                                    TileType::Content(d_type, c_id) => {
+                                        self.run_cmenu_action_on_content(c_id, d_type, action)
+                                            .await;
                                     }
                                     other => {
                                         eprintln!(
+                                            "{:?} tile does not support Context Menu action",
+                                            other
+                                        );
+                                        self.state = TuiState::ContextMenuOn(other);
+                                    }
+                                },
+                                other => {
+                                    eprintln!(
+                                        "{:?} state does not support Context Menu action",
+                                        other
+                                    );
+                                    self.state = other;
+                                }
+                            }
+                        }
+                        FromPresentation::CreatorResult(c_result) => {
+                            //TODO
+                            match c_result {
+                                CreatorResult::SelectDType => {
+                                    // TODO send request to presentation to show selector
+                                    let new_state;
+                                    match &self.state {
+                                        TuiState::Creator(
+                                            c_id_opt,
+                                            read_only,
+                                            dtype,
+                                            descr,
+                                            tag_ids,
+                                        ) => {
+                                            new_state = TuiState::CreatorSelectDtype(
+                                                *c_id_opt,
+                                                *read_only,
+                                                *dtype,
+                                                descr.clone(),
+                                                tag_ids.clone(),
+                                            );
+                                            let _ =
+                                                self.to_tui.send(ToPresentation::DisplaySelector(
+                                                    true,
+                                                    "Catalog Application's Data Types".to_string(),
+                                                    self.active_swarm.manifest.dtype_names(),
+                                                    vec![dtype.byte() as usize],
+                                                ));
+                                        }
+                                        other => {
+                                            eprintln!(
                                             "{:?}: Unexpected state for CreatorResult::SelectDType",
                                             self.state
                                         );
-                                        new_state = other.clone();
+                                            new_state = other.clone();
+                                        }
                                     }
+                                    self.state = new_state;
                                 }
-                                self.state = new_state;
-                            }
-                            CreatorResult::SelectTags => {
-                                // TODO send request to presentation to show selector
-                                let new_state;
-                                match &self.state {
-                                    TuiState::Creator(
-                                        c_id_opt,
-                                        read_only,
-                                        dtype,
-                                        descr,
-                                        tag_ids,
-                                    ) => {
-                                        new_state = TuiState::CreatorSelectTags(
-                                            *c_id_opt,
-                                            *read_only,
-                                            *dtype,
-                                            descr.clone(),
-                                            tag_ids.clone(),
-                                        );
-                                        let mut long_ids = Vec::with_capacity(tag_ids.len());
-                                        let mut quit_on_first_select = false;
-                                        let filter = if *read_only {
-                                            quit_on_first_select = true;
-                                            Some(tag_ids.clone())
-                                        } else {
-                                            for t_id in tag_ids {
-                                                long_ids.push(*t_id as usize);
-                                            }
-                                            None
-                                        };
+                                CreatorResult::SelectTags => {
+                                    // TODO send request to presentation to show selector
+                                    let new_state;
+                                    match &self.state {
+                                        TuiState::Creator(
+                                            c_id_opt,
+                                            read_only,
+                                            dtype,
+                                            descr,
+                                            tag_ids,
+                                        ) => {
+                                            new_state = TuiState::CreatorSelectTags(
+                                                *c_id_opt,
+                                                *read_only,
+                                                *dtype,
+                                                descr.clone(),
+                                                tag_ids.clone(),
+                                            );
+                                            let mut long_ids = Vec::with_capacity(tag_ids.len());
+                                            let mut quit_on_first_select = false;
+                                            let filter = if *read_only {
+                                                quit_on_first_select = true;
+                                                Some(tag_ids.clone())
+                                            } else {
+                                                for t_id in tag_ids {
+                                                    long_ids.push(*t_id as usize);
+                                                }
+                                                None
+                                            };
 
-                                        let _ = self.to_tui.send(ToPresentation::DisplaySelector(
-                                            quit_on_first_select,
-                                            "Catalog Application's Tags".to_string(),
-                                            self.active_swarm.manifest.tag_names(filter),
-                                            long_ids,
-                                        ));
+                                            let _ =
+                                                self.to_tui.send(ToPresentation::DisplaySelector(
+                                                    quit_on_first_select,
+                                                    "Catalog Application's Tags".to_string(),
+                                                    self.active_swarm.manifest.tag_names(filter),
+                                                    long_ids,
+                                                ));
+                                        }
+                                        other => {
+                                            eprintln!(
+                                                "Unexpected state for CreatorResult::SelectDType"
+                                            );
+                                            new_state = other.clone();
+                                        }
                                     }
-                                    other => {
-                                        eprintln!(
-                                            "Unexpected state for CreatorResult::SelectDType"
-                                        );
-                                        new_state = other.clone();
-                                    }
+                                    self.state = new_state;
                                 }
-                                self.state = new_state;
-                            }
-                            CreatorResult::SelectDescription => {
-                                // TODO send request to presentation to show editor
-                                let new_state;
-                                match &self.state {
-                                    TuiState::Creator(
-                                        c_id_opt,
-                                        read_only,
-                                        dtype,
-                                        descr,
-                                        tag_ids,
-                                    ) => {
-                                        new_state = TuiState::CreatorDisplayDescription(
-                                            *c_id_opt,
-                                            *read_only,
-                                            *dtype,
-                                            descr.clone(),
-                                            tag_ids.clone(),
-                                        );
-                                        let _ = self.to_tui.send(ToPresentation::DisplayEditor(
+                                CreatorResult::SelectDescription => {
+                                    // TODO send request to presentation to show editor
+                                    let new_state;
+                                    match &self.state {
+                                        TuiState::Creator(
+                                            c_id_opt,
+                                            read_only,
+                                            dtype,
+                                            descr,
+                                            tag_ids,
+                                        ) => {
+                                            new_state = TuiState::CreatorDisplayDescription(
+                                                *c_id_opt,
+                                                *read_only,
+                                                *dtype,
+                                                descr.clone(),
+                                                tag_ids.clone(),
+                                            );
+                                            let _ = self.to_tui.send(ToPresentation::DisplayEditor(
                                             (*read_only,self.my_id ==self.active_swarm.founder_id),
                                     " Max size: 764  Multiline  Content Description    (TAB to finish)".to_string(),
                                     Some(descr.clone()),
                                     true,
                                     Some(764),
                                     ));
-                                    }
-                                    other => {
-                                        eprintln!(
-                                            "Unexpected state for CreatorResult::SelectDType"
-                                        );
-                                        new_state = other.clone();
-                                    }
-                                }
-                                self.state = new_state;
-                            }
-                            CreatorResult::Cancel => {
-                                self.state = TuiState::Village;
-                                // TODO send request to presentation to show village
-                                eprintln!("Cancel ");
-                            }
-                            CreatorResult::Create => {
-                                if let TuiState::Creator(
-                                    c_id_opt,
-                                    read_only,
-                                    d_type,
-                                    descr,
-                                    tag_indices,
-                                ) = &self.state
-                                {
-                                    //TODO: send request to app_mgr
-                                    // eprintln!("CreatorResult::Create(d_type, data)");
-                                    if !home_swarm_enforced {
-                                        eprintln!("Push back AppendContent");
-                                        buffered_from_tui.push(FromPresentation::CreatorResult(
-                                            CreatorResult::Create,
-                                        ));
-                                        continue;
-                                    }
-                                    //TODO: we need to sync this data with Swarm
-                                    //TODO: we need to create logic that converts user data like String
-                                    //      into SyncData|CastData before we can send it to Swarm
-                                    if let Some(c_id) = c_id_opt {
-                                        //TODO: here we update existing Content
-                                        let mut bytes = Vec::with_capacity(1024);
-                                        bytes.push(tag_indices.len() as u8);
-                                        for tag in tag_indices {
-                                            bytes.push(*tag as u8);
-                                        }
-                                        for byte in descr.bytes() {
-                                            bytes.push(byte as u8);
-                                        }
-                                        let _ = self
-                                            .to_app_mgr_send
-                                            .send(ToAppMgr::UpdateData(
-                                                self.active_swarm.swarm_id,
-                                                *c_id,
-                                                0,
-                                                Data::new(bytes).unwrap(),
-                                            ))
-                                            .await;
-                                    } else {
-                                        let mut bytes = Vec::with_capacity(1024);
-                                        bytes.push(tag_indices.len() as u8);
-                                        for tag in tag_indices {
-                                            bytes.push(*tag as u8);
-                                        }
-                                        for byte in descr.bytes() {
-                                            bytes.push(byte as u8);
-                                        }
-                                        let data = Data::new(bytes).unwrap();
-                                        eprintln!("Requesting AppendContent {}", data.get_hash());
-                                        let _ = self
-                                            .to_app_mgr_send
-                                            .send(ToAppMgr::AppendContent(
-                                                self.active_swarm.swarm_id,
-                                                *d_type,
-                                                data,
-                                            ))
-                                            .await;
-                                    }
-                                } else {
-                                    eprintln!("Got TUI Create request when in {:?}", self.state);
-                                }
-                                self.state = TuiState::Village;
-                            }
-                        }
-                    }
-                    FromPresentation::KeyPress(key) => {
-                        if self.handle_key(key).await {
-                            // eprintln!("Sending ToAppMgr::Quit");
-                            let _ = self.to_app_mgr_send.send(ToAppMgr::Quit).await;
-                        }
-                    }
-                    FromPresentation::ContentInquiry(c_id) => {
-                        if !home_swarm_enforced {
-                            buffered_from_tui.push(FromPresentation::ContentInquiry(c_id));
-                            continue;
-                        }
-                        let _ = self
-                            .to_app_mgr_send
-                            .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, c_id))
-                            .await;
-                    }
-                    FromPresentation::IndexResult(i_result) => {
-                        let mut new_state = None;
-                        match &self.state {
-                            TuiState::RemovePage(c_id) => {
-                                if let Some(page_id) = i_result {
-                                    eprintln!(
-                                        "We should request Page #{} removal from CID-{}",
-                                        page_id, c_id
-                                    );
-                                    if page_id > 0 {
-                                        let _ = self
-                                            .to_app_mgr_send
-                                            .send(ToAppMgr::RemoveData(
-                                                self.active_swarm.swarm_id,
-                                                *c_id,
-                                                page_id as u16,
-                                            ))
-                                            .await;
-                                    } else {
-                                        // TODO: make this logic built-into dapp-lib
-                                        eprintln!("Unable to remove Page #0");
-                                    }
-                                }
-                                new_state = Some(TuiState::Village);
-                            }
-                            TuiState::Indexing(
-                                c_id,
-                                d_id_opt,
-                                d_type,
-                                tag_ids,
-                                descr,
-                                headers,
-                                notes,
-                            ) => {
-                                if let Some(idx) = i_result {
-                                    match idx {
-                                        0 => {
-                                            let read_only =
-                                                self.my_id != self.active_swarm.founder_id;
-                                            eprintln!(
-                                                "Should show Content header RO: {}",
-                                                read_only
-                                            );
-                                            let (data_type, tags) = (
-                                                self.active_swarm
-                                                    .manifest
-                                                    .dtype_string(d_type.byte()),
-                                                self.active_swarm.manifest.tags_string(&tag_ids),
-                                            );
-                                            let _ =
-                                                self.to_tui.send(ToPresentation::DisplayCreator(
-                                                    read_only,
-                                                    data_type,
-                                                    descr.clone(),
-                                                    tags,
-                                                ));
-                                            new_state = Some(TuiState::Creator(
-                                                Some(*c_id),
-                                                read_only,
-                                                *d_type,
-                                                descr.clone(),
-                                                tag_ids.clone(),
-                                            ));
                                         }
                                         other => {
-                                            eprintln!("Should show Note #{}", other);
-                                            new_state = Some(TuiState::Indexing(
-                                                *c_id,
-                                                Some(other as u16),
-                                                *d_type,
-                                                tag_ids.clone(),
-                                                descr.clone(),
-                                                headers.clone(),
-                                                notes.clone(),
-                                            ));
-                                            let read_only = true;
-                                            let header = format!("Page #{}", other);
-                                            let contents_opt =
-                                                if let Some(text) = notes.clone().get(other) {
-                                                    Some(text.clone())
-                                                } else {
-                                                    None
-                                                };
-                                            let allow_newlines = true;
-                                            let byte_limit = Some(1024);
-                                            let _ =
-                                                self.to_tui.send(ToPresentation::DisplayEditor(
-                                                    (
-                                                        read_only,
-                                                        self.my_id == self.active_swarm.founder_id,
-                                                    ),
-                                                    header,
-                                                    contents_opt.clone(),
-                                                    allow_newlines,
-                                                    byte_limit,
-                                                ));
+                                            eprintln!(
+                                                "Unexpected state for CreatorResult::SelectDType"
+                                            );
+                                            new_state = other.clone();
                                         }
                                     }
-                                } else {
-                                    self.state = TuiState::Village;
-                                    eprintln!("Going back to Village");
+                                    self.state = new_state;
                                 }
-                            }
-                            TuiState::ShowActiveSwarms(mapping) => {
-                                if let Some(idx) = i_result {
-                                    eprintln!("Now we should activate swarm with id: {:?}", idx);
-                                    //TODO: we need a mapping from idx -> gnome_id
-                                    if let Some((gnome_id, _s_id)) = mapping.get(idx) {
-                                        new_state = Some(TuiState::Village);
-                                        let _ = self
-                                            .to_app_mgr_send
-                                            .send(ToAppMgr::SetActiveApp(*gnome_id))
-                                            .await;
-                                        let _ =
-                                            self.to_tui.send(ToPresentation::SwapTiles(*gnome_id));
+                                CreatorResult::Cancel => {
+                                    self.state = TuiState::Village;
+                                    // TODO send request to presentation to show village
+                                    eprintln!("Cancel ");
+                                }
+                                CreatorResult::Create => {
+                                    if let TuiState::Creator(
+                                        c_id_opt,
+                                        read_only,
+                                        d_type,
+                                        descr,
+                                        tag_indices,
+                                    ) = &self.state
+                                    {
+                                        //TODO: send request to app_mgr
+                                        // eprintln!("CreatorResult::Create(d_type, data)");
+                                        if !self.home_swarm_enforced {
+                                            eprintln!("Push back AppendContent");
+                                            self.buffered_from_tui.push(
+                                                FromPresentation::CreatorResult(
+                                                    CreatorResult::Create,
+                                                ),
+                                            );
+                                            continue;
+                                        }
+                                        //TODO: we need to sync this data with Swarm
+                                        //TODO: we need to create logic that converts user data like String
+                                        //      into SyncData|CastData before we can send it to Swarm
+                                        if let Some(c_id) = c_id_opt {
+                                            //TODO: here we update existing Content
+                                            let mut bytes = Vec::with_capacity(1024);
+                                            bytes.push(tag_indices.len() as u8);
+                                            for tag in tag_indices {
+                                                bytes.push(*tag as u8);
+                                            }
+                                            for byte in descr.bytes() {
+                                                bytes.push(byte as u8);
+                                            }
+                                            let _ = self
+                                                .to_app_mgr_send
+                                                .send(ToAppMgr::UpdateData(
+                                                    self.active_swarm.swarm_id,
+                                                    *c_id,
+                                                    0,
+                                                    Data::new(bytes).unwrap(),
+                                                ))
+                                                .await;
+                                        } else {
+                                            let mut bytes = Vec::with_capacity(1024);
+                                            bytes.push(tag_indices.len() as u8);
+                                            for tag in tag_indices {
+                                                bytes.push(*tag as u8);
+                                            }
+                                            for byte in descr.bytes() {
+                                                bytes.push(byte as u8);
+                                            }
+                                            let data = Data::new(bytes).unwrap();
+                                            eprintln!(
+                                                "Requesting AppendContent {}",
+                                                data.get_hash()
+                                            );
+                                            let _ = self
+                                                .to_app_mgr_send
+                                                .send(ToAppMgr::AppendContent(
+                                                    self.active_swarm.swarm_id,
+                                                    *d_type,
+                                                    data,
+                                                ))
+                                                .await;
+                                        }
+                                    } else {
+                                        eprintln!(
+                                            "Got TUI Create request when in {:?}",
+                                            self.state
+                                        );
                                     }
-                                } else {
-                                    eprintln!("Going back to Village");
                                     self.state = TuiState::Village;
                                 }
                             }
-                            other => {
-                                eprintln!("Got Indexing response when in state {:?}", other);
+                        }
+                        FromPresentation::KeyPress(key) => {
+                            if self.handle_key(key).await {
+                                // eprintln!("Sending ToAppMgr::Quit");
+                                let _ = self.to_app_mgr_send.send(ToAppMgr::Quit).await;
                             }
                         }
-                        if let Some(new_state) = new_state {
-                            self.state = new_state;
-                        }
-                    }
-                }
-            }
-            while let Ok(msg) = self.to_app.try_recv() {
-                match msg {
-                    ToApp::ActiveSwarm(f_id, s_id) => {
-                        eprintln!("Requesting Manifest");
-                        let _ = self.to_app_mgr_send.send(ToAppMgr::ReadData(s_id, 0)).await;
-                        let _ = self
-                            .to_app_mgr_send
-                            .send(ToAppMgr::ReadAllFirstPages(s_id))
-                            .await;
-                        if !home_swarm_enforced {
-                            home_swarm_enforced = true;
-                            for msg in buffered_from_tui.iter_mut() {
-                                let _ = self.from_tui_send.send(msg.clone());
-                            }
-                        }
-                        eprintln!("Set active {}", s_id);
-                        self.active_swarm = SwarmShell::new(s_id, f_id, AppType::Catalog);
-                        if let Some(pending_notifications) = self
-                            .pending_notifications
-                            .remove(&self.active_swarm.swarm_id)
-                        {
-                            for note in pending_notifications.into_iter() {
-                                let _ = self.to_user_send.send(note);
-                            }
-                        }
-                        let _ = self.to_app_mgr_send.send(ToAppMgr::ListNeighbors).await;
-                    }
-                    ToApp::MyPublicIPs(ip_list) => {
-                        //TODO: push this to my swarm's Manifest after syncing
-                        eprintln!("\nApplication got Pub IPs:\n{:?}\n", ip_list);
-                        for ip_tuple in ip_list {
-                            if !self.pub_ips.contains(&ip_tuple) {
-                                self.pub_ips.push(ip_tuple);
-                            }
-                        }
-                    }
-                    ToApp::GnomeToSwarmMapping(mapping) => {
-                        // TODO: show after mgr responds with a list
-                        if mapping.is_empty() {
-                            //TODO: display a notification
-                            // that there are no synced swarms available
-                            self.state = TuiState::Village;
-                            continue;
-                        }
-                        let mut map_vec = Vec::with_capacity(mapping.len());
-                        let mut name_vec = Vec::with_capacity(mapping.len());
-                        for (g_id, s_id) in mapping {
-                            map_vec.push((g_id, s_id));
-                            name_vec.push(format!("Swarm ID {} Founder {}", s_id.0, g_id));
-                        }
-                        self.state = TuiState::ShowActiveSwarms(map_vec);
-                        self.show_active_swarms(name_vec);
-                    }
-                    ToApp::GetCIDsForTags(s_id, n_id, tags, all_first_pages) => {
-                        eprintln!("App received request for tags: {:?}", tags);
-                        for (c_id, data) in all_first_pages {
-                            let mut tags_iter = data.ref_bytes().iter();
-                            let tags_count = tags_iter.next().unwrap();
-                            if *tags_count == 0 {
+                        FromPresentation::ContentInquiry(c_id) => {
+                            if !self.home_swarm_enforced {
+                                self.buffered_from_tui
+                                    .push(FromPresentation::ContentInquiry(c_id));
                                 continue;
                             }
-                            for _i in 0..*tags_count {
-                                let tag = tags_iter.next().unwrap();
-                                if tags.contains(tag) {
-                                    let _ = self
-                                        .to_app_mgr_send
-                                        .send(ToAppMgr::CIDsForTag(s_id, n_id, *tag, c_id, data))
-                                        .await;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    ToApp::Neighbors(s_id, neighbors) => {
-                        if !home_swarm_enforced {
                             let _ = self
                                 .to_app_mgr_send
-                                .send(ToAppMgr::SetActiveApp(self.my_id))
+                                .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, c_id))
                                 .await;
                         }
-                        if s_id == self.active_swarm.swarm_id {
-                            if self.my_id == self.active_swarm.founder_id {
-                                let _ = self.to_tui.send(ToPresentation::Neighbors(neighbors));
-                            } else {
-                                //TODO: here we need to insert our id as a Neighbor, and remove Swarm's founder from Neighbor list
-                                let mut new_neighbors = vec![self.my_id];
-                                for n in neighbors {
-                                    if n == self.active_swarm.founder_id {
-                                        eprintln!("Removing founder from neighbors list");
-                                        continue;
+                        FromPresentation::IndexResult(i_result) => {
+                            let mut new_state = None;
+                            match &self.state {
+                                TuiState::RemovePage(c_id) => {
+                                    if let Some(page_id) = i_result {
+                                        eprintln!(
+                                            "We should request Page #{} removal from CID-{}",
+                                            page_id, c_id
+                                        );
+                                        if page_id > 0 {
+                                            let _ = self
+                                                .to_app_mgr_send
+                                                .send(ToAppMgr::RemoveData(
+                                                    self.active_swarm.swarm_id,
+                                                    *c_id,
+                                                    page_id as u16,
+                                                ))
+                                                .await;
+                                        } else {
+                                            // TODO: make this logic built-into dapp-lib
+                                            eprintln!("Unable to remove Page #0");
+                                        }
                                     }
-                                    new_neighbors.push(n);
+                                    new_state = Some(TuiState::Village);
                                 }
-                                let _ = self.to_tui.send(ToPresentation::Neighbors(new_neighbors));
-                            }
-                        } else {
-                            eprintln!(
-                                "Not sending neighbors, because my {} != {}",
-                                self.active_swarm.swarm_id, s_id
-                            );
-                            self.pending_notifications
-                                .entry(s_id)
-                                .or_insert(vec![])
-                                .push(ToApp::Neighbors(s_id, neighbors));
-                        }
-                    }
-                    ToApp::NewContent(s_id, c_id, d_type, main_page) => {
-                        //TODO: read tags from main page
-                        if s_id == self.active_swarm.swarm_id && home_swarm_enforced {
-                            self.update_active_content_tags(s_id, c_id, d_type, main_page);
-                        } else {
-                            eprintln!(
-                                "Not sending new content, because my {} != {}",
-                                self.active_swarm.swarm_id, s_id
-                            );
-                            self.pending_notifications
-                                .entry(s_id)
-                                .or_insert(vec![])
-                                .push(ToApp::NewContent(s_id, c_id, d_type, main_page));
-                        }
-                    }
-                    ToApp::ContentChanged(s_id, c_id, d_type, main_page_option) => {
-                        if c_id == 0 {
-                            eprintln!("Requesting ReadData for CID-0");
-                            let _ = self
-                                .to_app_mgr_send
-                                .send(ToAppMgr::ReadData(s_id, c_id))
-                                .await;
-                        }
-                        if s_id == self.active_swarm.swarm_id && home_swarm_enforced {
-                            if let Some(main_page) = main_page_option {
-                                if main_page.is_empty() && main_page.get_hash() > 0 {
-                                    eprintln!("We should check if Tags have changed");
-                                    let _ = self
-                                        .to_app_mgr_send
-                                        .send(ToAppMgr::ReadData(s_id, c_id))
-                                        .await;
-                                } else {
-                                    self.update_active_content_tags(s_id, c_id, d_type, main_page);
+                                TuiState::Indexing(
+                                    c_id,
+                                    d_id_opt,
+                                    d_type,
+                                    tag_ids,
+                                    descr,
+                                    headers,
+                                    notes,
+                                ) => {
+                                    if let Some(idx) = i_result {
+                                        match idx {
+                                            0 => {
+                                                let read_only =
+                                                    self.my_id != self.active_swarm.founder_id;
+                                                eprintln!(
+                                                    "Should show Content header RO: {}",
+                                                    read_only
+                                                );
+                                                let (data_type, tags) = (
+                                                    self.active_swarm
+                                                        .manifest
+                                                        .dtype_string(d_type.byte()),
+                                                    self.active_swarm
+                                                        .manifest
+                                                        .tags_string(&tag_ids),
+                                                );
+                                                let _ = self.to_tui.send(
+                                                    ToPresentation::DisplayCreator(
+                                                        read_only,
+                                                        data_type,
+                                                        descr.clone(),
+                                                        tags,
+                                                    ),
+                                                );
+                                                new_state = Some(TuiState::Creator(
+                                                    Some(*c_id),
+                                                    read_only,
+                                                    *d_type,
+                                                    descr.clone(),
+                                                    tag_ids.clone(),
+                                                ));
+                                            }
+                                            other => {
+                                                eprintln!("Should show Note #{}", other);
+                                                new_state = Some(TuiState::Indexing(
+                                                    *c_id,
+                                                    Some(other as u16),
+                                                    *d_type,
+                                                    tag_ids.clone(),
+                                                    descr.clone(),
+                                                    headers.clone(),
+                                                    notes.clone(),
+                                                ));
+                                                let read_only = true;
+                                                let header = format!("Page #{}", other);
+                                                let contents_opt =
+                                                    if let Some(text) = notes.clone().get(other) {
+                                                        Some(text.clone())
+                                                    } else {
+                                                        None
+                                                    };
+                                                let allow_newlines = true;
+                                                let byte_limit = Some(1024);
+                                                let _ = self.to_tui.send(
+                                                    ToPresentation::DisplayEditor(
+                                                        (
+                                                            read_only,
+                                                            self.my_id
+                                                                == self.active_swarm.founder_id,
+                                                        ),
+                                                        header,
+                                                        contents_opt.clone(),
+                                                        allow_newlines,
+                                                        byte_limit,
+                                                    ),
+                                                );
+                                            }
+                                        }
+                                    } else {
+                                        self.state = TuiState::Village;
+                                        eprintln!("Going back to Village");
+                                    }
+                                }
+                                TuiState::ShowActiveSwarms(mapping) => {
+                                    if let Some(idx) = i_result {
+                                        eprintln!(
+                                            "Now we should activate swarm with id: {:?}",
+                                            idx
+                                        );
+                                        //TODO: we need a mapping from idx -> gnome_id
+                                        if let Some((gnome_id, _s_id)) = mapping.get(idx) {
+                                            new_state = Some(TuiState::Village);
+                                            let _ = self
+                                                .to_app_mgr_send
+                                                .send(ToAppMgr::SetActiveApp(*gnome_id))
+                                                .await;
+                                            let _ = self
+                                                .to_tui
+                                                .send(ToPresentation::SwapTiles(*gnome_id));
+                                        }
+                                    } else {
+                                        eprintln!("Going back to Village");
+                                        self.state = TuiState::Village;
+                                    }
+                                }
+                                other => {
+                                    eprintln!("Got Indexing response when in state {:?}", other);
                                 }
                             }
-                            eprintln!("recv ToApp::ContentChanged({:?})", c_id);
-                        } else {
-                            eprintln!(
-                                "Not sending changed content, because my {:?} != {:?}",
-                                self.active_swarm.swarm_id, s_id
-                            );
-                        }
-                    }
-                    ToApp::ReadSuccess(s_id, c_id, d_type, d_vec) => {
-                        // eprintln!(
-                        //     "Received ReadSuccess {} CID-{} (len: {})",
-                        //     s_id,
-                        //     c_id,
-                        //     d_vec.len()
-                        // );
-                        if s_id == self.active_swarm.swarm_id {
-                            // eprintln!("processing it");
-                            self.process_data(c_id, d_type, d_vec).await;
-                        } else {
-                            // eprintln!(
-                            //     "shelving it (active swarm: {:?})",
-                            //     self.active_swarm.swarm_id
-                            // );
-                            self.pending_notifications
-                                .entry(s_id)
-                                .or_insert(vec![])
-                                .push(ToApp::ReadSuccess(s_id, c_id, d_type, d_vec));
-                        }
-                    }
-                    ToApp::ReadError(s_id, c_id, error) => {
-                        eprintln!("Received ReadError for {} CID-{}: {}", s_id, c_id, error);
-                        if matches!(error, AppError::AppDataNotSynced) && c_id == 0 {
-                            //TODO: some delay would be nice
-                            eprintln!("Requesting CID-{} again…", c_id);
-                            let _ = self
-                                .to_app_mgr_send
-                                .send(ToAppMgr::ReadData(s_id, c_id))
-                                .await;
-                        }
-                        if s_id == self.active_swarm.swarm_id {
-                            if c_id == 0 && self.my_id == self.active_swarm.founder_id {
-                            } else {
-                                let _ = self.to_tui.send(ToPresentation::ReadError(c_id, error));
+                            if let Some(new_state) = new_state {
+                                self.state = new_state;
                             }
                         }
-                    }
-                    ToApp::FirstPages(s_id, first_pages) => {
-                        //TODO: we need to store this information in SwarmShell
-                        // we also need to know what Contents are already displayed
-                        // and we should only send ToPresentation those contents
-                        // that are not already visible, but should be
-                        if s_id == self.active_swarm.swarm_id {
-                            eprintln!("App received first pages: {}", first_pages.len());
-                            for (c_id, d_type, main_page) in first_pages {
-                                self.update_active_content_tags(s_id, c_id, d_type, main_page);
-                            }
-                        } else {
-                            self.pending_notifications
-                                .entry(s_id)
-                                .or_insert(vec![])
-                                .push(ToApp::FirstPages(s_id, first_pages));
-                        }
-                    }
-                    ToApp::Disconnected(is_reconnecting, s_id, s_name) => {
-                        self.swarm_disconnected(is_reconnecting, s_id, s_name).await
-                        // TODO: maybe later we can allow offline read-only mode
-                        // but for now we need to implement something simple
-                        //
-                    }
-                    ToApp::Quit => {
-                        eprintln!("Done serving ApplicationLogic");
-                        break 'outer;
-                    }
+                    },
                 }
             }
         }
@@ -1303,7 +1369,7 @@ impl ApplicationLogic {
                 .remove(&self.active_swarm.swarm_id)
             {
                 for note in pending_notifications.into_iter() {
-                    let _ = self.to_user_send.send(note);
+                    let _ = self.to_user_send.send(InternalMsg::User(note)).await;
                 }
             }
             if self.my_id == self.active_swarm.founder_id && !self.pub_ips.is_empty() {
