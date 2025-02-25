@@ -1,3 +1,4 @@
+use async_std::channel as achannel;
 use async_std::task::spawn_blocking;
 use dapp_lib::prelude::*;
 use std::path::PathBuf;
@@ -22,7 +23,7 @@ async fn main() {
     let (to_presentation_msg_send, to_presentation_msg_recv) = channel();
     let (from_presentation_msg_send, from_presentation_msg_recv) = channel();
     let (to_application_send, to_application_recv) = channel();
-    let (to_app_mgr_send, to_app_mgr_recv) = channel();
+    let (to_app_mgr_send, to_app_mgr_recv) = achannel::unbounded();
 
     let tui_mgr = instantiate_tui_mgr();
 
@@ -38,7 +39,8 @@ async fn main() {
         to_app_mgr_recv,
         dir.clone(),
         storage_neighbors,
-    );
+    )
+    .await;
     let mut logic = ApplicationLogic::new(
         my_id,
         to_app_mgr_send,

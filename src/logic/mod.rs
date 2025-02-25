@@ -1,4 +1,5 @@
 use animaterm::prelude::*;
+use async_std::channel::Sender as ASender;
 use async_std::task::sleep;
 use dapp_lib::prelude::SwarmID;
 use dapp_lib::prelude::SwarmName;
@@ -149,7 +150,7 @@ pub struct ApplicationLogic {
     pub_ips: Vec<(IpAddr, u16, Nat, (PortAllocationRule, i8))>,
     state: TuiState,
     active_swarm: SwarmShell,
-    to_app_mgr_send: Sender<ToAppMgr>,
+    to_app_mgr_send: ASender<ToAppMgr>,
     to_tui: Sender<ToPresentation>,
     from_tui_send: Sender<FromPresentation>,
     from_tui_recv: Receiver<FromPresentation>,
@@ -162,7 +163,7 @@ pub struct ApplicationLogic {
 impl ApplicationLogic {
     pub fn new(
         my_id: GnomeId,
-        to_app_mgr_send: Sender<ToAppMgr>,
+        to_app_mgr_send: ASender<ToAppMgr>,
         to_tui_send: Sender<ToPresentation>,
         from_tui_send: Sender<FromPresentation>,
         from_tui_recv: Receiver<FromPresentation>,
@@ -173,7 +174,7 @@ impl ApplicationLogic {
             my_id,
             pub_ips: vec![],
             state: TuiState::Village,
-            active_swarm: SwarmShell::new(SwarmID(0), my_id, AppType::Catalog),
+            active_swarm: SwarmShell::new(SwarmID(0), GnomeId::any(), AppType::Catalog),
             to_app_mgr_send,
             to_tui: to_tui_send,
             from_tui_send,
@@ -206,7 +207,10 @@ impl ApplicationLogic {
                                 }
                             }
                             TileType::Neighbor(g_id) => {
-                                let _ = self.to_app_mgr_send.send(ToAppMgr::SetActiveApp(g_id));
+                                let _ = self
+                                    .to_app_mgr_send
+                                    .send(ToAppMgr::SetActiveApp(g_id))
+                                    .await;
                             }
                             TileType::Field => {
                                 // TODO: do anything?
@@ -215,7 +219,7 @@ impl ApplicationLogic {
                                 //TODO
                             }
                             TileType::Content(dtype, c_id) => {
-                                self.query_content_for_indexer(c_id);
+                                self.query_content_for_indexer(c_id).await;
                                 eprintln!("About to show CID {} dtype: {:?}", c_id, dtype);
                             }
                         }
@@ -279,11 +283,14 @@ impl ApplicationLogic {
                         //TODO: we need to create logic that converts user data like String
                         //      into SyncData|CastData before we can send it to Swarm
                         eprintln!("Requesting AppendContent {}", data.get_hash());
-                        let _ = self.to_app_mgr_send.send(ToAppMgr::AppendContent(
-                            self.active_swarm.swarm_id,
-                            d_type,
-                            data,
-                        ));
+                        let _ = self
+                            .to_app_mgr_send
+                            .send(ToAppMgr::AppendContent(
+                                self.active_swarm.swarm_id,
+                                d_type,
+                                data,
+                            ))
+                            .await;
                     }
                     FromPresentation::UpdateContent(c_id, d_type, d_id, data) => {
                         if !home_swarm_enforced {
@@ -293,12 +300,15 @@ impl ApplicationLogic {
                             continue;
                         }
                         eprintln!("Requesting ChangeContent");
-                        let _ = self.to_app_mgr_send.send(ToAppMgr::ChangeContent(
-                            self.active_swarm.swarm_id,
-                            c_id,
-                            d_type,
-                            data,
-                        ));
+                        let _ = self
+                            .to_app_mgr_send
+                            .send(ToAppMgr::ChangeContent(
+                                self.active_swarm.swarm_id,
+                                c_id,
+                                d_type,
+                                data,
+                            ))
+                            .await;
                     }
                     FromPresentation::AddTags(tags) => {
                         eprintln!("Received FromPresentation::AddTags({:?})", tags);
@@ -312,18 +322,22 @@ impl ApplicationLogic {
                             // we need to sync it with swarm.
                             let _ = self
                                 .to_app_mgr_send
-                                .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, 0));
+                                .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, 0))
+                                .await;
                             // TODO: Probably it is better to hide this functionality from user
                             // and instead send a list of Data objects to update/create
                             let data_vec = self.active_swarm.manifest.to_data();
                             // TODO: this is not the data we want to send!
                             eprintln!("app logic received add tags request,\nsending change content to app mgr…");
-                            let _ = self.to_app_mgr_send.send(ToAppMgr::ChangeContent(
-                                self.active_swarm.swarm_id,
-                                0,
-                                DataType::Data(0),
-                                data_vec,
-                            ));
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::ChangeContent(
+                                    self.active_swarm.swarm_id,
+                                    0,
+                                    DataType::Data(0),
+                                    data_vec,
+                                ))
+                                .await;
                         }
                     }
                     FromPresentation::AddDataType(tag) => {
@@ -339,23 +353,30 @@ impl ApplicationLogic {
                             // we need to sync it with swarm.
                             let _ = self
                                 .to_app_mgr_send
-                                .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, 0));
+                                .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, 0))
+                                .await;
                             // TODO: Probably it is better to hide this functionality from user
                             // and instead send a list of Data objects to update/create
                             let data_vec = self.active_swarm.manifest.to_data();
                             // TODO: this is not the data we want to send!
                             eprintln!("app logic received add data type request,\nsending change content to app mgr…");
-                            let _ = self.to_app_mgr_send.send(ToAppMgr::ChangeContent(
-                                self.active_swarm.swarm_id,
-                                0,
-                                DataType::Data(0),
-                                data_vec,
-                            ));
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::ChangeContent(
+                                    self.active_swarm.swarm_id,
+                                    0,
+                                    DataType::Data(0),
+                                    data_vec,
+                                ))
+                                .await;
                         }
                     }
                     FromPresentation::NeighborSelected(gnome_id) => {
                         eprintln!("Selected neighbor: {:?}", gnome_id);
-                        let _ = self.to_app_mgr_send.send(ToAppMgr::SetActiveApp(gnome_id));
+                        let _ = self
+                            .to_app_mgr_send
+                            .send(ToAppMgr::SetActiveApp(gnome_id))
+                            .await;
                     }
                     FromPresentation::ShowContextMenu(ttype) => {
                         self.state = TuiState::ContextMenuOn(ttype);
@@ -531,11 +552,14 @@ impl ApplicationLogic {
                             TuiState::AppendData(c_id) => {
                                 if let Some(text) = e_result {
                                     let data = Data::new(text.bytes().collect()).unwrap();
-                                    let _ = self.to_app_mgr_send.send(ToAppMgr::AppendData(
-                                        self.active_swarm.swarm_id,
-                                        c_id,
-                                        data,
-                                    ));
+                                    let _ = self
+                                        .to_app_mgr_send
+                                        .send(ToAppMgr::AppendData(
+                                            self.active_swarm.swarm_id,
+                                            c_id,
+                                            data,
+                                        ))
+                                        .await;
                                 }
                             }
                             TuiState::CreatorDisplayDescription(
@@ -596,12 +620,15 @@ impl ApplicationLogic {
                                     eprintln!("Got edit result while indexing");
                                     if let Some(d_id) = d_id_opt {
                                         let data = Data::new(text.bytes().collect()).unwrap();
-                                        let _ = self.to_app_mgr_send.send(ToAppMgr::UpdateData(
-                                            self.active_swarm.swarm_id,
-                                            c_id,
-                                            d_id,
-                                            data,
-                                        ));
+                                        let _ = self
+                                            .to_app_mgr_send
+                                            .send(ToAppMgr::UpdateData(
+                                                self.active_swarm.swarm_id,
+                                                c_id,
+                                                d_id,
+                                                data,
+                                            ))
+                                            .await;
                                     }
                                 } else {
                                     new_state = TuiState::Indexing(
@@ -629,10 +656,10 @@ impl ApplicationLogic {
                         match prev_state {
                             TuiState::ContextMenuOn(ttype) => match ttype {
                                 TileType::Home(g_id) => {
-                                    self.run_cmenu_action_on_home(action);
+                                    self.run_cmenu_action_on_home(action).await;
                                 }
                                 TileType::Content(d_type, c_id) => {
-                                    self.run_cmenu_action_on_content(c_id, d_type, action);
+                                    self.run_cmenu_action_on_content(c_id, d_type, action).await;
                                 }
                                 other => {
                                     eprintln!(
@@ -803,12 +830,15 @@ impl ApplicationLogic {
                                         for byte in descr.bytes() {
                                             bytes.push(byte as u8);
                                         }
-                                        let _ = self.to_app_mgr_send.send(ToAppMgr::UpdateData(
-                                            self.active_swarm.swarm_id,
-                                            *c_id,
-                                            0,
-                                            Data::new(bytes).unwrap(),
-                                        ));
+                                        let _ = self
+                                            .to_app_mgr_send
+                                            .send(ToAppMgr::UpdateData(
+                                                self.active_swarm.swarm_id,
+                                                *c_id,
+                                                0,
+                                                Data::new(bytes).unwrap(),
+                                            ))
+                                            .await;
                                     } else {
                                         let mut bytes = Vec::with_capacity(1024);
                                         bytes.push(tag_indices.len() as u8);
@@ -820,11 +850,14 @@ impl ApplicationLogic {
                                         }
                                         let data = Data::new(bytes).unwrap();
                                         eprintln!("Requesting AppendContent {}", data.get_hash());
-                                        let _ = self.to_app_mgr_send.send(ToAppMgr::AppendContent(
-                                            self.active_swarm.swarm_id,
-                                            *d_type,
-                                            data,
-                                        ));
+                                        let _ = self
+                                            .to_app_mgr_send
+                                            .send(ToAppMgr::AppendContent(
+                                                self.active_swarm.swarm_id,
+                                                *d_type,
+                                                data,
+                                            ))
+                                            .await;
                                     }
                                 } else {
                                     eprintln!("Got TUI Create request when in {:?}", self.state);
@@ -834,9 +867,9 @@ impl ApplicationLogic {
                         }
                     }
                     FromPresentation::KeyPress(key) => {
-                        if self.handle_key(key) {
+                        if self.handle_key(key).await {
                             // eprintln!("Sending ToAppMgr::Quit");
-                            let _ = self.to_app_mgr_send.send(ToAppMgr::Quit);
+                            let _ = self.to_app_mgr_send.send(ToAppMgr::Quit).await;
                         }
                     }
                     FromPresentation::ContentInquiry(c_id) => {
@@ -846,7 +879,8 @@ impl ApplicationLogic {
                         }
                         let _ = self
                             .to_app_mgr_send
-                            .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, c_id));
+                            .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, c_id))
+                            .await;
                     }
                     FromPresentation::IndexResult(i_result) => {
                         let mut new_state = None;
@@ -858,11 +892,14 @@ impl ApplicationLogic {
                                         page_id, c_id
                                     );
                                     if page_id > 0 {
-                                        let _ = self.to_app_mgr_send.send(ToAppMgr::RemoveData(
-                                            self.active_swarm.swarm_id,
-                                            *c_id,
-                                            page_id as u16,
-                                        ));
+                                        let _ = self
+                                            .to_app_mgr_send
+                                            .send(ToAppMgr::RemoveData(
+                                                self.active_swarm.swarm_id,
+                                                *c_id,
+                                                page_id as u16,
+                                            ))
+                                            .await;
                                     } else {
                                         // TODO: make this logic built-into dapp-lib
                                         eprintln!("Unable to remove Page #0");
@@ -956,7 +993,8 @@ impl ApplicationLogic {
                                         new_state = Some(TuiState::Village);
                                         let _ = self
                                             .to_app_mgr_send
-                                            .send(ToAppMgr::SetActiveApp(*gnome_id));
+                                            .send(ToAppMgr::SetActiveApp(*gnome_id))
+                                            .await;
                                         let _ =
                                             self.to_tui.send(ToPresentation::SwapTiles(*gnome_id));
                                     }
@@ -979,8 +1017,11 @@ impl ApplicationLogic {
                 match msg {
                     ToApp::ActiveSwarm(f_id, s_id) => {
                         eprintln!("Requesting Manifest");
-                        let _ = self.to_app_mgr_send.send(ToAppMgr::ReadData(s_id, 0));
-                        let _ = self.to_app_mgr_send.send(ToAppMgr::ReadAllFirstPages(s_id));
+                        let _ = self.to_app_mgr_send.send(ToAppMgr::ReadData(s_id, 0)).await;
+                        let _ = self
+                            .to_app_mgr_send
+                            .send(ToAppMgr::ReadAllFirstPages(s_id))
+                            .await;
                         if !home_swarm_enforced {
                             home_swarm_enforced = true;
                             for msg in buffered_from_tui.iter_mut() {
@@ -997,7 +1038,7 @@ impl ApplicationLogic {
                                 let _ = self.to_user_send.send(note);
                             }
                         }
-                        let _ = self.to_app_mgr_send.send(ToAppMgr::ListNeighbors);
+                        let _ = self.to_app_mgr_send.send(ToAppMgr::ListNeighbors).await;
                     }
                     ToApp::MyPublicIPs(ip_list) => {
                         //TODO: push this to my swarm's Manifest after syncing
@@ -1038,7 +1079,8 @@ impl ApplicationLogic {
                                 if tags.contains(tag) {
                                     let _ = self
                                         .to_app_mgr_send
-                                        .send(ToAppMgr::CIDsForTag(s_id, n_id, *tag, c_id, data));
+                                        .send(ToAppMgr::CIDsForTag(s_id, n_id, *tag, c_id, data))
+                                        .await;
                                     break;
                                 }
                             }
@@ -1048,7 +1090,8 @@ impl ApplicationLogic {
                         if !home_swarm_enforced {
                             let _ = self
                                 .to_app_mgr_send
-                                .send(ToAppMgr::SetActiveApp(self.my_id));
+                                .send(ToAppMgr::SetActiveApp(self.my_id))
+                                .await;
                         }
                         if s_id == self.active_swarm.swarm_id {
                             if self.my_id == self.active_swarm.founder_id {
@@ -1094,14 +1137,19 @@ impl ApplicationLogic {
                     ToApp::ContentChanged(s_id, c_id, d_type, main_page_option) => {
                         if c_id == 0 {
                             eprintln!("Requesting ReadData for CID-0");
-                            let _ = self.to_app_mgr_send.send(ToAppMgr::ReadData(s_id, c_id));
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::ReadData(s_id, c_id))
+                                .await;
                         }
                         if s_id == self.active_swarm.swarm_id && home_swarm_enforced {
                             if let Some(main_page) = main_page_option {
                                 if main_page.is_empty() && main_page.get_hash() > 0 {
                                     eprintln!("We should check if Tags have changed");
-                                    let _ =
-                                        self.to_app_mgr_send.send(ToAppMgr::ReadData(s_id, c_id));
+                                    let _ = self
+                                        .to_app_mgr_send
+                                        .send(ToAppMgr::ReadData(s_id, c_id))
+                                        .await;
                                 } else {
                                     self.update_active_content_tags(s_id, c_id, d_type, main_page);
                                 }
@@ -1123,7 +1171,7 @@ impl ApplicationLogic {
                         // );
                         if s_id == self.active_swarm.swarm_id {
                             // eprintln!("processing it");
-                            self.process_data(c_id, d_type, d_vec);
+                            self.process_data(c_id, d_type, d_vec).await;
                         } else {
                             // eprintln!(
                             //     "shelving it (active swarm: {:?})",
@@ -1140,7 +1188,10 @@ impl ApplicationLogic {
                         if matches!(error, AppError::AppDataNotSynced) && c_id == 0 {
                             //TODO: some delay would be nice
                             eprintln!("Requesting CID-{} again…", c_id);
-                            let _ = self.to_app_mgr_send.send(ToAppMgr::ReadData(s_id, c_id));
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::ReadData(s_id, c_id))
+                                .await;
                         }
                         if s_id == self.active_swarm.swarm_id {
                             if c_id == 0 && self.my_id == self.active_swarm.founder_id {
@@ -1167,7 +1218,7 @@ impl ApplicationLogic {
                         }
                     }
                     ToApp::Disconnected(is_reconnecting, s_id, s_name) => {
-                        self.swarm_disconnected(is_reconnecting, s_id, s_name)
+                        self.swarm_disconnected(is_reconnecting, s_id, s_name).await
                         // TODO: maybe later we can allow offline read-only mode
                         // but for now we need to implement something simple
                         //
@@ -1181,7 +1232,7 @@ impl ApplicationLogic {
         }
     }
 
-    fn process_data(&mut self, c_id: ContentID, d_type: DataType, mut d_vec: Vec<Data>) {
+    async fn process_data(&mut self, c_id: ContentID, d_type: DataType, mut d_vec: Vec<Data>) {
         if c_id == 0 {
             // eprintln!(
             //     "Sending Manifest d_vec.len: {} to Presentation",
@@ -1260,12 +1311,15 @@ impl ApplicationLogic {
                 if self.active_swarm.manifest.update_pub_ips(ips) {
                     eprintln!("Now we should sync updated Manifest to Swarm");
                     let data_vec = self.active_swarm.manifest.to_data();
-                    let _ = self.to_app_mgr_send.send(ToAppMgr::ChangeContent(
-                        self.active_swarm.swarm_id,
-                        0,
-                        DataType::Data(0),
-                        data_vec,
-                    ));
+                    let _ = self
+                        .to_app_mgr_send
+                        .send(ToAppMgr::ChangeContent(
+                            self.active_swarm.swarm_id,
+                            0,
+                            DataType::Data(0),
+                            data_vec,
+                        ))
+                        .await;
                 }
             }
         } else {
@@ -1440,12 +1494,18 @@ impl ApplicationLogic {
             .to_tui
             .send(ToPresentation::DisplayIndexer(active_swarms));
     }
-    fn swarm_disconnected(&mut self, is_reconnecting: bool, s_id: SwarmID, s_name: SwarmName) {
+    async fn swarm_disconnected(
+        &mut self,
+        is_reconnecting: bool,
+        s_id: SwarmID,
+        s_name: SwarmName,
+    ) {
         if self.active_swarm.swarm_id == s_id {
             self.state = TuiState::ShowActiveSwarms(vec![]);
             let _ = self
                 .to_app_mgr_send
-                .send(ToAppMgr::ProvideGnomeToSwarmMapping);
+                .send(ToAppMgr::ProvideGnomeToSwarmMapping)
+                .await;
             // TODO: In this case if active swarm != our own swarm
             // we can simply switch to our own & send a notification
             // that current swarm got disconnected
@@ -1485,7 +1545,12 @@ impl ApplicationLogic {
             );
         }
     }
-    fn run_cmenu_action_on_content(&mut self, c_id: ContentID, d_type: DataType, action: usize) {
+    async fn run_cmenu_action_on_content(
+        &mut self,
+        c_id: ContentID,
+        d_type: DataType,
+        action: usize,
+    ) {
         match action {
             1 => {
                 //TODO
@@ -1500,7 +1565,7 @@ impl ApplicationLogic {
             }
             2 => {
                 // eprintln!("Setting state to RemovePage({})", c_id);
-                self.query_content_for_indexer(c_id);
+                self.query_content_for_indexer(c_id).await;
                 self.state = TuiState::RemovePage(c_id);
             }
             other => {
@@ -1509,7 +1574,7 @@ impl ApplicationLogic {
             }
         }
     }
-    fn run_cmenu_action_on_home(&mut self, action: usize) {
+    async fn run_cmenu_action_on_home(&mut self, action: usize) {
         //TODO
         eprintln!(
             "We should perform action: {} when in {:?}",
@@ -1563,7 +1628,8 @@ impl ApplicationLogic {
                 self.state = TuiState::ShowActiveSwarms(vec![]);
                 let _ = self
                     .to_app_mgr_send
-                    .send(ToAppMgr::ProvideGnomeToSwarmMapping);
+                    .send(ToAppMgr::ProvideGnomeToSwarmMapping)
+                    .await;
             }
             7 => {
                 eprintln!("Show known Swarms");
@@ -1574,23 +1640,24 @@ impl ApplicationLogic {
         }
     }
 
-    fn query_content_for_indexer(&mut self, c_id: ContentID) {
+    async fn query_content_for_indexer(&mut self, c_id: ContentID) {
         eprintln!("In query_content_for_indexer");
         //TODO: first we need to retrieve Pages in order to have something to present
         if matches!(self.state, TuiState::Village) {
             self.state = TuiState::ReadRequestForIndexer(c_id);
             let _ = self
                 .to_app_mgr_send
-                .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, c_id));
+                .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, c_id))
+                .await;
         } else {
             eprintln!("Can not run query when in state: {:?}", self.state);
         }
     }
 
-    fn handle_key(&self, key: Key) -> bool {
+    async fn handle_key(&self, key: Key) -> bool {
         match key {
             Key::U => {
-                let _ = self.to_app_mgr_send.send(ToAppMgr::UploadData);
+                let _ = self.to_app_mgr_send.send(ToAppMgr::UploadData).await;
             }
             Key::J => {
                 // TODO: indirect send via AppMgr
@@ -1604,60 +1671,74 @@ impl ApplicationLogic {
             }
             // TODO: this should be served separately by sending to user_req
             Key::B => {
-                let _ = self.to_app_mgr_send.send(ToAppMgr::StartBroadcast);
+                let _ = self.to_app_mgr_send.send(ToAppMgr::StartBroadcast).await;
                 // let res = service_request.send(Request::StartBroadcast);
                 // b_req_sent = res.is_ok();
             }
             Key::ShiftB => {
                 eprintln!("ShiftB");
-                let _ = self.to_app_mgr_send.send(ToAppMgr::EndBroadcast);
+                let _ = self.to_app_mgr_send.send(ToAppMgr::EndBroadcast).await;
                 // let res = service_request.send(Request::StartBroadcast);
                 // b_req_sent = res.is_ok();
             }
             Key::CtrlB => {
-                let _ = self.to_app_mgr_send.send(ToAppMgr::UnsubscribeBroadcast);
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::UnsubscribeBroadcast)
+                    .await;
             }
             Key::CtrlU => {
                 let _ = self
                     .to_app_mgr_send
                     .send(ToAppMgr::TransformLinkRequest(Box::new(
                         SyncData::new(vec![27; 1024]).unwrap(),
-                    )));
+                    )))
+                    .await;
             }
             Key::M => {
                 // Here we send request to read manifest data
                 let _ = self
                     .to_app_mgr_send
-                    .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, 0));
+                    .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, 0))
+                    .await;
             }
             Key::N => {
-                let _ = self.to_app_mgr_send.send(ToAppMgr::ListNeighbors);
+                let _ = self.to_app_mgr_send.send(ToAppMgr::ListNeighbors).await;
             }
             Key::C => {
-                let _ = self.to_app_mgr_send.send(ToAppMgr::ChangeContent(
-                    self.active_swarm.swarm_id,
-                    1,
-                    DataType::from(0),
-                    vec![Data::empty(0)],
-                ));
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::ChangeContent(
+                        self.active_swarm.swarm_id,
+                        1,
+                        DataType::from(0),
+                        vec![Data::empty(0)],
+                    ))
+                    .await;
             }
             Key::S => {
-                let _ = self.to_app_mgr_send.send(ToAppMgr::AppendContent(
-                    self.active_swarm.swarm_id,
-                    DataType::Data(0),
-                    Data::empty(0),
-                ));
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::AppendContent(
+                        self.active_swarm.swarm_id,
+                        DataType::Data(0),
+                        Data::empty(0),
+                    ))
+                    .await;
             }
             Key::ShiftS => {
                 // TODO: extend this message with actual content
-                let _ = self.to_app_mgr_send.send(ToAppMgr::AppendContent(
-                    self.active_swarm.swarm_id,
-                    DataType::Data(0),
-                    Data::empty(0),
-                ));
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::AppendContent(
+                        self.active_swarm.swarm_id,
+                        DataType::Data(0),
+                        Data::empty(0),
+                    ))
+                    .await;
             }
             Key::ShiftU => {
-                let _ = self.to_app_mgr_send.send(ToAppMgr::StartUnicast);
+                let _ = self.to_app_mgr_send.send(ToAppMgr::StartUnicast).await;
             }
             _ => eprintln!(),
         }
