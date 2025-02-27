@@ -1,18 +1,14 @@
 use animaterm::prelude::*;
 use async_std::channel::Receiver as AReceiver;
 use async_std::channel::Sender as ASender;
-use async_std::task::sleep;
 use dapp_lib::prelude::SwarmID;
 use dapp_lib::prelude::SwarmName;
 use dapp_lib::prelude::*;
 use dapp_lib::ToAppMgr;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::fmt::format;
 use std::net::IpAddr;
-use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
-use std::time::Duration;
 mod manifest;
 use crate::tui::Direction;
 use crate::tui::{CreatorResult, FromPresentation, TileType, ToPresentation};
@@ -194,13 +190,7 @@ impl ApplicationLogic {
         }
     }
     pub async fn run(&mut self) {
-        // let dur = Duration::from_millis(32);
-        // let mut home_swarm_enforced = false;
-
-        // let mut buffered_from_tui = vec![];
         'outer: loop {
-            // sleep(dur).await;
-            // if let Ok(from_tui) = self.from_tui_recv.try_recv() {}
             while let Ok(internal_msg) = self.to_app.recv().await {
                 match internal_msg {
                     InternalMsg::User(msg) => match msg {
@@ -285,6 +275,11 @@ impl ApplicationLogic {
                                     .to_app_mgr_send
                                     .send(ToAppMgr::SetActiveApp(self.my_id))
                                     .await;
+                                self.pending_notifications
+                                    .entry(s_id)
+                                    .or_insert(vec![])
+                                    .push(ToApp::Neighbors(s_id, neighbors));
+                                continue;
                             }
                             if s_id == self.active_swarm.swarm_id {
                                 if self.my_id == self.active_swarm.founder_id {
@@ -380,10 +375,10 @@ impl ApplicationLogic {
                             }
                         }
                         ToApp::ReadError(s_id, c_id, error) => {
-                            eprintln!("Received ReadError for {} CID-{}: {}", s_id, c_id, error);
+                            // eprintln!("Received ReadError for {} CID-{}: {}", s_id, c_id, error);
                             if matches!(error, AppError::AppDataNotSynced) && c_id == 0 {
                                 //TODO: some delay would be nice
-                                eprintln!("Requesting CID-{} again…", c_id);
+                                // eprintln!("Requesting CID-{} again…", c_id);
                                 let _ = self
                                     .to_app_mgr_send
                                     .send(ToAppMgr::ReadData(s_id, c_id))
@@ -620,7 +615,7 @@ impl ApplicationLogic {
                                     //TODO: select proper set_id depending on g_id value
                                     let _ = self.to_tui.send(ToPresentation::DisplayCMenu(1));
                                 }
-                                TileType::Neighbor(g_id) => {
+                                TileType::Neighbor(_g_id) => {
                                     //TODO
                                 }
                                 TileType::Content(dtype, c_id) => {
