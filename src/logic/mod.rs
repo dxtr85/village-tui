@@ -45,7 +45,7 @@ struct SwarmShell {
     swarm_id: SwarmID,
     founder_id: GnomeId,
     manifest: Manifest,
-    tag_to_cid: HashMap<Tag, HashSet<(DataType, ContentID)>>,
+    tag_to_cid: HashMap<Tag, HashSet<(DataType, ContentID, String)>>,
     tag_ring: Vec<Vec<Tag>>,
 }
 
@@ -72,19 +72,20 @@ impl SwarmShell {
         c_id: ContentID,
         d_type: DataType,
         tags: Vec<Tag>,
+        header: String,
     ) -> (Vec<Tag>, Vec<Tag>) {
         eprintln!("update_tag_to_cid {}: {:?}", c_id, tags);
         let mut newly_added = vec![];
         let mut removed = vec![];
-        let to_add = (d_type, c_id);
+        let to_add = (d_type, c_id, header.clone());
         if tags.is_empty() {
             if let Some(set) = self.tag_to_cid.get_mut(&Tag::empty()) {
-                if set.insert((d_type, c_id)) {
+                if set.insert((d_type, c_id, header)) {
                     newly_added.push(Tag::empty());
                 }
             } else {
                 let mut set = HashSet::new();
-                set.insert((d_type, c_id));
+                set.insert((d_type, c_id, header));
                 self.tag_to_cid.insert(Tag::empty(), set);
                 newly_added.push(Tag::empty());
             }
@@ -100,12 +101,12 @@ impl SwarmShell {
                     // Do nothing
                 } else {
                     eprintln!("inserting");
-                    let _ = cids.insert(to_add);
+                    let _ = cids.insert(to_add.clone());
                     newly_added.push(new_tag.clone());
                 }
             } else {
                 let mut hsadd = HashSet::new();
-                hsadd.insert(to_add);
+                hsadd.insert(to_add.clone());
                 eprintln!("hash set: {:?}", hsadd);
                 let res = self.tag_to_cid.insert(new_tag.clone(), hsadd);
                 eprintln!("not found,insert result: {:?}", res);
@@ -134,7 +135,7 @@ impl SwarmShell {
         (newly_added, removed)
     }
 
-    pub fn get_cids_for_tag(&self, tag: Tag) -> HashSet<(DataType, ContentID)> {
+    pub fn get_cids_for_tag(&self, tag: Tag) -> HashSet<(DataType, ContentID, String)> {
         if let Some(contents) = self.tag_to_cid.get(&tag) {
             contents.clone()
         } else {
@@ -1396,9 +1397,8 @@ impl ApplicationLogic {
                         let mut all_notes = Vec::with_capacity(d_vec.len());
                         all_notes.push(String::new());
                         let mut all_headers = Vec::with_capacity(d_vec.len());
-                        let mut description = String::new();
                         let first_data = d_vec.remove(0);
-                        let tag_ids = read_tags(first_data.clone());
+                        let (tag_ids, description) = read_tags_and_header(first_data.clone());
                         let mut bytes = first_data.bytes();
                         let _ = bytes.remove(0);
                         for _i in 0..tag_ids.len() {
@@ -1413,7 +1413,6 @@ impl ApplicationLogic {
                         //         eprintln!("This should not happen!");
                         //     }
                         // }
-                        description.push_str(&String::from_utf8(bytes).unwrap());
                         let mut header = String::new();
                         if !description.is_empty() {
                             for c in description.lines().next().unwrap().chars() {
@@ -1478,7 +1477,7 @@ impl ApplicationLogic {
     ) {
         // eprintln!("ToApp::NewContent({:?},{:?})", c_id, d_type);
         // eprintln!("CID-{} Main page: {:?}", c_id, main_page);
-        let tag_ids = read_tags(main_page.clone());
+        let (tag_ids, header) = read_tags_and_header(main_page.clone());
         let ids_len = tag_ids.len();
         // eprintln!("{} tag ids: {:?}", c_id, tag_ids);
         // eprintln!("Manifest tags: {:?}", self.active_swarm.manifest.tags);
@@ -1495,12 +1494,14 @@ impl ApplicationLogic {
                 .or_insert(vec![])
                 .push(ToApp::NewContent(s_id, c_id, d_type, main_page));
         } else {
-            let (added, removed) = self.active_swarm.update_tag_to_cid(c_id, d_type, tags);
+            let (added, removed) =
+                self.active_swarm
+                    .update_tag_to_cid(c_id, d_type, tags, header.clone());
             eprintln!("added: {:?}\nremoved: {:?}", added, removed);
             if !added.is_empty() {
                 let _ = self
                     .to_tui
-                    .send(ToPresentation::AppendContent(c_id, d_type, added));
+                    .send(ToPresentation::AppendContent(c_id, d_type, added, header));
             }
             if !removed.is_empty() {
                 let mut visible_removed = vec![];
@@ -1806,9 +1807,9 @@ impl ApplicationLogic {
         false
     }
 }
-fn read_tags(data: Data) -> Vec<u8> {
+fn read_tags_and_header(data: Data) -> (Vec<u8>, String) {
     if data.is_empty() {
-        return vec![];
+        return (vec![], String::new());
     }
     let mut bytes = data.bytes();
     let how_many_tags = bytes.remove(0);
@@ -1820,5 +1821,12 @@ fn read_tags(data: Data) -> Vec<u8> {
             eprintln!("This should not happen!");
         }
     }
-    tag_ids
+    let header = String::from_utf8(bytes)
+        .unwrap()
+        .lines()
+        .next()
+        .unwrap()
+        .trim()
+        .to_string();
+    (tag_ids, header)
 }

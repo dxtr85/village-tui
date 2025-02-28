@@ -89,7 +89,13 @@ impl VillageLayout {
             }
         }
         if let Some(tile) = self.tiles.get_mut(&self.home_tile) {
-            tile.set_to_home(owner_id, true, owner_id == self.my_id, mgr);
+            tile.set_to_home(
+                owner_id,
+                true,
+                owner_id == self.my_id,
+                // Some(format!("Testowy pirszy")),
+                mgr,
+            );
         }
         self.visible_rows >> 1
     }
@@ -116,7 +122,13 @@ impl VillageLayout {
                 tile.set_to_field(mgr);
             }
             if let Some(tile) = self.tiles.get_mut(&self.home_tile) {
-                tile.set_to_home(owner_id, false, owner_id == self.my_id, mgr);
+                tile.set_to_home(
+                    owner_id,
+                    false,
+                    owner_id == self.my_id,
+                    // Some(format!("{}", owner_id)),
+                    mgr,
+                );
             }
             self.selected_tile = self.home_tile;
         }
@@ -124,7 +136,7 @@ impl VillageLayout {
 
     fn set_street_names(
         &mut self,
-        str_names: Vec<(Tag, HashSet<(DataType, ContentID)>)>,
+        str_names: Vec<(Tag, HashSet<(DataType, ContentID, String)>)>,
         mgr: &mut Manager,
     ) {
         eprintln!("set_street_names, resetting street_to_rows");
@@ -190,7 +202,13 @@ impl VillageLayout {
         if let Some(tile) = self.tiles.get_mut(&self.home_tile) {
             if let TileType::Home(curr_owner) = tile.tile_type {
                 if curr_owner.is_any() {
-                    tile.set_to_home(owner_id, false, owner_id == self.my_id, mgr);
+                    tile.set_to_home(
+                        owner_id,
+                        false,
+                        owner_id == self.my_id,
+                        // Some(format!("Testowy trzeci")),
+                        mgr,
+                    );
                 } else {
                     eprintln!(
                         "Attempt to change owner from: {} to {}",
@@ -231,7 +249,7 @@ impl VillageLayout {
         d_type: DataType,
         c_id: ContentID,
         tags: Vec<Tag>,
-        // street_to_rows: &HashMap<Tag, Vec<u8>>,
+        description: String,
         mgr: &mut Manager,
         // ) -> (u8, u8) {
     ) {
@@ -244,7 +262,7 @@ impl VillageLayout {
                 let tile_id = self.next_field_tile(restricted_rows);
                 eprintln!("Next id: {:?}", tile_id);
                 if let Some(tile) = self.tiles.get_mut(&tile_id) {
-                    tile.set_to_content(d_type, c_id, false, mgr);
+                    tile.set_to_content(Some(description.clone()), d_type, c_id, false, mgr);
                 } else {
                     eprintln!("No tile");
                 }
@@ -256,7 +274,7 @@ impl VillageLayout {
     }
     pub fn add_contents_to_rows(
         &mut self,
-        contents: HashSet<(DataType, ContentID)>,
+        contents: HashSet<(DataType, ContentID, String)>,
         restricted_rows: Vec<u8>,
         // d_type: DataType,
         // c_id: ContentID,
@@ -271,11 +289,11 @@ impl VillageLayout {
         // eprintln!("Tag: {:?}", tag);
         // if let Some(restricted_rows) = self.street_to_rows.get(&tag) {
         eprintln!("rest rows: {:?}", restricted_rows);
-        for (d_type, c_id) in contents {
+        for (d_type, c_id, header) in contents {
             let tile_id = self.next_field_tile(&restricted_rows);
             eprintln!("Next id: {:?}", tile_id);
             if let Some(tile) = self.tiles.get_mut(&tile_id) {
-                tile.set_to_content(d_type, c_id, false, mgr);
+                tile.set_to_content(Some(header), d_type, c_id, false, mgr);
             } else {
                 eprintln!("No tile");
             }
@@ -415,9 +433,9 @@ pub enum Direction {
 
 pub enum ToPresentation {
     Neighbors(Vec<GnomeId>),
-    AppendContent(ContentID, DataType, Vec<Tag>),
+    AppendContent(ContentID, DataType, Vec<Tag>, String),
     HideContent(ContentID, Vec<Tag>),
-    Contents(ContentID, DataType, Vec<u8>, String, Vec<Data>),
+    ContentHeader(ContentID, Data),
     ReadError(ContentID, AppError),
     DisplaySelector(bool, String, Vec<String>, Vec<usize>), //bool indicates if we are founder of active swarm
     DisplayCMenu(usize),
@@ -436,7 +454,7 @@ pub enum ToPresentation {
     ),
     DisplayIndexer(Vec<String>),
     SwapTiles(GnomeId),
-    StreetNames(Vec<(Tag, HashSet<(DataType, ContentID)>)>),
+    StreetNames(Vec<(Tag, HashSet<(DataType, ContentID, String)>)>),
 }
 
 #[derive(Clone)]
@@ -624,18 +642,18 @@ pub fn serve_tui_mgr(
                         let _tile_id = village.add_new_neighbor(neighbor, &mut mgr);
                     }
                 }
-                ToPresentation::AppendContent(c_id, d_type, tags) => {
+                ToPresentation::AppendContent(c_id, d_type, tags, description) => {
                     eprintln!(
                         "ToPresentation::AppendContent({:?}, {:?})\nTags: {:?}",
                         c_id, d_type, tags
                     );
-                    village.add_new_content(d_type, c_id, tags, &mut mgr);
+                    village.add_new_content(d_type, c_id, tags, description, &mut mgr);
                     // tiles_mapping.insert(tile_id, TileType::Content(d_type, c_id));
                 }
                 ToPresentation::HideContent(c_id, tags) => {
                     village.hide_content(c_id, tags, &mut mgr);
                 }
-                ToPresentation::Contents(c_id, d_type, tags, text, mut data_vec) => {
+                ToPresentation::ContentHeader(c_id, data) => {
                     eprintln!("Showing Contents of {}", c_id,);
                     // let read_only = !am_i_founder;
 
@@ -775,7 +793,13 @@ fn swap_tiles(
                 match tile_type {
                     TileType::Home(g_id) => {
                         if let Some(tile) = village.tiles.get_mut(&slot) {
-                            tile.set_to_home(g_id, false, g_id == village.my_id, mgr);
+                            tile.set_to_home(
+                                g_id,
+                                false,
+                                g_id == village.my_id,
+                                // Some(format!("Testowy czwarty")),
+                                mgr,
+                            );
                         }
                     }
                     TileType::Neighbor(n_id) => {
@@ -794,7 +818,7 @@ fn swap_tiles(
                     }
                     TileType::Content(d_type, c_id) => {
                         if let Some(tile) = village.tiles.get_mut(&slot) {
-                            tile.set_to_content(d_type, c_id, false, mgr);
+                            tile.set_to_content(None, d_type, c_id, false, mgr);
                         }
                     }
                 }
