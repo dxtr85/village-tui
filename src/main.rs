@@ -10,6 +10,7 @@ mod logic;
 mod tui;
 use config::Configuration;
 use logic::ApplicationLogic;
+use tui::Notifier;
 use tui::{instantiate_tui_mgr, serve_tui_mgr, FromPresentation};
 
 enum InternalMsg {
@@ -32,7 +33,7 @@ async fn main() {
     let (wrapped_sender, wrapped_receiver) = achannel::unbounded();
     let (to_app_mgr_send, to_app_mgr_recv) = achannel::unbounded();
 
-    let tui_mgr = instantiate_tui_mgr();
+    let mut tui_mgr = instantiate_tui_mgr();
     //TODO: we want to make ApplicationLogic::run() async
     // Restrictions:
     // - We can not alter logic in tui module
@@ -64,21 +65,34 @@ async fn main() {
         from_presentation_msg_recv,
         wrapped_sender.clone(),
     ));
+    let (notification_sender, notification_receiver) = achannel::unbounded();
     let mut logic = ApplicationLogic::new(
         my_id,
         to_app_mgr_send,
-        to_presentation_msg_send,
-        // from_presentation_msg_send.clone(),
+        to_presentation_msg_send.clone(),
+        notification_sender.clone(), // from_presentation_msg_send.clone(),
         // from_presentation_msg_recv,
         wrapped_sender,
         wrapped_receiver,
     );
-
+    let s_size = tui_mgr.screen_size();
+    let notifier = Notifier::new(
+        (s_size.0 as isize, 0),
+        &mut tui_mgr,
+        (notification_sender.clone(), notification_receiver),
+        to_presentation_msg_send,
+    );
+    spawn(notifier.serve());
+    let _res = notification_sender
+        .send(Some(format!("Wciśnij F1 aby uzyskać pomoc")))
+        .await;
+    eprintln!("Sent testowa notka: {:?}", _res);
     let tui_join = spawn_blocking(move || {
         serve_tui_mgr(
             my_id,
             tui_mgr,
             from_presentation_msg_send,
+            // to_presentation_msg_send,
             to_presentation_msg_recv,
             config,
         )

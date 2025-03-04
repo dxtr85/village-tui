@@ -1,5 +1,6 @@
 // use crate::logic::Manifest;
 use animaterm::prelude::*;
+use async_std::channel;
 // use animaterm::utilities::message_box;
 pub use content_creator::CreatorResult;
 use dapp_lib::prelude::AppError;
@@ -8,6 +9,7 @@ use dapp_lib::prelude::ContentID;
 use dapp_lib::prelude::DataType;
 use dapp_lib::prelude::GnomeId;
 use dapp_lib::Data;
+pub use notifier::Notifier;
 use std::collections::HashMap;
 use std::collections::HashSet;
 // use std::fmt::format;
@@ -20,6 +22,7 @@ mod content_creator;
 mod context_menu;
 mod editor;
 mod indexer;
+mod notifier;
 mod option;
 mod selector;
 mod tile;
@@ -455,6 +458,8 @@ pub enum ToPresentation {
     DisplayIndexer(Vec<String>),
     SwapTiles(GnomeId),
     StreetNames(Vec<(Tag, HashSet<(DataType, ContentID, String)>)>),
+    SetNotification(usize, Vec<Glyph>),
+    MoveNotification(usize, (isize, isize)),
 }
 
 #[derive(Clone)]
@@ -509,6 +514,7 @@ pub fn serve_tui_mgr(
     my_id: GnomeId,
     mut mgr: Manager,
     to_app: Sender<FromPresentation>,
+    // to_tui_send: Sender<ToPresentation>,
     to_tui_recv: Receiver<ToPresentation>,
     config: Configuration,
 ) {
@@ -764,6 +770,14 @@ pub fn serve_tui_mgr(
                         // let manifest = create_manifest(&mut mgr);
                         // TODO: send Data to Swarm
                     }
+                }
+                ToPresentation::SetNotification(g_id, new_frame) => {
+                    // eprintln!("Got SetNotification");
+                    let _old_frame = mgr.swap_frame(g_id, 0, new_frame);
+                    // eprintln!("Swap frame res: {:?}", _old_frame);
+                }
+                ToPresentation::MoveNotification(g_id, offset) => {
+                    mgr.move_graphic(g_id, 4, offset);
                 }
             }
         }

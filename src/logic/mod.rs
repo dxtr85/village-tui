@@ -155,6 +155,7 @@ pub struct ApplicationLogic {
     // from_tui_recv: Receiver<FromPresentation>,
     to_user_send: ASender<InternalMsg>,
     to_app: AReceiver<InternalMsg>,
+    notification_sender: ASender<Option<String>>,
     pending_notifications: HashMap<SwarmID, Vec<ToApp>>, //TODO: clear pending
     // when given SwarmID was disconnected
     visible_streets: (usize, Vec<Tag>), // (how many streets visible at once, visible street names),
@@ -166,6 +167,7 @@ impl ApplicationLogic {
         my_id: GnomeId,
         to_app_mgr_send: ASender<ToAppMgr>,
         to_tui_send: Sender<ToPresentation>,
+        notification_sender: ASender<Option<String>>,
         // from_tui_send: Sender<FromPresentation>,
         // from_tui_recv: Receiver<FromPresentation>,
         // to_user_send: Sender<ToApp>,
@@ -188,6 +190,7 @@ impl ApplicationLogic {
             visible_streets: (0, vec![]),
             home_swarm_enforced: false,
             buffered_from_tui: vec![],
+            notification_sender,
         }
     }
     pub async fn run(&mut self) {
@@ -1765,7 +1768,11 @@ impl ApplicationLogic {
                     .await;
             }
             Key::N => {
-                let _ = self.to_app_mgr_send.send(ToAppMgr::ListNeighbors).await;
+                let _res = self
+                    .notification_sender
+                    .send(Some(format!("Testowa notka")))
+                    .await;
+                // let _ = self.to_app_mgr_send.send(ToAppMgr::ListNeighbors).await;
             }
             Key::C => {
                 let _ = self

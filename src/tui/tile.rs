@@ -60,16 +60,31 @@ impl Tile {
     fn update_tile_text(&self, optional_text: Option<String>, mgr: &mut Manager) {
         mgr.set_graphic(self.text_id, 0, false);
         if let Some(text) = optional_text {
+            let words = text.split_whitespace();
             let g = Glyph::transparent();
             let mut gt = Glyph::char(' ');
             let mut test_frame = vec![g; 84];
-            for (i, char) in text.chars().enumerate() {
-                if i >= 84 {
+            let mut curr_line = 1;
+            for word in words {
+                for (i, char) in word.chars().enumerate() {
+                    if i >= 10 {
+                        continue;
+                    }
+                    gt.set_char(char);
+                    test_frame[curr_line * 12 + 1 + i] = gt.clone();
+                }
+                curr_line += 1;
+                if curr_line >= 6 {
                     break;
                 }
-                gt.set_char(char);
-                test_frame[i] = gt.clone();
             }
+            // for (i, char) in text.chars().enumerate() {
+            //     if i >= 84 {
+            //         break;
+            //     }
+            //     gt.set_char(char);
+            //     test_frame[i] = gt.clone();
+            // }
             if let Some(_old_frame) = mgr.swap_frame(self.text_id, 1, test_frame) {
                 mgr.set_graphic(self.text_id, 1, false);
             }
@@ -102,7 +117,7 @@ impl Tile {
     }
     pub fn set_to_neighbor(&mut self, n_id: GnomeId, selected: bool, mgr: &mut Manager) {
         // TODO: make use of n_id
-        self.update_tile_text(Some(format!("Nejbor {:#x}", n_id.0)), mgr);
+        self.update_tile_text(Some(format!("Nejbor {:x}", n_id.0)), mgr);
         self.select_frame = 7;
         self.deselect_frame = 6;
         self.tile_type = TileType::Neighbor(n_id);
