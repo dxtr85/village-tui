@@ -51,7 +51,7 @@ async fn main() {
     } else {
         std::mem::replace(&mut config.storage_neighbors, vec![])
     };
-    let my_id = initialize(
+    let my_name = initialize(
         to_application_send,
         to_app_mgr_send.clone(),
         to_app_mgr_recv,
@@ -66,8 +66,9 @@ async fn main() {
         wrapped_sender.clone(),
     ));
     let (notification_sender, notification_receiver) = achannel::unbounded();
+    let founder = my_name.founder;
     let mut logic = ApplicationLogic::new(
-        my_id,
+        my_name,
         to_app_mgr_send,
         to_presentation_msg_send.clone(),
         notification_sender.clone(), // from_presentation_msg_send.clone(),
@@ -89,7 +90,7 @@ async fn main() {
     eprintln!("Sent testowa notka: {:?}", _res);
     let tui_join = spawn_blocking(move || {
         serve_tui_mgr(
-            my_id,
+            founder,
             tui_mgr,
             from_presentation_msg_send,
             // to_presentation_msg_send,

@@ -79,7 +79,7 @@ impl CMenu {
         let mut selection = self.current_set.starting_frame;
         // eprintln!("Set nr: {}", set_nr);
         mgr.set_graphic(self.g_id, self.current_set.starting_frame, false);
-        mgr.move_graphic(self.g_id, 3, offset);
+        mgr.move_graphic(self.g_id, 4, offset);
         loop {
             if let Some(key) = mgr.read_key() {
                 match key {

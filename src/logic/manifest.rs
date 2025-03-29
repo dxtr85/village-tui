@@ -483,6 +483,9 @@ impl Manifest {
     }
     pub fn dtype_string(&self, dtype_id: u8) -> String {
         eprintln!("Searching for DType name for {}", dtype_id);
+        if dtype_id == 255 {
+            return format!("Link");
+        }
         let mut tstring = String::new();
         if let Some(tag) = self.d_types.get(&dtype_id) {
             eprintln!("Found: {}", tag.0);

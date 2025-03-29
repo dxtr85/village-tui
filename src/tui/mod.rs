@@ -8,6 +8,7 @@ use dapp_lib::prelude::AppType;
 use dapp_lib::prelude::ContentID;
 use dapp_lib::prelude::DataType;
 use dapp_lib::prelude::GnomeId;
+use dapp_lib::prelude::SwarmName;
 use dapp_lib::Data;
 pub use notifier::Notifier;
 use std::collections::HashMap;
@@ -40,7 +41,7 @@ pub use tile::TileType;
 // use viewer::Viewer;
 
 pub struct VillageLayout {
-    my_id: GnomeId,
+    my_name: SwarmName,
     tiles_in_row: u8,
     visible_rows: u8,
     home_tile: (u8, u8),
@@ -55,7 +56,10 @@ impl VillageLayout {
         let tiles_in_row: u8 = (x_size / 12) as u8;
         let visible_rows: u8 = (y_size / 8) as u8 + 1;
         VillageLayout {
-            my_id: GnomeId::any(),
+            my_name: SwarmName {
+                founder: GnomeId::any(),
+                name: format!("/"),
+            },
             tiles_in_row,
             visible_rows,
             home_tile: (2, 1),
@@ -72,7 +76,7 @@ impl VillageLayout {
         mgr: &mut Manager,
         config: Configuration,
     ) -> u8 {
-        self.my_id = owner_id;
+        self.my_name.founder = owner_id;
         for col in 0..self.tiles_in_row {
             for row in 0..self.visible_rows {
                 let off_x: isize = if col > 1 {
@@ -95,7 +99,7 @@ impl VillageLayout {
             tile.set_to_home(
                 owner_id,
                 true,
-                owner_id == self.my_id,
+                owner_id == self.my_name.founder,
                 // Some(format!("Testowy pirszy")),
                 mgr,
             );
@@ -128,7 +132,7 @@ impl VillageLayout {
                 tile.set_to_home(
                     owner_id,
                     false,
-                    owner_id == self.my_id,
+                    owner_id == self.my_name.founder,
                     // Some(format!("{}", owner_id)),
                     mgr,
                 );
@@ -203,22 +207,24 @@ impl VillageLayout {
 
     pub fn set_owner(&mut self, owner_id: GnomeId, mgr: &mut Manager) {
         if let Some(tile) = self.tiles.get_mut(&self.home_tile) {
-            if let TileType::Home(curr_owner) = tile.tile_type {
-                if curr_owner.is_any() {
-                    tile.set_to_home(
-                        owner_id,
-                        false,
-                        owner_id == self.my_id,
-                        // Some(format!("Testowy trzeci")),
-                        mgr,
-                    );
-                } else {
-                    eprintln!(
-                        "Attempt to change owner from: {} to {}",
-                        curr_owner, owner_id
-                    );
-                }
-            }
+            // if let TileType::Home(curr_owner) = tile.tile_type {
+            // if curr_owner.is_any() {
+            tile.set_to_home(
+                owner_id,
+                false,
+                owner_id == self.my_name.founder,
+                // Some(format!("Testowy trzeci")),
+                mgr,
+            );
+            // } else {
+            //     eprintln!(
+            //         "Attempt to change owner from: {} to {}",
+            //         curr_owner, owner_id
+            //     );
+            // }
+            // }
+        } else {
+            eprintln!("Unable to find home tile in order to set owner");
         }
     }
 
@@ -232,7 +238,11 @@ impl VillageLayout {
         }
     }
     pub fn get_selection(&self) -> TileType {
-        self.tiles.get(&self.selected_tile).unwrap().tile_type
+        self.tiles
+            .get(&self.selected_tile)
+            .unwrap()
+            .tile_type
+            .clone()
     }
     pub fn add_new_neighbor(&mut self, n_id: GnomeId, mgr: &mut Manager) -> (u8, u8) {
         if let Some(tile_location) = self.neighbors.get(&n_id) {
@@ -471,7 +481,7 @@ pub enum FromPresentation {
     CreateContent(DataType, Data),
     UpdateContent(ContentID, DataType, u16, Vec<Data>),
     ContentInquiry(ContentID),
-    NeighborSelected(GnomeId),
+    NeighborSelected(SwarmName),
     KeyPress(Key),
     ShowContextMenu(TileType),
     TileSelected(TileType),
@@ -559,12 +569,26 @@ pub fn serve_tui_mgr(
         vec![
             " Nowa Notatka".to_string(),
             " Usuń Notatkę".to_string(),
-            " By".to_string(),
+            " Kopiuj Odnośnik".to_string(),
             " Nie".to_string(),
             " Było".to_string(),
             " Będzie".to_string(),
             " Bardzo".to_string(),
             " Miło".to_string(),
+        ],
+    );
+    eprintln!("Added CMenu set: {}", _set_id);
+    let _set_id = c_menu.add_set(
+        &mut mgr,
+        vec![
+            " Wklej Odnośnik".to_string(),
+            " Na".to_string(),
+            " Razie".to_string(),
+            " Nic".to_string(),
+            " Ciekawego".to_string(),
+            " Tu".to_string(),
+            " Nie".to_string(),
+            " Ma".to_string(),
         ],
     );
     eprintln!("Added CMenu set: {}", _set_id);
@@ -599,10 +623,12 @@ pub fn serve_tui_mgr(
                     }
                 }
                 Key::AltCtrlH => {
-                    let _ = to_app.send(FromPresentation::NeighborSelected(village.my_id));
+                    let _ =
+                        to_app.send(FromPresentation::NeighborSelected(village.my_name.clone()));
                     // TODO: remove swap_tiles logic from presentation, it should not be here
+                    eprintln!("AltCtrlH");
                     swap_tiles(
-                        village.my_id,
+                        village.my_name.founder,
                         &mut village,
                         &mut neighboring_villages,
                         &mut mgr,
@@ -618,8 +644,9 @@ pub fn serve_tui_mgr(
                 }
                 Key::Enter => {
                     let tile = village.get_selection();
-                    if let TileType::Neighbor(g_id) = &tile {
-                        swap_tiles(*g_id, &mut village, &mut neighboring_villages, &mut mgr);
+                    if let TileType::Neighbor(n_id) = &tile {
+                        eprintln!("Enter");
+                        swap_tiles(*n_id, &mut village, &mut neighboring_villages, &mut mgr);
                     }
                     let _ = to_app.send(FromPresentation::TileSelected(tile));
                 }
@@ -635,7 +662,7 @@ pub fn serve_tui_mgr(
         if let Ok(to_tui) = to_tui_recv.try_recv() {
             match to_tui {
                 ToPresentation::StreetNames(str_names) => {
-                    village.reset_tiles(village.my_id, true, &mut mgr);
+                    village.reset_tiles(village.my_name.founder, true, &mut mgr);
                     village.set_street_names(str_names, &mut mgr);
                 }
                 ToPresentation::DisplayCMenu(set_id) => {
@@ -760,6 +787,7 @@ pub fn serve_tui_mgr(
                     let _ = to_app.send(FromPresentation::CreatorResult(c_result));
                 }
                 ToPresentation::SwapTiles(g_id) => {
+                    eprintln!("ToPresentation::SwapTiles");
                     swap_tiles(g_id, &mut village, &mut neighboring_villages, &mut mgr);
                 }
                 ToPresentation::ReadError(c_id, error) => {
@@ -810,7 +838,7 @@ fn swap_tiles(
                             tile.set_to_home(
                                 g_id,
                                 false,
-                                g_id == village.my_id,
+                                g_id == village.my_name.founder,
                                 // Some(format!("Testowy czwarty")),
                                 mgr,
                             );
