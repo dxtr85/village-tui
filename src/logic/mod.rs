@@ -423,17 +423,23 @@ impl ApplicationLogic {
                             }
                             if s_id == self.active_swarm.swarm_id {
                                 if self.my_name == self.active_swarm.swarm_name {
-                                    let _ = self.to_tui.send(ToPresentation::Neighbors(neighbors));
+                                    eprintln!("App got neighbors: {:?}", neighbors);
+                                    if !neighbors.is_empty() {
+                                        // eprintln!("{} Sending Neighbors0: {:?}", s_id, neighbors);
+                                        let _ =
+                                            self.to_tui.send(ToPresentation::Neighbors(neighbors));
+                                    }
                                 } else {
                                     //TODO: here we need to insert our id as a Neighbor, and remove Swarm's founder from Neighbor list
                                     let mut new_neighbors = vec![self.my_name.founder];
                                     for n in neighbors {
                                         if n == self.active_swarm.swarm_name.founder {
-                                            eprintln!("Removing founder from neighbors list");
+                                            eprintln!("Removing {} from neighbors list", n);
                                             continue;
                                         }
                                         new_neighbors.push(n);
                                     }
+                                    eprintln!("Presenting Neighbors: {:?}", new_neighbors);
                                     let _ =
                                         self.to_tui.send(ToPresentation::Neighbors(new_neighbors));
                                 }
@@ -752,6 +758,10 @@ impl ApplicationLogic {
                         }
                         FromPresentation::NeighborSelected(s_name) => {
                             eprintln!("Selected neighbor swarm: {}", s_name);
+                            if self.active_swarm.swarm_name == s_name {
+                                eprintln!("Already showing selected swarm");
+                                continue;
+                            }
                             let _ = self
                                 .to_app_mgr_send
                                 .send(ToAppMgr::SetActiveApp(s_name))
@@ -1495,7 +1505,7 @@ impl ApplicationLogic {
                     } else {
                         tag_ring.push(tag_set);
                         tag_set = vec![street_name.clone()];
-                        remaining_to_add = self.visible_streets.0 - 1;
+                        // remaining_to_add = self.visible_streets.0 - 1;
                     }
                     //     street_names.push(street_name.clone());
                     //     streets_left_to_present = streets_left_to_present - 1;

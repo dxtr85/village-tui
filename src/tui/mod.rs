@@ -125,6 +125,7 @@ impl VillageLayout {
                 }
             }
         } else {
+            self.neighbors = HashMap::new();
             for tile in self.tiles.values_mut() {
                 tile.set_to_field(mgr);
             }
@@ -246,6 +247,7 @@ impl VillageLayout {
     }
     pub fn add_new_neighbor(&mut self, n_id: GnomeId, mgr: &mut Manager) -> (u8, u8) {
         if let Some(tile_location) = self.neighbors.get(&n_id) {
+            eprintln!("Have this neighbor already under {:?}", tile_location);
             *tile_location
         } else {
             let tile_id = self.next_neighbor_field_tile();
@@ -673,6 +675,7 @@ pub fn serve_tui_mgr(
                     //TODO: first make sure neighbor is not placed on screen
                     for neighbor in neighbors.into_iter() {
                         let _tile_id = village.add_new_neighbor(neighbor, &mut mgr);
+                        eprintln!("Showing Neighbor {}: {:?}", neighbor, _tile_id);
                     }
                 }
                 ToPresentation::AppendContent(c_id, d_type, tags, description) => {
@@ -846,6 +849,7 @@ fn swap_tiles(
                     }
                     TileType::Neighbor(n_id) => {
                         if let Some(tile) = village.tiles.get_mut(&slot) {
+                            village.neighbors.insert(n_id, slot);
                             tile.set_to_neighbor(n_id, false, mgr);
                         }
                     }
@@ -859,9 +863,11 @@ fn swap_tiles(
                         //TODO
                     }
                     TileType::Content(d_type, c_id) => {
-                        if let Some(tile) = village.tiles.get_mut(&slot) {
-                            tile.set_to_content(None, d_type, c_id, false, mgr);
-                        }
+                        // TODO: need to define a better algorithm
+                        //
+                        // if let Some(tile) = village.tiles.get_mut(&slot) {
+                        //     tile.set_to_content(None, d_type, c_id, false, mgr);
+                        // }
                     }
                 }
             }
