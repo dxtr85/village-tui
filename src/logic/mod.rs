@@ -248,6 +248,11 @@ impl SwarmShell {
             HashSet::new()
         }
     }
+    pub fn clear_tag_to_cid(&mut self) {
+        for c_ids in self.tag_to_cid.values_mut() {
+            *c_ids = HashSet::new();
+        }
+    }
 }
 
 pub struct ApplicationLogic {
@@ -530,13 +535,13 @@ impl ApplicationLogic {
                                     .send(ToAppMgr::ReadData(s_id, c_id))
                                     .await;
                             }
-                            if s_id == self.active_swarm.swarm_id {
-                                if c_id == 0 && self.my_name == self.active_swarm.swarm_name {
-                                } else {
-                                    let _ =
-                                        self.to_tui.send(ToPresentation::ReadError(c_id, error));
-                                }
-                            }
+                            // if s_id == self.active_swarm.swarm_id {
+                            //     if c_id == 0 && self.my_name == self.active_swarm.swarm_name {
+                            //     } else {
+                            //         let _ =
+                            //             self.to_tui.send(ToPresentation::ReadError(c_id, error));
+                            //     }
+                            // }
                         }
                         ToApp::FirstPages(s_id, first_pages) => {
                             //TODO: we need to store this information in SwarmShell
@@ -1805,6 +1810,12 @@ impl ApplicationLogic {
         s_name: SwarmName,
     ) {
         if self.active_swarm.swarm_id == s_id {
+            let _ = self
+                .notification_sender
+                .send(Some(format!("{} disconnected", s_name)))
+                .await;
+            let _ = self.to_tui.send(ToPresentation::SwapTiles(GnomeId::any()));
+            self.active_swarm.clear_tag_to_cid();
             self.state = TuiState::ShowActiveSwarms(vec![]);
             let _ = self
                 .to_app_mgr_send

@@ -22,6 +22,12 @@ impl TileType {
             _other => false,
         }
     }
+    pub fn is_home(&self) -> bool {
+        match self {
+            Self::Home(_id) => true,
+            _other => false,
+        }
+    }
     pub fn is_field(&self) -> bool {
         match self {
             Self::Field => true,

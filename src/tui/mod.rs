@@ -142,6 +142,14 @@ impl VillageLayout {
         }
     }
 
+    fn clear_street_names(&mut self, street_count: usize, mgr: &mut Manager) {
+        let g = Glyph::plain();
+        for s_idx in 0..street_count {
+            for c in 0..32 {
+                mgr.set_glyph(0, g, 32 + c, (14 * s_idx as usize) + 7);
+            }
+        }
+    }
     fn set_street_names(
         &mut self,
         str_names: Vec<(Tag, HashSet<(DataType, ContentID, String)>)>,
@@ -823,6 +831,18 @@ fn swap_tiles(
     neighboring_villages: &mut HashMap<GnomeId, Vec<((u8, u8), TileType)>>,
     mgr: &mut Manager,
 ) {
+    if n_id.is_any() {
+        eprintln!("We should clear all tiles");
+        village.neighbors = HashMap::new();
+        village.clear_street_names(2, mgr);
+        for tile in village.tiles.values_mut() {
+            if tile.tile_type.is_field() || tile.tile_type.is_home() {
+                continue;
+            }
+            tile.set_to_field(mgr);
+        }
+        return;
+    }
     // TODO: we need to swap tiles for a new set
     if let Some(owner) = village.get_owner() {
         let existing_tile_types = village.get_tile_headers();
@@ -849,6 +869,8 @@ fn swap_tiles(
                     }
                     TileType::Neighbor(n_id) => {
                         if let Some(tile) = village.tiles.get_mut(&slot) {
+                            // We should get updated Neighbor list from internal mechanism
+                            // tile.set_to_field(mgr);
                             village.neighbors.insert(n_id, slot);
                             tile.set_to_neighbor(n_id, false, mgr);
                         }
