@@ -49,6 +49,12 @@ impl CreatorContext {
             Self::Link { tags, .. } => *tags = new_tags,
         }
     }
+    pub fn set_description(&mut self, new_description: Description) {
+        match self {
+            Self::Data { description, .. } => *description = new_description,
+            Self::Link { description, .. } => *description = new_description,
+        }
+    }
     pub fn set_data_type(&mut self, new_type: DataType) {
         match self {
             Self::Data { d_type, .. } => *d_type = new_type,
@@ -986,7 +992,11 @@ impl ApplicationLogic {
                                             .manifest
                                             .dtype_string(c_context.data_type().byte());
                                         if !c_context.is_read_only() {
-                                            new_state = TuiState::Creator(c_context);
+                                            let mut new_context = c_context.clone();
+                                            new_context.set_description(
+                                                Description::new(text.clone()).unwrap(),
+                                            );
+                                            new_state = TuiState::Creator(new_context);
                                             eprintln!("Requesting display creator again");
                                             let _ =
                                                 self.to_tui.send(ToPresentation::DisplayCreator(

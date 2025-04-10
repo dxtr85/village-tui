@@ -152,6 +152,7 @@ fn default_config() -> Configuration {
 
 fn parse_config(file: &Path) -> Configuration {
     let mut asset_dir = PathBuf::new();
+    asset_dir = asset_dir.join("/home/dxtr/projects/village-tui/assets/");
     let lines_iter = read_lines(file).unwrap().into_iter();
     for line in lines_iter {
         let ls = line.unwrap().to_string();
