@@ -266,6 +266,15 @@ impl VillageLayout {
             tile_id
         }
     }
+    pub fn remove_neighbor(&mut self, n_id: GnomeId, mgr: &mut Manager) -> (u8, u8) {
+        if let Some(tile_location) = self.neighbors.get(&n_id) {
+            if let Some(tile) = self.tiles.get_mut(tile_location) {
+                tile.set_to_field(mgr);
+            }
+            return *tile_location;
+        }
+        return (255, 255);
+    }
 
     pub fn add_new_content(
         &mut self,
@@ -456,6 +465,7 @@ pub enum Direction {
 
 pub enum ToPresentation {
     Neighbors(Vec<GnomeId>),
+    NeighborLeft(GnomeId),
     AppendContent(ContentID, DataType, Vec<Tag>, String),
     HideContent(ContentID, Vec<Tag>),
     ContentHeader(ContentID, Data),
@@ -685,6 +695,9 @@ pub fn serve_tui_mgr(
                         let _tile_id = village.add_new_neighbor(neighbor, &mut mgr);
                         eprintln!("Showing Neighbor {}: {:?}", neighbor, _tile_id);
                     }
+                }
+                ToPresentation::NeighborLeft(n_id) => {
+                    let _tile_id = village.remove_neighbor(n_id, &mut mgr);
                 }
                 ToPresentation::AppendContent(c_id, d_type, tags, description) => {
                     eprintln!(

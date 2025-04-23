@@ -422,10 +422,10 @@ impl ApplicationLogic {
                         ToApp::Neighbors(s_id, neighbors) => {
                             if !self.home_swarm_enforced {
                                 eprintln!("!home_swarm_enforced");
-                                let _ = self
-                                    .to_app_mgr_send
-                                    .send(ToAppMgr::SetActiveApp(self.my_name.clone()))
-                                    .await;
+                                // let _ = self
+                                //     .to_app_mgr_send
+                                //     .send(ToAppMgr::SetActiveApp(self.my_name.clone()))
+                                //     .await;
                                 self.pending_notifications
                                     .entry(s_id)
                                     .or_insert(vec![])
@@ -463,6 +463,26 @@ impl ApplicationLogic {
                                     .entry(s_id)
                                     .or_insert(vec![])
                                     .push(ToApp::Neighbors(s_id, neighbors));
+                            }
+                        }
+                        ToApp::NeighborLeft(s_id, n_id) => {
+                            if !self.home_swarm_enforced {
+                                // eprintln!("!home_swarm_enforced");
+                                // let _ = self
+                                //     .to_app_mgr_send
+                                //     .send(ToAppMgr::SetActiveApp(self.my_name.clone()))
+                                //     .await;
+                                self.pending_notifications
+                                    .entry(s_id)
+                                    .or_insert(vec![])
+                                    .push(ToApp::NeighborLeft(s_id, n_id));
+                                continue;
+                            }
+                            if s_id == self.active_swarm.swarm_id {
+                                eprintln!("Neighbor left: {}", n_id);
+                                let _ = self.to_tui.send(ToPresentation::NeighborLeft(n_id));
+                            } else {
+                                eprintln!("Neighbor left: {} for swarm {}", n_id, s_id);
                             }
                         }
                         ToApp::NewContent(s_id, c_id, d_type, main_page) => {
