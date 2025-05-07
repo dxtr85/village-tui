@@ -487,6 +487,9 @@ impl ApplicationLogic {
                         }
                         ToApp::NewContent(s_id, c_id, d_type, main_page) => {
                             //TODO: read tags from main page
+                            if c_id == 0 {
+                                continue;
+                            }
                             if s_id == self.active_swarm.swarm_id && self.home_swarm_enforced {
                                 self.update_active_content_tags(s_id, c_id, d_type, main_page);
                             } else {
@@ -501,8 +504,11 @@ impl ApplicationLogic {
                             }
                         }
                         ToApp::ContentChanged(s_id, c_id, d_type, main_page_option) => {
+                            eprintln!("recv ToApp::ContentChanged({:?})", c_id);
+                            let mut data_requested = false;
                             if c_id == 0 {
                                 eprintln!("Requesting ReadData for CID-0");
+                                data_requested = true;
                                 let _ = self
                                     .to_app_mgr_send
                                     .send(ToAppMgr::ReadData(s_id, c_id))
@@ -512,17 +518,19 @@ impl ApplicationLogic {
                                 if let Some(main_page) = main_page_option {
                                     if main_page.is_empty() && main_page.get_hash() > 0 {
                                         eprintln!("We should check if Tags have changed");
-                                        let _ = self
-                                            .to_app_mgr_send
-                                            .send(ToAppMgr::ReadData(s_id, c_id))
-                                            .await;
-                                    } else {
+                                        if !data_requested {
+                                            // data_requested = true;
+                                            let _ = self
+                                                .to_app_mgr_send
+                                                .send(ToAppMgr::ReadData(s_id, c_id))
+                                                .await;
+                                        }
+                                    } else if c_id > 0 {
                                         self.update_active_content_tags(
                                             s_id, c_id, d_type, main_page,
                                         );
                                     }
                                 }
-                                eprintln!("recv ToApp::ContentChanged({:?})", c_id);
                             } else {
                                 eprintln!(
                                     "Not sending changed content, because my {:?} != {:?}",
@@ -1565,6 +1573,7 @@ impl ApplicationLogic {
             //     street_names.push(Tag(format!("Generic street #{}", i)));
             // }
             self.active_swarm.manifest = manifest;
+            eprintln!("All tags: {:?}", tag_ring);
             self.active_swarm.tag_ring = tag_ring;
             if street_names != self.visible_streets.1 {
                 self.visible_streets.1 = street_names.clone();
@@ -1616,6 +1625,7 @@ impl ApplicationLogic {
                         all_notes.push(String::new());
                         let mut all_headers = Vec::with_capacity(d_vec.len());
                         let first_data = d_vec.remove(0);
+                        eprintln!("1Reading tags & header for: {}", rc_id);
                         let (tag_ids, description) =
                             read_tags_and_header(d_type, first_data.clone());
                         let mut bytes = first_data.bytes();
@@ -1719,6 +1729,7 @@ impl ApplicationLogic {
     ) {
         // eprintln!("ToApp::NewContent({:?},{:?})", c_id, d_type);
         // eprintln!("CID-{} Main page: {:?}", c_id, main_page);
+        eprintln!("2Reading tags & header for: {}", c_id);
         let (tag_ids, header) = read_tags_and_header(d_type, main_page.clone());
 
         let ids_len = tag_ids.len();
@@ -2150,13 +2161,13 @@ fn read_tags_and_header(d_type: DataType, data: Data) -> (Vec<u8>, String) {
     };
     let mut bytes = data.bytes();
     let how_many_tags = bytes.remove(0);
-    // eprintln!("We have {} tags", how_many_tags);
+    eprintln!("We have {} tags", how_many_tags);
     let mut tag_ids = Vec::with_capacity(how_many_tags as usize);
     for _i in 0..how_many_tags {
         if !bytes.is_empty() {
             tag_ids.push(bytes.remove(0));
         } else {
-            eprintln!("This should not happen!");
+            eprintln!("NO TAGS, This should not happen!");
         }
     }
     let header = if bytes.is_empty() {

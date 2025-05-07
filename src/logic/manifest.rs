@@ -1,11 +1,12 @@
 use crate::Data;
+use dapp_lib::prelude::sha_hash;
 use dapp_lib::prelude::AppType;
 use dapp_lib::prelude::Nat;
 use dapp_lib::prelude::NetworkSettings;
 use dapp_lib::prelude::PortAllocationRule;
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::hash::{DefaultHasher, Hasher};
+// use std::hash::{DefaultHasher, Hasher};
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
@@ -83,7 +84,7 @@ impl Manifest {
     // - tags count
     // - description
     pub fn first_hash(&self) -> u64 {
-        let mut hasher = DefaultHasher::new();
+        // let mut hasher = DefaultHasher::new();
         let mut bytes = Vec::with_capacity(1024);
         bytes.push(self.app_type.byte());
         bytes.push(self.tags.len() as u8);
@@ -105,8 +106,9 @@ impl Manifest {
         //     }
         // }
         // println!("mani hash len: {}", bytes.len());
-        bytes.hash(&mut hasher);
-        hasher.finish()
+        // bytes.hash(&mut hasher);
+        // hasher.finish()
+        sha_hash(&bytes)
     }
 
     //TODO: There can be up to 256 Tags defined in a manifest,
