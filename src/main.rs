@@ -98,7 +98,7 @@ async fn main() {
             config,
         )
     });
-    logic.run().await;
+    logic.run(dir.clone()).await;
     tui_join.await;
 }
 

@@ -1,6 +1,7 @@
 use animaterm::prelude::*;
 use async_std::channel::Receiver as AReceiver;
 use async_std::channel::Sender as ASender;
+use async_std::path::Path;
 use dapp_lib::prelude::Description;
 use dapp_lib::prelude::SwarmID;
 use dapp_lib::prelude::SwarmName;
@@ -9,10 +10,12 @@ use dapp_lib::ToAppMgr;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::net::IpAddr;
+use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 mod manifest;
 use crate::tui::Direction;
 use crate::tui::{CreatorResult, FromPresentation, TileType, ToPresentation};
+use crate::Configuration as AppConf;
 use crate::InternalMsg;
 pub use manifest::Manifest;
 pub use manifest::Tag;
@@ -319,11 +322,18 @@ impl ApplicationLogic {
             clipboard: None,
         }
     }
-    pub async fn run(&mut self) {
+    pub async fn run(&mut self, config_dir: PathBuf) {
         'outer: loop {
             while let Ok(internal_msg) = self.to_app.recv().await {
                 match internal_msg {
                     InternalMsg::User(msg) => match msg {
+                        ToApp::AllNeighborsGone => {
+                            let config = AppConf::new(&config_dir).await;
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::StorageNeighbors(config.storage_neighbors))
+                                .await;
+                        }
                         ToApp::ActiveSwarm(s_name, s_id) => {
                             eprintln!("Requesting Manifest");
                             let _ = self.to_app_mgr_send.send(ToAppMgr::ReadData(s_id, 0)).await;
