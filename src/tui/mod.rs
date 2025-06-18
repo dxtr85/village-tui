@@ -280,7 +280,7 @@ impl VillageLayout {
         &mut self,
         d_type: DataType,
         c_id: ContentID,
-        tags: Vec<Tag>,
+        tags: HashSet<Tag>,
         description: String,
         mgr: &mut Manager,
         // ) -> (u8, u8) {
@@ -360,6 +360,13 @@ impl VillageLayout {
                 eprintln!("no rows to search in");
             }
         }
+    }
+    fn filter_visible_tags(&self, tags: Vec<Tag>) -> HashSet<Tag> {
+        self.street_to_rows
+            .keys()
+            .cloned()
+            .filter(|t| tags.contains(t))
+            .collect()
     }
     fn next_neighbor_field_tile(&self) -> (u8, u8) {
         for y in 0..self.visible_rows {
@@ -581,7 +588,7 @@ pub fn serve_tui_mgr(
             " Create new…".to_string(),
             " Public IPs".to_string(),
             " Active Swarms".to_string(),
-            " Known Swarms".to_string(),
+            " Add Search".to_string(),
         ],
     );
     let _set_id = c_menu.add_set(
@@ -608,7 +615,7 @@ pub fn serve_tui_mgr(
             " Ciekawego".to_string(),
             " Tu".to_string(),
             " Nie".to_string(),
-            " Ma".to_string(),
+            " List Searches".to_string(),
         ],
     );
     eprintln!("Added CMenu set: {}", _set_id);
@@ -664,10 +671,10 @@ pub fn serve_tui_mgr(
                 }
                 Key::Enter => {
                     let tile = village.get_selection();
-                    if let TileType::Neighbor(n_id) = &tile {
-                        eprintln!("Enter");
-                        swap_tiles(*n_id, &mut village, &mut neighboring_villages, &mut mgr);
-                    }
+                    // if let TileType::Neighbor(n_id) = &tile {
+                    //     // eprintln!("Enter");
+                    //     swap_tiles(*n_id, &mut village, &mut neighboring_villages, &mut mgr);
+                    // }
                     let _ = to_app.send(FromPresentation::TileSelected(tile));
                 }
                 other => {
@@ -704,7 +711,27 @@ pub fn serve_tui_mgr(
                         "ToPresentation::AppendContent({:?}, {:?})\nTags: {:?}",
                         c_id, d_type, tags
                     );
-                    village.add_new_content(d_type, c_id, tags, description, &mut mgr);
+                    //TODO: First we check if this content should be displayed on screen
+                    let mut filtered_tags = village.filter_visible_tags(tags);
+                    // if so, we get all it's current instances as Tile
+                    let mut t_headers = village.get_tile_headers();
+                    let tile_locations = t_headers
+                        .iter()
+                        .filter(|(_loc, ttype)| matches!(ttype, TileType::Content(d_type, c_id)));
+                    eprintln!("tlocs: {:?}", tile_locations);
+                    for (loc, _t) in tile_locations {
+                        eprintln!("tlocs: {:?}", _t);
+                        for (tag, rows) in &village.street_to_rows {
+                            eprintln!("tag: {:?}, rows: {:?}", tag, rows);
+                            if rows.contains(&loc.0) {
+                                // and subscract Tags that correspond to them
+                                filtered_tags.remove(&tag);
+                                eprintln!("Rem: {:?}", tag);
+                            }
+                        }
+                    }
+                    // if there are any tags left we add Tiles for them.
+                    village.add_new_content(d_type, c_id, filtered_tags, description, &mut mgr);
                     // tiles_mapping.insert(tile_id, TileType::Content(d_type, c_id));
                 }
                 ToPresentation::HideContent(c_id, tags) => {

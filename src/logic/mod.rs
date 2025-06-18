@@ -3,8 +3,10 @@ use async_std::channel::Receiver as AReceiver;
 use async_std::channel::Sender as ASender;
 use async_std::path::Path;
 use dapp_lib::prelude::Description;
+pub use dapp_lib::prelude::Manifest;
 use dapp_lib::prelude::SwarmID;
 use dapp_lib::prelude::SwarmName;
+pub use dapp_lib::prelude::Tag;
 use dapp_lib::prelude::*;
 use dapp_lib::ToAppMgr;
 use std::collections::HashMap;
@@ -12,13 +14,13 @@ use std::collections::HashSet;
 use std::net::IpAddr;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
-mod manifest;
+// mod manifest;
 use crate::tui::Direction;
 use crate::tui::{CreatorResult, FromPresentation, TileType, ToPresentation};
 use crate::Configuration as AppConf;
 use crate::InternalMsg;
-pub use manifest::Manifest;
-pub use manifest::Tag;
+// pub use manifest::Manifest;
+// pub use manifest::Tag;
 
 #[derive(Debug, Clone)]
 pub enum CreatorContext {
@@ -133,6 +135,9 @@ impl CreatorContext {
 enum TuiState {
     Village,
     AddTag,
+    AddSearch,
+    ListSearches(Vec<(String, usize)>),
+    SearchResults(Vec<(SwarmName, ContentID)>),
     AddDType,
     RemovePage(ContentID),
     AppendData(ContentID),
@@ -282,6 +287,7 @@ pub struct ApplicationLogic {
     home_swarm_enforced: bool,
     buffered_from_tui: Vec<FromPresentation>,
     clipboard: Option<(SwarmName, ContentID)>,
+    // waiting_for: (SwarmName, ContentID),
 }
 impl ApplicationLogic {
     pub fn new(
@@ -320,6 +326,7 @@ impl ApplicationLogic {
             buffered_from_tui: vec![],
             notification_sender,
             clipboard: None,
+            // waiting_for: (SwarmName::new(GnomeId::any(), "".to_string()).unwrap(), 0),
         }
     }
     pub async fn run(&mut self, config_dir: PathBuf) {
@@ -327,7 +334,44 @@ impl ApplicationLogic {
             while let Ok(internal_msg) = self.to_app.recv().await {
                 match internal_msg {
                     InternalMsg::User(msg) => match msg {
+                        ToApp::SearchQueries(phrases) => {
+                            if phrases.is_empty() {
+                                continue;
+                            }
+                            eprintln!("Received list of Search queries:\n {:?}", phrases);
+                            let mut formated_phrases = Vec::with_capacity(phrases.len());
+                            let mut indices = Vec::with_capacity(phrases.len());
+                            let mut idx = 0;
+                            for (p, h) in &phrases {
+                                formated_phrases.push(format!("{}: {}", p, h));
+                                indices.push(idx);
+                                idx += 1;
+                            }
+                            self.to_tui.send(ToPresentation::DisplayIndexer(
+                                // true,
+                                // "Active Searches".to_string(),
+                                formated_phrases,
+                                // indices,
+                            ));
+                            self.state = TuiState::ListSearches(phrases);
+                        }
+                        ToApp::SearchResults(phrase, hits) => {
+                            if hits.is_empty() {
+                                eprintln!(" No results for {}", phrase);
+                                continue;
+                            }
+                            let mut links = Vec::with_capacity(hits.len());
+                            let mut texts = Vec::with_capacity(hits.len());
+                            for Hit(s_name, c_id, score) in &hits {
+                                texts.push(format!("{}-{}: {}", s_name, c_id, score));
+                                links.push((s_name.clone(), *c_id));
+                            }
+                            self.to_tui.send(ToPresentation::DisplayIndexer(texts));
+                            self.state = TuiState::SearchResults(links);
+                            eprintln!("Search results for {}{:?}", phrase, hits);
+                        }
                         ToApp::AllNeighborsGone => {
+                            self.home_swarm_enforced = false;
                             let config = AppConf::new(&config_dir).await;
                             let _ = self
                                 .to_app_mgr_send
@@ -336,10 +380,13 @@ impl ApplicationLogic {
                         }
                         ToApp::ActiveSwarm(s_name, s_id) => {
                             eprintln!("Requesting Manifest");
-                            let _ = self.to_app_mgr_send.send(ToAppMgr::ReadData(s_id, 0)).await;
                             let _ = self
                                 .to_app_mgr_send
-                                .send(ToAppMgr::ReadAllFirstPages(s_id))
+                                .send(ToAppMgr::FromApp(LibRequest::ReadData(s_id, 0)))
+                                .await;
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::FromApp(LibRequest::ReadAllFirstPages(s_id)))
                                 .await;
                             let prev_state = std::mem::replace(&mut self.state, TuiState::Village);
                             if let TuiState::ReadLinkToFollow(
@@ -353,8 +400,13 @@ impl ApplicationLogic {
                                     self.state = TuiState::ReadRequestForIndexer(target_cid);
                                     let _ = self
                                         .to_app_mgr_send
-                                        .send(ToAppMgr::ReadData(s_id, target_cid))
+                                        .send(ToAppMgr::FromApp(LibRequest::ReadData(
+                                            s_id, target_cid,
+                                        )))
                                         .await;
+                                    let _ = self
+                                        .to_tui
+                                        .send(ToPresentation::SwapTiles(target_name.founder));
                                 } else {
                                     eprintln!(
                                         "Had to follow a link, but switched to a different swarm"
@@ -521,7 +573,7 @@ impl ApplicationLogic {
                                 data_requested = true;
                                 let _ = self
                                     .to_app_mgr_send
-                                    .send(ToAppMgr::ReadData(s_id, c_id))
+                                    .send(ToAppMgr::FromApp(LibRequest::ReadData(s_id, c_id)))
                                     .await;
                             }
                             if s_id == self.active_swarm.swarm_id && self.home_swarm_enforced {
@@ -532,7 +584,9 @@ impl ApplicationLogic {
                                             // data_requested = true;
                                             let _ = self
                                                 .to_app_mgr_send
-                                                .send(ToAppMgr::ReadData(s_id, c_id))
+                                                .send(ToAppMgr::FromApp(LibRequest::ReadData(
+                                                    s_id, c_id,
+                                                )))
                                                 .await;
                                         }
                                     } else if c_id > 0 {
@@ -548,25 +602,32 @@ impl ApplicationLogic {
                                 );
                             }
                         }
-                        ToApp::ReadSuccess(s_id, c_id, d_type, d_vec) => {
-                            // eprintln!(
-                            //     "Received ReadSuccess {} CID-{} (len: {})",
-                            //     s_id,
-                            //     c_id,
-                            //     d_vec.len()
-                            // );
+                        ToApp::ReadSuccess(s_id, s_name, c_id, d_type, d_vec) => {
+                            eprintln!(
+                                "Received ReadSuccess {} CID-{} (len: {})",
+                                s_id,
+                                c_id,
+                                d_vec.len()
+                            );
                             if s_id == self.active_swarm.swarm_id {
                                 // eprintln!("processing it");
                                 self.process_data(c_id, d_type, d_vec).await;
                             } else {
-                                // eprintln!(
-                                //     "shelving it (active swarm: {:?})",
-                                //     self.active_swarm.swarm_id
-                                // );
+                                //TODO: if this is content we are waiting for
+                                // we should process it
+                                // if self.waiting_for.0 == s_name && self.waiting_for.1 == c_id {
+                                //     //TODO
+                                //     eprintln!("Should show this data, without switching swarm");
+                                // } else {
+                                eprintln!(
+                                    "shelving it (active swarm: {:?})",
+                                    self.active_swarm.swarm_id
+                                );
                                 self.pending_notifications
                                     .entry(s_id)
                                     .or_insert(vec![])
-                                    .push(ToApp::ReadSuccess(s_id, c_id, d_type, d_vec));
+                                    .push(ToApp::ReadSuccess(s_id, s_name, c_id, d_type, d_vec));
+                                // }
                             }
                         }
                         ToApp::ReadError(s_id, c_id, error) => {
@@ -576,7 +637,7 @@ impl ApplicationLogic {
                                 // eprintln!("Requesting CID-{} again…", c_id);
                                 let _ = self
                                     .to_app_mgr_send
-                                    .send(ToAppMgr::ReadData(s_id, c_id))
+                                    .send(ToAppMgr::FromApp(LibRequest::ReadData(s_id, c_id)))
                                     .await;
                             }
                             // if s_id == self.active_swarm.swarm_id {
@@ -632,11 +693,14 @@ impl ApplicationLogic {
                                     eprintln!("NeighborSelected");
                                     let _ = self
                                         .to_app_mgr_send
-                                        .send(ToAppMgr::SetActiveApp(SwarmName {
-                                            founder: g_id,
-                                            name: "/".to_string(),
-                                        }))
+                                        .send(ToAppMgr::FromApp(LibRequest::SetActiveApp(
+                                            SwarmName {
+                                                founder: g_id,
+                                                name: "/".to_string(),
+                                            },
+                                        )))
                                         .await;
+                                    let _ = self.to_tui.send(ToPresentation::SwapTiles(g_id));
                                 }
                                 TileType::Field => {
                                     // TODO: do anything?
@@ -756,7 +820,10 @@ impl ApplicationLogic {
                                 // we need to sync it with swarm.
                                 let _ = self
                                     .to_app_mgr_send
-                                    .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, 0))
+                                    .send(ToAppMgr::FromApp(LibRequest::ReadData(
+                                        self.active_swarm.swarm_id,
+                                        0,
+                                    )))
                                     .await;
                                 // TODO: Probably it is better to hide this functionality from user
                                 // and instead send a list of Data objects to update/create
@@ -787,7 +854,10 @@ impl ApplicationLogic {
                                 // we need to sync it with swarm.
                                 let _ = self
                                     .to_app_mgr_send
-                                    .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, 0))
+                                    .send(ToAppMgr::FromApp(LibRequest::ReadData(
+                                        self.active_swarm.swarm_id,
+                                        0,
+                                    )))
                                     .await;
                                 // TODO: Probably it is better to hide this functionality from user
                                 // and instead send a list of Data objects to update/create
@@ -813,7 +883,7 @@ impl ApplicationLogic {
                             }
                             let _ = self
                                 .to_app_mgr_send
-                                .send(ToAppMgr::SetActiveApp(s_name))
+                                .send(ToAppMgr::FromApp(LibRequest::SetActiveApp(s_name)))
                                 .await;
                         }
                         FromPresentation::ShowContextMenu(ttype) => {
@@ -1089,6 +1159,16 @@ impl ApplicationLogic {
                                         let _ = self
                                             .to_tui
                                             .send(ToPresentation::DisplayIndexer(all_headers));
+                                    }
+                                }
+                                TuiState::AddSearch => {
+                                    eprintln!("Received add Search result");
+                                    if let Some(text) = e_result {
+                                        eprintln!("Some: {}", text);
+                                        //TODO
+                                        self.to_app_mgr_send
+                                            .send(ToAppMgr::FromApp(LibRequest::Search(text)))
+                                            .await;
                                     }
                                 }
                                 _other => {
@@ -1369,7 +1449,10 @@ impl ApplicationLogic {
                             }
                             let _ = self
                                 .to_app_mgr_send
-                                .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, c_id))
+                                .send(ToAppMgr::FromApp(LibRequest::ReadData(
+                                    self.active_swarm.swarm_id,
+                                    c_id,
+                                )))
                                 .await;
                         }
                         FromPresentation::IndexResult(i_result) => {
@@ -1505,7 +1588,9 @@ impl ApplicationLogic {
                                             new_state = Some(TuiState::Village);
                                             let _ = self
                                                 .to_app_mgr_send
-                                                .send(ToAppMgr::SetActiveApp(swarm_name.clone()))
+                                                .send(ToAppMgr::FromApp(LibRequest::SetActiveApp(
+                                                    swarm_name.clone(),
+                                                )))
                                                 .await;
                                             let _ = self.to_tui.send(ToPresentation::SwapTiles(
                                                 swarm_name.founder,
@@ -1514,6 +1599,53 @@ impl ApplicationLogic {
                                     } else {
                                         eprintln!("Going back to Village");
                                         self.state = TuiState::Village;
+                                    }
+                                }
+                                TuiState::ListSearches(s_list) => {
+                                    if let Some(idx) = i_result {
+                                        eprintln!(
+                                            "Supposed to show search results of {:?}",
+                                            i_result
+                                        );
+                                        if let Some((text, count)) = s_list.get(idx) {
+                                            self.to_app_mgr_send
+                                                .send(ToAppMgr::FromApp(
+                                                    LibRequest::GetSearchResults(text.clone()),
+                                                ))
+                                                .await;
+                                        }
+                                    } else {
+                                        eprintln!("No search item selected.");
+                                    }
+                                }
+                                TuiState::SearchResults(links) => {
+                                    if let Some(idx) = i_result {
+                                        eprintln!("Supposed to open Content@{:?}", idx);
+                                        if let Some((s_name, c_id)) = links.get(idx) {
+                                            new_state = Some(TuiState::ReadLinkToFollow(
+                                                0,
+                                                Some((s_name.clone(), *c_id)),
+                                            ));
+                                            self.to_app_mgr_send
+                                                .send(ToAppMgr::FromApp(LibRequest::SetActiveApp(
+                                                    s_name.clone(),
+                                                )))
+                                                .await;
+                                            // self.waiting_for = (s_name.clone(), *c_id);
+                                            // eprintln!("Sending req to GMgr for {}", s_name);
+                                            // self.to_app_mgr_send
+                                            //     .send(ToAppMgr::FromApp(
+                                            //         LibRequest::ReadDataGlobal(
+                                            //             s_name.clone(),
+                                            //             *c_id,
+                                            //         ),
+                                            //     ))
+                                            //     .await;
+                                        } else {
+                                            eprintln!("Could not find corresponding s_name");
+                                        }
+                                    } else {
+                                        eprintln!("No search item selected.");
                                     }
                                 }
                                 other => {
@@ -1711,7 +1843,7 @@ impl ApplicationLogic {
                             eprintln!("ReadLinkToFollow");
                             let _ = self
                                 .to_app_mgr_send
-                                .send(ToAppMgr::SetActiveApp(s_name.clone()))
+                                .send(ToAppMgr::FromApp(LibRequest::SetActiveApp(s_name.clone())))
                                 .await;
                             let _ = self.to_tui.send(ToPresentation::SwapTiles(s_name.founder));
                             self.state =
@@ -2005,8 +2137,16 @@ impl ApplicationLogic {
                     .send(ToAppMgr::ProvideGnomeToSwarmMapping)
                     .await;
             }
-            7 => {
-                eprintln!("Show known Swarms");
+            8 => {
+                eprintln!("Open Add a new Search window");
+                self.state = TuiState::AddSearch;
+                let _ = self.to_tui.send(ToPresentation::DisplayEditor(
+                    (false, true),
+                    " Max size: 1024 Multiline  Add a new Search   (TAB to finish)".to_string(),
+                    None,
+                    true,
+                    Some(1024),
+                ));
             }
             _other => {
                 //TODO
@@ -2034,6 +2174,13 @@ impl ApplicationLogic {
                         .await;
                 }
             }
+            8 => {
+                //TODO
+                eprintln!("Shold list all Searches running");
+                self.to_app_mgr_send
+                    .send(ToAppMgr::FromApp(LibRequest::ListSearches))
+                    .await;
+            }
             other => {
                 //TODO
                 eprintln!("{} Context Menu action on Content", other);
@@ -2047,7 +2194,10 @@ impl ApplicationLogic {
         self.state = TuiState::ReadLinkToFollow(c_id, None);
         let _ = self
             .to_app_mgr_send
-            .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, c_id))
+            .send(ToAppMgr::FromApp(LibRequest::ReadData(
+                self.active_swarm.swarm_id,
+                c_id,
+            )))
             .await;
     }
     async fn query_content_for_indexer(&mut self, c_id: ContentID) {
@@ -2057,7 +2207,10 @@ impl ApplicationLogic {
             self.state = TuiState::ReadRequestForIndexer(c_id);
             let _ = self
                 .to_app_mgr_send
-                .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, c_id))
+                .send(ToAppMgr::FromApp(LibRequest::ReadData(
+                    self.active_swarm.swarm_id,
+                    c_id,
+                )))
                 .await;
         } else {
             eprintln!("Can not run query when in state: {:?}", self.state);
@@ -2109,7 +2262,10 @@ impl ApplicationLogic {
                 // Here we send request to read manifest data
                 let _ = self
                     .to_app_mgr_send
-                    .send(ToAppMgr::ReadData(self.active_swarm.swarm_id, 0))
+                    .send(ToAppMgr::FromApp(LibRequest::ReadData(
+                        self.active_swarm.swarm_id,
+                        0,
+                    )))
                     .await;
             }
             Key::N => {
@@ -2159,37 +2315,37 @@ impl ApplicationLogic {
         false
     }
 }
-fn read_tags_and_header(d_type: DataType, data: Data) -> (Vec<u8>, String) {
-    if data.is_empty() {
-        return (vec![], String::new());
-    }
-    if d_type.is_link() {
-        let link = data_to_link(data).unwrap();
-        return (link.tag_ids(), link.description());
-        // eprintln!("Not updating Links for now");
-        // return (vec![], String::new());
-    };
-    let mut bytes = data.bytes();
-    let how_many_tags = bytes.remove(0);
-    eprintln!("We have {} tags", how_many_tags);
-    let mut tag_ids = Vec::with_capacity(how_many_tags as usize);
-    for _i in 0..how_many_tags {
-        if !bytes.is_empty() {
-            tag_ids.push(bytes.remove(0));
-        } else {
-            eprintln!("NO TAGS, This should not happen!");
-        }
-    }
-    let header = if bytes.is_empty() {
-        String::new()
-    } else {
-        String::from_utf8(bytes)
-            .unwrap()
-            .lines()
-            .next()
-            .unwrap()
-            .trim()
-            .to_string()
-    };
-    (tag_ids, header)
-}
+// fn read_tags_and_header(d_type: DataType, data: Data) -> (Vec<u8>, String) {
+//     if data.is_empty() {
+//         return (vec![], String::new());
+//     }
+//     if d_type.is_link() {
+//         let link = data_to_link(data).unwrap();
+//         return (link.tag_ids(), link.description());
+//         // eprintln!("Not updating Links for now");
+//         // return (vec![], String::new());
+//     };
+//     let mut bytes = data.bytes();
+//     let how_many_tags = bytes.remove(0);
+//     eprintln!("We have {} tags", how_many_tags);
+//     let mut tag_ids = Vec::with_capacity(how_many_tags as usize);
+//     for _i in 0..how_many_tags {
+//         if !bytes.is_empty() {
+//             tag_ids.push(bytes.remove(0));
+//         } else {
+//             eprintln!("NO TAGS, This should not happen!");
+//         }
+//     }
+//     let header = if bytes.is_empty() {
+//         String::new()
+//     } else {
+//         String::from_utf8(bytes)
+//             .unwrap()
+//             .lines()
+//             .next()
+//             .unwrap()
+//             .trim()
+//             .to_string()
+//     };
+//     (tag_ids, header)
+// }
