@@ -1,4 +1,4 @@
-use dapp_lib::prelude::{load_content_from_disk, read_datastore_from_disk, GnomeId};
+use dapp_lib::prelude::{load_content_from_disk, read_datastore_from_disk, GnomeId, Transport};
 use dapp_lib::prelude::{DataType, NetworkSettings};
 use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader};
@@ -75,6 +75,7 @@ impl Configuration {
                                         pub_port: pub_ip.1,
                                         nat_type: pub_ip.2,
                                         port_allocation: pub_ip.3,
+                                        transport: Transport::UDPoverIP4,
                                     },
                                 ));
                                 next_v4 = false;
@@ -90,6 +91,7 @@ impl Configuration {
                                         pub_port: pub_ip.1,
                                         nat_type: pub_ip.2,
                                         port_allocation: pub_ip.3,
+                                        transport: Transport::UDPoverIP4,
                                     },
                                 ));
                             }
@@ -106,6 +108,7 @@ impl Configuration {
                                         pub_port: pub_ip.1,
                                         nat_type: pub_ip.2,
                                         port_allocation: pub_ip.3,
+                                        transport: Transport::UDPoverIP6,
                                     },
                                 ));
                             }
@@ -120,6 +123,7 @@ impl Configuration {
                                         pub_port: pub_ip.1,
                                         nat_type: pub_ip.2,
                                         port_allocation: pub_ip.3,
+                                        transport: Transport::UDPoverIP6,
                                     },
                                 ));
                                 next_v4 = true;
