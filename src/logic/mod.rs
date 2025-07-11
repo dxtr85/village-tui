@@ -271,7 +271,8 @@ impl SwarmShell {
 
 pub struct ApplicationLogic {
     my_name: SwarmName,
-    pub_ips: Vec<(IpAddr, u16, Nat, (PortAllocationRule, i8))>,
+    // pub_ips: Vec<(IpAddr, u16, Nat, (PortAllocationRule, i8))>,
+    pub_ips: Vec<NetworkSettings>,
     state: TuiState,
     active_swarm: SwarmShell,
     to_app_mgr_send: ASender<ToAppMgr>,
@@ -414,6 +415,11 @@ impl ApplicationLogic {
                                 }
                             }
                             if !self.home_swarm_enforced {
+                                // TODO: build some logic to periodically ask for IPs
+                                let _ = self
+                                    .to_app_mgr_send
+                                    .send(ToAppMgr::FromApp(LibRequest::ProvidePublicIPs))
+                                    .await;
                                 self.home_swarm_enforced = true;
                                 for msg in self.buffered_from_tui.iter_mut() {
                                     // let _ = self.from_tui_send.send(msg.clone());
@@ -1964,10 +1970,11 @@ impl ApplicationLogic {
     fn show_public_ips(&self) {
         // eprintln!("We should show Public IPs");
         let mut public_ips = String::with_capacity(256);
-        for (ip, port, nat, (rule, delta)) in &self.active_swarm.manifest.pub_ips {
+        // for (ip, port, nat, (rule, delta)) in &self.active_swarm.manifest.pub_ips {
+        for ns in &self.active_swarm.manifest.get_pub_ips() {
             public_ips.push_str(&format!(
                 "IP: {} PORT: {} NAT: {:?} Port alloc: {:?}({})",
-                ip, port, nat, rule, delta
+                ns.pub_ip, ns.pub_port, ns.nat_type, ns.port_allocation.0, ns.port_allocation.1
             ));
             public_ips.push('\n');
         }

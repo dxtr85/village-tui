@@ -52,9 +52,11 @@ impl Configuration {
                 let data_vec = vec![c_zero.read_data(0).unwrap()];
                 eprintln!("Building Manifest from single data page (for larger manifests this will probably crash)");
                 let manifest = Manifest::from(data_vec);
-                let mut pubiplen = manifest.pub_ips.len();
-                for pub_ip in manifest.pub_ips {
-                    if pub_ip.1 == 0 {
+                let pub_ips = manifest.get_pub_ips();
+                let mut pubiplen = pub_ips.len();
+                for pub_ip in pub_ips {
+                    // if pub_ip.1 == 0 {
+                    if pub_ip.pub_port == 0 {
                         // This way we will add other IP to our list
                         if pubiplen > 1 {
                             pubiplen = 1;
@@ -63,68 +65,69 @@ impl Configuration {
                         // pub port
                         continue;
                     }
-                    if pub_ip.0.is_ipv4() {
+                    // if pub_ip.0.is_ipv4() {
+                    if pub_ip.pub_ip.is_ipv4() {
                         if next_v4 {
                             if !added_gids.contains(&g_id) {
-                                eprintln!("Add V4 neighbor {}:{}", pub_ip.0, pub_ip.1);
+                                eprintln!("Add V4 neighbor {}:{}", pub_ip.pub_ip, pub_ip.pub_port);
                                 added_gids.push(g_id);
                                 storage_neighbors.push((
                                     g_id,
-                                    NetworkSettings {
-                                        pub_ip: pub_ip.0,
-                                        pub_port: pub_ip.1,
-                                        nat_type: pub_ip.2,
-                                        port_allocation: pub_ip.3,
-                                        transport: Transport::UDPoverIP4,
-                                    },
+                                    pub_ip, // NetworkSettings {
+                                           //     pub_ip: pub_ip.0,
+                                           //     pub_port: pub_ip.1,
+                                           //     nat_type: pub_ip.2,
+                                           //     port_allocation: pub_ip.3,
+                                           //     transport: Transport::UDPoverIP4,
+                                           // },
                                 ));
                                 next_v4 = false;
                             }
                         } else if pubiplen == 1 {
                             if !added_gids.contains(&g_id) {
-                                eprintln!("Add neighbor {}:{}", pub_ip.0, pub_ip.1);
+                                eprintln!("Add neighbor {}:{}", pub_ip.pub_ip, pub_ip.pub_port);
                                 added_gids.push(g_id);
                                 storage_neighbors.push((
                                     g_id,
-                                    NetworkSettings {
-                                        pub_ip: pub_ip.0,
-                                        pub_port: pub_ip.1,
-                                        nat_type: pub_ip.2,
-                                        port_allocation: pub_ip.3,
-                                        transport: Transport::UDPoverIP4,
-                                    },
+                                    pub_ip, // NetworkSettings {
+                                           //     pub_ip: pub_ip.0,
+                                           //     pub_port: pub_ip.1,
+                                           //     nat_type: pub_ip.2,
+                                           //     port_allocation: pub_ip.3,
+                                           //     transport: Transport::UDPoverIP4,
+                                           // },
                                 ));
                             }
                         }
                     } else {
                         if next_v4 && pubiplen == 1 {
                             if !added_gids.contains(&g_id) {
-                                eprintln!("Add a neighbor {}:{}", pub_ip.0, pub_ip.1);
+                                eprintln!("Add a neighbor {}:{}", pub_ip.pub_ip, pub_ip.pub_port);
                                 added_gids.push(g_id);
                                 storage_neighbors.push((
                                     g_id,
-                                    NetworkSettings {
-                                        pub_ip: pub_ip.0,
-                                        pub_port: pub_ip.1,
-                                        nat_type: pub_ip.2,
-                                        port_allocation: pub_ip.3,
-                                        transport: Transport::UDPoverIP6,
-                                    },
+                                    pub_ip, // NetworkSettings {
+                                           //     pub_ip: pub_ip.0,
+                                           //     pub_port: pub_ip.1,
+                                           //     nat_type: pub_ip.2,
+                                           //     port_allocation: pub_ip.3,
+                                           //     transport: Transport::UDPoverIP6,
+                                           // },
                                 ));
                             }
                         } else {
                             if !added_gids.contains(&g_id) {
-                                eprintln!("Add V6 neighbor {}:{}", pub_ip.0, pub_ip.1);
+                                eprintln!("Add V6 neighbor {}:{}", pub_ip.pub_ip, pub_ip.pub_port);
                                 added_gids.push(g_id);
                                 storage_neighbors.push((
                                     g_id,
-                                    NetworkSettings {
-                                        pub_ip: pub_ip.0,
-                                        pub_port: pub_ip.1,
-                                        nat_type: pub_ip.2,
-                                        port_allocation: pub_ip.3,
-                                        transport: Transport::UDPoverIP6,
-                                    },
+                                    pub_ip, // NetworkSettings {
+                                           //     pub_ip: pub_ip.0,
+                                           //     pub_port: pub_ip.1,
+                                           //     nat_type: pub_ip.2,
+                                           //     port_allocation: pub_ip.3,
+                                           //     transport: Transport::UDPoverIP6,
+                                           // },
                                 ));
                                 next_v4 = true;
                             }
