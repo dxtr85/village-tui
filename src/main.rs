@@ -1,10 +1,10 @@
 use async_std::channel::{self as achannel, Receiver as AReceiver, Sender};
 use async_std::task::{sleep, spawn, spawn_blocking};
 use dapp_lib::prelude::*;
+use std::env::args;
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver};
 use std::time::Duration;
-use std::{env::args, path::Path};
 mod config;
 mod logic;
 mod tui;
@@ -99,15 +99,16 @@ async fn main() {
         )
     });
     logic.run(dir.clone()).await;
+    eprintln!("logic finished, waiting for tui_join");
     tui_join.await;
 }
 
 async fn to_user_adapter(to_user: AReceiver<ToApp>, wrapped_sender: Sender<InternalMsg>) {
-    let timeout = Duration::from_millis(16);
+    // let timeout = Duration::from_millis(16);
     // loop {
     // if let Ok(to_app) = to_user.recv_timeout(timeout) {
     while let Ok(to_app) = to_user.recv().await {
-        wrapped_sender.send(InternalMsg::User(to_app)).await;
+        let _ = wrapped_sender.send(InternalMsg::User(to_app)).await;
         // } else {
         //     sleep(timeout).await
         // }
@@ -121,7 +122,7 @@ async fn from_tui_adapter(
     let timeout = Duration::from_millis(16);
     loop {
         if let Ok(from_tui) = from_presentation.recv_timeout(timeout) {
-            wrapped_sender.send(InternalMsg::Tui(from_tui)).await;
+            let _ = wrapped_sender.send(InternalMsg::Tui(from_tui)).await;
         } else {
             sleep(timeout).await
         }

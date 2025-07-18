@@ -1,7 +1,7 @@
 use animaterm::prelude::*;
 use async_std::channel::Receiver as AReceiver;
 use async_std::channel::Sender as ASender;
-use async_std::path::Path;
+// use async_std::path::Path;
 use dapp_lib::prelude::Description;
 pub use dapp_lib::prelude::Manifest;
 use dapp_lib::prelude::SwarmID;
@@ -11,7 +11,7 @@ use dapp_lib::prelude::*;
 use dapp_lib::ToAppMgr;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::net::IpAddr;
+// use std::net::IpAddr;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 // mod manifest;
@@ -70,7 +70,7 @@ impl CreatorContext {
                 s_name: _,
                 target_id: _,
                 description,
-                ti_opt,
+                ti_opt: _,
             } => {
                 if new_type.is_link() {
                     return;
@@ -348,7 +348,7 @@ impl ApplicationLogic {
                                 indices.push(idx);
                                 idx += 1;
                             }
-                            self.to_tui.send(ToPresentation::DisplayIndexer(
+                            let _ = self.to_tui.send(ToPresentation::DisplayIndexer(
                                 // true,
                                 // "Active Searches".to_string(),
                                 formated_phrases,
@@ -367,7 +367,7 @@ impl ApplicationLogic {
                                 texts.push(format!("{}-{}: {}", s_name, c_id, score));
                                 links.push((s_name.clone(), *c_id));
                             }
-                            self.to_tui.send(ToPresentation::DisplayIndexer(texts));
+                            let _ = self.to_tui.send(ToPresentation::DisplayIndexer(texts));
                             self.state = TuiState::SearchResults(links);
                             eprintln!("Search results for {}{:?}", phrase, hits);
                         }
@@ -902,7 +902,7 @@ impl ApplicationLogic {
                                 TileType::Neighbor(_g_id) => {
                                     //TODO
                                 }
-                                TileType::Content(dtype, c_id) => {
+                                TileType::Content(_dtype, _c_id) => {
                                     //TODO
                                     self.state = TuiState::ContextMenuOn(ttype);
                                     let _ = self.to_tui.send(ToPresentation::DisplayCMenu(2));
@@ -1172,7 +1172,8 @@ impl ApplicationLogic {
                                     if let Some(text) = e_result {
                                         eprintln!("Some: {}", text);
                                         //TODO
-                                        self.to_app_mgr_send
+                                        let _ = self
+                                            .to_app_mgr_send
                                             .send(ToAppMgr::FromApp(LibRequest::Search(text)))
                                             .await;
                                     }
@@ -1187,7 +1188,7 @@ impl ApplicationLogic {
                             let prev_state = std::mem::replace(&mut self.state, TuiState::Village);
                             match prev_state {
                                 TuiState::ContextMenuOn(ttype) => match ttype {
-                                    TileType::Home(g_id) => {
+                                    TileType::Home(_g_id) => {
                                         self.run_cmenu_action_on_home(action).await;
                                     }
                                     TileType::Content(d_type, c_id) => {
@@ -2233,7 +2234,7 @@ impl ApplicationLogic {
                 // TODO: indirect send via AppMgr
                 // let _ = gmgr_send.send(ManagerRequest::JoinSwarm("trzat".to_string()));
             }
-            Key::Q | Key::ShiftQ => {
+            Key::ShiftQ => {
                 // TODO: indirect send via AppMgr
                 // let _ = gmgr_send.send(ManagerRequest::Disconnect);
                 // keep_running = false;
@@ -2283,13 +2284,15 @@ impl ApplicationLogic {
                 // let _ = self.to_app_mgr_send.send(ToAppMgr::ListNeighbors).await;
             }
             Key::C => {
+                let mut data_vec = vec![Data::new(vec![70, 91]).unwrap(); 129];
+                data_vec[0] = Data::new(vec![0, 70, 91]).unwrap();
                 let _ = self
                     .to_app_mgr_send
                     .send(ToAppMgr::ChangeContent(
                         self.active_swarm.swarm_id,
                         1,
                         DataType::from(0),
-                        vec![Data::empty(0)],
+                        data_vec,
                     ))
                     .await;
             }
