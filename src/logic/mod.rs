@@ -2240,6 +2240,14 @@ impl ApplicationLogic {
                 // keep_running = false;
                 return true;
             }
+            Key::ShiftD => {
+                // We want to test if ChangeDiameter works
+                eprintln!("ChangeDiameter request from keyboard");
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::ChangeDiameter(self.active_swarm.swarm_id, 10))
+                    .await;
+            }
             // TODO: this should be served separately by sending to user_req
             Key::B => {
                 let _ = self.to_app_mgr_send.send(ToAppMgr::StartBroadcast).await;
