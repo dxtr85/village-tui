@@ -2228,6 +2228,7 @@ impl ApplicationLogic {
     async fn handle_key(&self, key: Key) -> bool {
         match key {
             Key::U => {
+                eprintln!("Keyboard request UploadData");
                 let _ = self.to_app_mgr_send.send(ToAppMgr::UploadData).await;
             }
             Key::J => {
@@ -2264,6 +2265,20 @@ impl ApplicationLogic {
                 let _ = self
                     .to_app_mgr_send
                     .send(ToAppMgr::UnsubscribeBroadcast)
+                    .await;
+            }
+            Key::ShiftS => {
+                // TODO: SendToBCastSource
+                eprintln!("SendToBCastSource");
+                let data = CastData::new(vec![1, 2, 3, 4, 5, 6]).unwrap();
+                let bc_id = CastID(0);
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::SendToBCastSource(
+                        self.active_swarm.swarm_id,
+                        bc_id,
+                        data,
+                    ))
                     .await;
             }
             Key::CtrlU => {
@@ -2314,7 +2329,7 @@ impl ApplicationLogic {
                     ))
                     .await;
             }
-            Key::ShiftS => {
+            Key::ShiftA => {
                 // TODO: extend this message with actual content
                 let _ = self
                     .to_app_mgr_send
