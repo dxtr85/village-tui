@@ -2229,7 +2229,13 @@ impl ApplicationLogic {
         match key {
             Key::U => {
                 eprintln!("Keyboard request UploadData");
-                let _ = self.to_app_mgr_send.send(ToAppMgr::UploadData).await;
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::BroadcastSend(
+                        CastID(0),
+                        CastData::new(vec![0, 1, 0, 2, 0, 3]).unwrap(),
+                    ))
+                    .await;
             }
             Key::J => {
                 // TODO: indirect send via AppMgr
@@ -2265,6 +2271,56 @@ impl ApplicationLogic {
                 let _ = self
                     .to_app_mgr_send
                     .send(ToAppMgr::UnsubscribeBroadcast)
+                    .await;
+            }
+            Key::M => {
+                eprintln!("Key::M MulticastStart");
+                let _ = self.to_app_mgr_send.send(ToAppMgr::StartMulticast).await;
+                // let res = service_request.send(Request::StartBroadcast);
+                // b_req_sent = res.is_ok();
+            }
+            Key::N => {
+                eprintln!("Key::N MulticastSend");
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::MulticastSend(
+                        CastID(0),
+                        CastData::new(vec![5, 5, 5, 5, 5, 5]).unwrap(),
+                    ))
+                    .await;
+            }
+            Key::ShiftM => {
+                eprintln!("ShiftM: End Multicast");
+                let _ = self.to_app_mgr_send.send(ToAppMgr::EndMulticast).await;
+                // let res = service_request.send(Request::StartBroadcast);
+                // b_req_sent = res.is_ok();
+            }
+            Key::O => {
+                eprintln!("Key::O: UnsubscribeMulticast");
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::UnsubscribeMulticast)
+                    .await;
+            }
+            Key::ShiftO => {
+                eprintln!("Key::ShiftO: SubscribeMulticast");
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::SubscribeMulticast)
+                    .await;
+            }
+            Key::ShiftN => {
+                // TODO: SendToBCastSource
+                eprintln!("ShiftN: SendToMCastSource");
+                let data = CastData::new(vec![1, 2, 3, 4, 5, 6]).unwrap();
+                let bc_id = CastID(0);
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::SendToMCastSource(
+                        self.active_swarm.swarm_id,
+                        bc_id,
+                        data,
+                    ))
                     .await;
             }
             Key::ShiftS => {
