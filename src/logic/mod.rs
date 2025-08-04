@@ -383,7 +383,7 @@ impl ApplicationLogic {
                             eprintln!("Requesting Manifest");
                             let _ = self
                                 .to_app_mgr_send
-                                .send(ToAppMgr::FromApp(LibRequest::ReadData(s_id, 0)))
+                                .send(ToAppMgr::FromApp(LibRequest::ReadAllPages(s_id, 0)))
                                 .await;
                             let _ = self
                                 .to_app_mgr_send
@@ -401,7 +401,7 @@ impl ApplicationLogic {
                                     self.state = TuiState::ReadRequestForIndexer(target_cid);
                                     let _ = self
                                         .to_app_mgr_send
-                                        .send(ToAppMgr::FromApp(LibRequest::ReadData(
+                                        .send(ToAppMgr::FromApp(LibRequest::ReadAllPages(
                                             s_id, target_cid,
                                         )))
                                         .await;
@@ -579,7 +579,7 @@ impl ApplicationLogic {
                                 data_requested = true;
                                 let _ = self
                                     .to_app_mgr_send
-                                    .send(ToAppMgr::FromApp(LibRequest::ReadData(s_id, c_id)))
+                                    .send(ToAppMgr::FromApp(LibRequest::ReadAllPages(s_id, c_id)))
                                     .await;
                             }
                             if s_id == self.active_swarm.swarm_id && self.home_swarm_enforced {
@@ -590,7 +590,7 @@ impl ApplicationLogic {
                                             // data_requested = true;
                                             let _ = self
                                                 .to_app_mgr_send
-                                                .send(ToAppMgr::FromApp(LibRequest::ReadData(
+                                                .send(ToAppMgr::FromApp(LibRequest::ReadAllPages(
                                                     s_id, c_id,
                                                 )))
                                                 .await;
@@ -636,6 +636,12 @@ impl ApplicationLogic {
                                 // }
                             }
                         }
+                        ToApp::ReadInProgress(s_id, c_id) => {
+                            let _ = self
+                                .notification_sender
+                                .send(Some(format!("{} {} Read in progress…", s_id, c_id)))
+                                .await;
+                        }
                         ToApp::ReadError(s_id, c_id, error) => {
                             // eprintln!("Received ReadError for {} CID-{}: {}", s_id, c_id, error);
                             if matches!(error, AppError::AppDataNotSynced) && c_id == 0 {
@@ -643,7 +649,7 @@ impl ApplicationLogic {
                                 // eprintln!("Requesting CID-{} again…", c_id);
                                 let _ = self
                                     .to_app_mgr_send
-                                    .send(ToAppMgr::FromApp(LibRequest::ReadData(s_id, c_id)))
+                                    .send(ToAppMgr::FromApp(LibRequest::ReadAllPages(s_id, c_id)))
                                     .await;
                             }
                             // if s_id == self.active_swarm.swarm_id {
@@ -826,12 +832,14 @@ impl ApplicationLogic {
                                 // we need to sync it with swarm.
                                 let _ = self
                                     .to_app_mgr_send
-                                    .send(ToAppMgr::FromApp(LibRequest::ReadData(
+                                    .send(ToAppMgr::FromApp(LibRequest::ReadAllPages(
                                         self.active_swarm.swarm_id,
                                         0,
+                                        // true,
                                     )))
                                     .await;
-                                // TODO: Probably it is better to hide this functionality from user
+                                // TODO: Probably it is better to hide this
+                                // functionality from user
                                 // and instead send a list of Data objects to update/create
                                 let data_vec = self.active_swarm.manifest.to_data();
                                 // TODO: this is not the data we want to send!
@@ -860,12 +868,14 @@ impl ApplicationLogic {
                                 // we need to sync it with swarm.
                                 let _ = self
                                     .to_app_mgr_send
-                                    .send(ToAppMgr::FromApp(LibRequest::ReadData(
+                                    .send(ToAppMgr::FromApp(LibRequest::ReadAllPages(
                                         self.active_swarm.swarm_id,
                                         0,
+                                        // true,
                                     )))
                                     .await;
-                                // TODO: Probably it is better to hide this functionality from user
+                                // TODO: Probably it is better to hide this
+                                // functionality from user
                                 // and instead send a list of Data objects to update/create
                                 let data_vec = self.active_swarm.manifest.to_data();
                                 // TODO: this is not the data we want to send!
@@ -1456,12 +1466,14 @@ impl ApplicationLogic {
                             }
                             let _ = self
                                 .to_app_mgr_send
-                                .send(ToAppMgr::FromApp(LibRequest::ReadData(
+                                .send(ToAppMgr::FromApp(LibRequest::ReadAllPages(
                                     self.active_swarm.swarm_id,
                                     c_id,
+                                    // true,
                                 )))
                                 .await;
                         }
+
                         FromPresentation::IndexResult(i_result) => {
                             let mut new_state = None;
                             match &self.state {
@@ -2202,9 +2214,10 @@ impl ApplicationLogic {
         self.state = TuiState::ReadLinkToFollow(c_id, None);
         let _ = self
             .to_app_mgr_send
-            .send(ToAppMgr::FromApp(LibRequest::ReadData(
+            .send(ToAppMgr::FromApp(LibRequest::ReadAllPages(
                 self.active_swarm.swarm_id,
                 c_id,
+                // true,
             )))
             .await;
     }
@@ -2215,9 +2228,10 @@ impl ApplicationLogic {
             self.state = TuiState::ReadRequestForIndexer(c_id);
             let _ = self
                 .to_app_mgr_send
-                .send(ToAppMgr::FromApp(LibRequest::ReadData(
+                .send(ToAppMgr::FromApp(LibRequest::ReadAllPages(
                     self.active_swarm.swarm_id,
                     c_id,
+                    // true,
                 )))
                 .await;
         } else {
@@ -2349,9 +2363,10 @@ impl ApplicationLogic {
                 // Here we send request to read manifest data
                 let _ = self
                     .to_app_mgr_send
-                    .send(ToAppMgr::FromApp(LibRequest::ReadData(
+                    .send(ToAppMgr::FromApp(LibRequest::ReadAllPages(
                         self.active_swarm.swarm_id,
                         0,
+                        // true,
                     )))
                     .await;
             }
