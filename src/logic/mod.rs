@@ -1855,8 +1855,11 @@ impl ApplicationLogic {
                     if *rc_id == c_id {
                         // 2 convert data to link
                         let first_data = d_vec.remove(0);
-                        let link = data_to_link(first_data).unwrap();
-                        if let Some((s_name, target_c_id, descr, data, ti_opt)) = link.link_params()
+                        let link_res = data_to_link(first_data);
+                        if link_res.is_err() {
+                            eprintln!("Unable to ReadLink: {}", link_res.err().unwrap());
+                        } else if let Some((s_name, target_c_id, descr, data, ti_opt)) =
+                            link_res.unwrap().link_params()
                         {
                             // 3 set target swarm active
                             eprintln!("ReadLinkToFollow");
@@ -1903,7 +1906,13 @@ impl ApplicationLogic {
             }
         }
         if tags.len() != ids_len {
-            eprintln!("Manifest not synced, shelving NewContent message");
+            // eprintln!("Manifest not synced, shelving NewContent message");
+            eprintln!(
+                "Manifest has {} TAGS, {} has {}, shelving",
+                tags.len(),
+                c_id,
+                ids_len
+            );
             self.pending_notifications
                 .entry(s_id)
                 .or_insert(vec![])
