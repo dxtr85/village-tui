@@ -16,6 +16,7 @@ use tui::{instantiate_tui_mgr, serve_tui_mgr, FromPresentation};
 enum InternalMsg {
     Tui(FromPresentation),
     User(ToApp),
+    PresentOptionsForTag(u8, String),
 }
 
 #[async_std::main]

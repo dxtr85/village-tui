@@ -135,6 +135,9 @@ impl CreatorContext {
 enum TuiState {
     Village,
     AddTag,
+    ChangeTag(u8),
+    PresentTags,
+    ChooseActionForTag(u8, String),
     AddSearch,
     ListSearches(Vec<(String, usize)>),
     SearchResults(Vec<(SwarmName, ContentID)>),
@@ -855,6 +858,36 @@ impl ApplicationLogic {
                                     .await;
                             }
                         }
+                        FromPresentation::ChangeTag(tag_id, tag) => {
+                            eprintln!("Received FromPresentation::ChangeTag({tag_id},{tag:?})",);
+                            if self.active_swarm.manifest.update_tag(tag_id, tag) {
+                                // Now our manifest is out of sync with swarm
+                                // we need to sync it with swarm.
+                                // let _ = self
+                                //     .to_app_mgr_send
+                                //     .send(ToAppMgr::FromApp(LibRequest::ReadAllPages(
+                                //         self.active_swarm.swarm_id,
+                                //         0,
+                                //         // true,
+                                //     )))
+                                //     .await;
+                                // TODO: Probably it is better to hide this
+                                // functionality from user
+                                // and instead send a list of Data objects to update/create
+                                let data_vec = self.active_swarm.manifest.to_data();
+                                // TODO: this is not the data we want to send!
+                                eprintln!("app logic received change tag request,\nsending change content to app mgr…");
+                                let _ = self
+                                    .to_app_mgr_send
+                                    .send(ToAppMgr::ChangeContent(
+                                        self.active_swarm.swarm_id,
+                                        0,
+                                        DataType::Data(0),
+                                        data_vec,
+                                    ))
+                                    .await;
+                            }
+                        }
                         FromPresentation::AddDataType(tag) => {
                             eprintln!("Received FromPresentation::AddDataType({})", tag.0);
                             // TODO: first check if we can add a tag for given swarm
@@ -1042,6 +1075,61 @@ impl ApplicationLogic {
                                         ));
                                     }
                                 }
+                                TuiState::PresentTags => {
+                                    // eprintln!("We should do something with received Tag");
+                                    if !indices.is_empty() {
+                                        let tag_index = indices[0] as u8;
+                                        let mut tag_texts = self
+                                            .active_swarm
+                                            .manifest
+                                            .tag_names(Some(vec![tag_index]));
+                                        if !tag_texts.is_empty() {
+                                            let t_txt = tag_texts.remove(0);
+                                            let _ = self
+                                                .to_user_send
+                                                .send(InternalMsg::PresentOptionsForTag(
+                                                    tag_index, t_txt,
+                                                ))
+                                                .await;
+                                        }
+                                    }
+                                }
+                                TuiState::ChooseActionForTag(tag_id, tag_text) => {
+                                    match indices[0] {
+                                        0 => {
+                                            // TODO
+                                            eprintln!("Should go to street with id {tag_id}");
+                                        }
+                                        1 => {
+                                            new_state = TuiState::ChangeTag(*tag_id);
+                                            let _ = self.to_tui.send(ToPresentation::DisplayEditor(
+                    (false, true),
+                    " Max size: 32  Oneline  Change Street name    (TAB to finish)".to_string(),
+                    Some(tag_text.clone()),
+                    true,
+                    Some(32),
+                ));
+                                            eprintln!("Should change street name for id {tag_id}");
+                                        }
+                                        2 => {
+                                            new_state = TuiState::AddTag;
+                                            let _ = self.to_tui.send(ToPresentation::DisplayEditor(
+                    (false, true),
+                    " Max size: 32  Oneline  Define new Tag name    (TAB to finish)".to_string(),
+                    None,
+                    false,
+                    Some(32),
+                ));
+                                            // eprintln!("Should create new street");
+                                        }
+                                        3 => {
+                                            // Do nothing
+                                        }
+                                        other => {
+                                            eprintln!("Don't know what to do with Tag {other}");
+                                        }
+                                    }
+                                }
                                 other => {
                                     eprintln!("{:?} got Selected indices", other);
                                 }
@@ -1066,6 +1154,24 @@ impl ApplicationLogic {
                                                 vec![Tag::new(text).unwrap()],
                                             )))
                                             .await;
+                                    }
+                                }
+                                TuiState::ChangeTag(tag_id) => {
+                                    if let Some(text) = e_result {
+                                        if !text.is_empty() {
+                                            // eprintln!("We should change Tag {tag_id} to {text}");
+                                            let _ = self
+                                                .to_user_send
+                                                .send(InternalMsg::Tui(
+                                                    FromPresentation::ChangeTag(
+                                                        tag_id,
+                                                        Tag::new(text).unwrap(),
+                                                    ),
+                                                ))
+                                                .await;
+                                        }
+                                    } else {
+                                        eprintln!("Not supposed to change tag {tag_id}");
                                     }
                                 }
                                 TuiState::AddDType => {
@@ -1189,7 +1295,7 @@ impl ApplicationLogic {
                                     }
                                 }
                                 _other => {
-                                    eprintln!("Unexpected EditResult");
+                                    eprintln!("Unexpected EditResult {:?}", _other);
                                 }
                             }
                             self.state = new_state;
@@ -1676,6 +1782,10 @@ impl ApplicationLogic {
                             }
                         }
                     },
+                    InternalMsg::PresentOptionsForTag(tag_idx, tag_text) => {
+                        // eprintln!("We should present options for {}: {}", tag_idx, tag_text);
+                        let _ = self.present_options_for_tag(tag_idx, tag_text).await;
+                    }
                 }
             }
         }
@@ -1882,6 +1992,29 @@ impl ApplicationLogic {
                 }
             }
         }
+    }
+
+    async fn present_options_for_tag(&mut self, tag_idx: u8, tag_text: String) {
+        // TODO:
+        // we should present user with available options
+        // – Go to street
+        // – (Change name)
+        // – (Add new street)
+        // – Cancel
+        eprintln!("present_options_for_tag({tag_idx},{tag_text})");
+        self.state = TuiState::ChooseActionForTag(tag_idx, tag_text.clone());
+        let options = vec![
+            "Go to street".to_string(),
+            "Change name".to_string(),
+            "Add new street".to_string(),
+            "Cancel".to_string(),
+        ];
+        let _ = self.to_tui.send(ToPresentation::DisplaySelector(
+            true,
+            format!("What to do with {tag_text}"),
+            options,
+            vec![],
+        ));
     }
 
     fn update_active_content_tags(
@@ -2117,8 +2250,9 @@ impl ApplicationLogic {
         );
         match action {
             1 => {
+                self.state = TuiState::PresentTags;
                 let _ = self.to_tui.send(ToPresentation::DisplaySelector(
-                    false,
+                    true,
                     "Catalog Application's Tags".to_string(),
                     self.active_swarm.manifest.tag_names(None),
                     vec![],

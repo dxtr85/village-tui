@@ -505,6 +505,7 @@ pub enum FromPresentation {
     // context where given key was pressed
     AddDataType(Tag),
     AddTags(Vec<Tag>),
+    ChangeTag(u8, Tag),
     CreateContent(DataType, Data),
     UpdateContent(ContentID, DataType, u16, Vec<Data>),
     ContentInquiry(ContentID),
