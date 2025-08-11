@@ -1,4 +1,4 @@
-use crate::tui::Direction;
+use crate::catalog::tui::Direction;
 use animaterm::utilities::message_box;
 use animaterm::{glyph, prelude::*};
 

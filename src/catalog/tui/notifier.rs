@@ -10,7 +10,7 @@ use async_std::task::sleep;
 use async_std::task::spawn;
 use std::sync::mpsc::Sender as SyncSender;
 
-use super::ToPresentation;
+use super::ToCatalogView;
 
 enum NotifierState {
     SlidingIn(u8),
@@ -27,7 +27,7 @@ pub struct Notifier {
     buffer: Vec<String>,
     sender: Sender<Option<String>>,
     receiver: Receiver<Option<String>>,
-    tui_sender: SyncSender<ToPresentation>,
+    tui_sender: SyncSender<ToCatalogView>,
 }
 //TODO: Create an async channel for Notifier to receive notifications.
 // We need also a buffer to store queued notifications, if we receive multiple
@@ -38,7 +38,7 @@ impl Notifier {
         offset: (isize, isize),
         mgr: &mut Manager,
         (sender, receiver): (Sender<Option<String>>, Receiver<Option<String>>),
-        tui_sender: SyncSender<ToPresentation>,
+        tui_sender: SyncSender<ToCatalogView>,
     ) -> Self {
         let cols = 30;
         let rows = 3;
@@ -76,18 +76,21 @@ impl Notifier {
             // eprintln!("Notifier ggot: {:?}", recv_result);
             match recv_result {
                 Ok(Some(new_note)) => {
+                    if new_note.is_empty() {
+                        eprintln!("Notifier received empty note, terminating");
+                        break;
+                    }
                     //TODO: display a new_note or add it to buffer
                     match self.state {
                         NotifierState::OffScreen => {
                             self.state = NotifierState::SlidingIn(self.cols as u8);
                             let note_frame = self.prepare_note(new_note);
-                            //TODO: spawn a timer
                             spawn(timer(self.sender.clone(), self.cols));
                             // eprintln!("Timer spawned");
                             let _res = self
                                 .tui_sender
-                                .send(ToPresentation::SetNotification(self.id, note_frame));
-                            eprintln!("SetNote result: {:?}", _res);
+                                .send(ToCatalogView::SetNotification(self.id, note_frame));
+                            eprintln!("SetNote send result: {_res:?}");
                         }
                         _ => {
                             self.buffer.push(new_note);
@@ -104,7 +107,7 @@ impl Notifier {
                         };
                         let _ = self
                             .tui_sender
-                            .send(ToPresentation::MoveNotification(self.id, (-1, 0)));
+                            .send(ToCatalogView::MoveNotification(self.id, (-1, 0)));
                     }
                     NotifierState::Presenting => {
                         self.state = NotifierState::SlidingOut(self.cols as u8);
@@ -118,7 +121,7 @@ impl Notifier {
                         };
                         let _ = self
                             .tui_sender
-                            .send(ToPresentation::MoveNotification(self.id, (1, 0)));
+                            .send(ToCatalogView::MoveNotification(self.id, (1, 0)));
                         if !self.buffer.is_empty() {
                             let next_note = self.buffer.remove(0);
                             let _ = self.sender.send(Some(next_note)).await;
@@ -134,6 +137,7 @@ impl Notifier {
                 }
             }
         }
+        eprintln!("Notifier is done.");
     }
     fn prepare_note(&self, text: String) -> Vec<Glyph> {
         let mut frame = Vec::with_capacity(self.cols * self.rows);

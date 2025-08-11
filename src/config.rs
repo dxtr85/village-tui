@@ -6,8 +6,9 @@ use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use crate::logic::Manifest;
+use crate::catalog::logic::Manifest;
 
+#[derive(Clone)]
 pub struct Configuration {
     pub asset_dir: PathBuf,
     pub storage_neighbors: Vec<(GnomeId, NetworkSettings)>,

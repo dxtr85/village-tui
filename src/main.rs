@@ -1,20 +1,18 @@
 use async_std::channel::{self as achannel, Receiver as AReceiver, Sender};
-use async_std::task::{sleep, spawn, spawn_blocking};
+use async_std::task::spawn;
 use dapp_lib::prelude::*;
 use std::env::args;
 use std::path::PathBuf;
-use std::sync::mpsc::{channel, Receiver};
-use std::time::Duration;
+mod catalog;
 mod config;
-mod logic;
-mod tui;
+mod forum;
+use catalog::logic::CatalogLogic;
+use catalog::tui::{instantiate_tui_mgr, FromCatalogView};
 use config::Configuration;
-use logic::ApplicationLogic;
-use tui::Notifier;
-use tui::{instantiate_tui_mgr, serve_tui_mgr, FromPresentation};
+use forum::logic::ForumLogic;
 
 enum InternalMsg {
-    Tui(FromPresentation),
+    Tui(FromCatalogView),
     User(ToApp),
     PresentOptionsForTag(u8, String),
 }
@@ -28,24 +26,9 @@ async fn main() {
         PathBuf::new()
     };
 
-    let (to_presentation_msg_send, to_presentation_msg_recv) = channel();
-    let (from_presentation_msg_send, from_presentation_msg_recv) = channel();
     let (to_application_send, to_application_recv) = achannel::unbounded();
     let (wrapped_sender, wrapped_receiver) = achannel::unbounded();
     let (to_app_mgr_send, to_app_mgr_recv) = achannel::unbounded();
-
-    let mut tui_mgr = instantiate_tui_mgr();
-    //TODO: we want to make ApplicationLogic::run() async
-    // Restrictions:
-    // - We can not alter logic in tui module
-    // - We can not make ToUser wrap FromTUI messages
-    //
-    // Solution:
-    // - We create an enum wrapper that can carry both ToUser and FromPresentation
-    // - We spawn two adapter services, one for wrapping ToUser messages
-    //   and one for FromPresentation
-    // - We modify run fn to only listen on a single async receiver
-
     let mut config = Configuration::new(&dir).await;
     let storage_neighbors = if config.storage_neighbors.is_empty() {
         vec![]
@@ -62,70 +45,54 @@ async fn main() {
     .await;
 
     spawn(to_user_adapter(to_application_recv, wrapped_sender.clone()));
-    spawn(from_tui_adapter(
-        from_presentation_msg_recv,
-        wrapped_sender.clone(),
-    ));
-    let (notification_sender, notification_receiver) = achannel::unbounded();
-    let founder = my_name.founder;
-    let mut logic = ApplicationLogic::new(
-        my_name,
-        to_app_mgr_send,
-        to_presentation_msg_send.clone(),
-        notification_sender.clone(), // from_presentation_msg_send.clone(),
-        // from_presentation_msg_recv,
-        wrapped_sender,
-        wrapped_receiver,
-    );
-    let s_size = tui_mgr.screen_size();
-    let notifier = Notifier::new(
-        (s_size.0 as isize, 0),
-        &mut tui_mgr,
-        (notification_sender.clone(), notification_receiver),
-        to_presentation_msg_send,
-    );
-    spawn(notifier.serve());
-    let _res = notification_sender
-        .send(Some(format!("Wciśnij F1 aby uzyskać pomoc")))
-        .await;
-    eprintln!("Sent testowa notka: {:?}", _res);
-    let tui_join = spawn_blocking(move || {
-        serve_tui_mgr(
-            founder,
-            tui_mgr,
-            from_presentation_msg_send,
-            // to_presentation_msg_send,
-            to_presentation_msg_recv,
-            config,
-        )
-    });
-    logic.run(dir.clone()).await;
-    eprintln!("logic finished, waiting for tui_join");
-    tui_join.await;
+    let tui_mgr = instantiate_tui_mgr();
+    // TODO: When logic.run() is done, it returns Option<AppType>,
+    //       and if that option is Some, another logic is started
+    //       for that new AppType.
+    //       Along with new logic, serve_tui_mgr task should be informed
+    //       about user interface switch. Upon receiving that info,
+    //       serve_tui_mgr should break it's loop and spawn a new one for AppType.
+    //       Also new from_tui_adapter should be spawned,
+    //       old one should self-terminate on error receiving FromPresentation.
+    // TODO: InternalMessage should serve every defined AppType, and Notification
+    let mut next_app = Some((AppType::Catalog, wrapped_receiver, config, tui_mgr));
+    loop {
+        if let Some((app_type, wrapped_receiver, config, mut tui_mgr)) = next_app.take() {
+            match app_type {
+                AppType::Catalog => {
+                    let c_logic = CatalogLogic::new(
+                        my_name.clone(),
+                        to_app_mgr_send.clone(),
+                        &mut tui_mgr,
+                        wrapped_sender.clone(),
+                        wrapped_receiver,
+                    );
+                    next_app = c_logic.run(dir.clone(), config, tui_mgr).await;
+                }
+                AppType::Forum => {
+                    let f_logic = ForumLogic::new(
+                        to_app_mgr_send.clone(),
+                        wrapped_sender.clone(),
+                        wrapped_receiver,
+                    );
+                    next_app = f_logic
+                        .run(my_name.founder, dir.clone(), config, tui_mgr)
+                        .await;
+                }
+                AppType::Other(_x) => {
+                    //TODO
+                    break;
+                }
+            }
+        } else {
+            break;
+        }
+    }
+    eprintln!("Main loop is done.");
 }
 
 async fn to_user_adapter(to_user: AReceiver<ToApp>, wrapped_sender: Sender<InternalMsg>) {
-    // let timeout = Duration::from_millis(16);
-    // loop {
-    // if let Ok(to_app) = to_user.recv_timeout(timeout) {
     while let Ok(to_app) = to_user.recv().await {
         let _ = wrapped_sender.send(InternalMsg::User(to_app)).await;
-        // } else {
-        //     sleep(timeout).await
-        // }
-    }
-}
-
-async fn from_tui_adapter(
-    from_presentation: Receiver<FromPresentation>,
-    wrapped_sender: Sender<InternalMsg>,
-) {
-    let timeout = Duration::from_millis(16);
-    loop {
-        if let Ok(from_tui) = from_presentation.recv_timeout(timeout) {
-            let _ = wrapped_sender.send(InternalMsg::Tui(from_tui)).await;
-        } else {
-            sleep(timeout).await
-        }
     }
 }

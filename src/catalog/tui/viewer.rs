@@ -1,4 +1,4 @@
-use crate::logic::Manifest;
+use crate::catalog::logic::Manifest;
 use animaterm::prelude::Glyph;
 use animaterm::prelude::Graphic;
 use animaterm::prelude::Manager;

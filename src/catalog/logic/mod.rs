@@ -1,6 +1,13 @@
+use crate::catalog::tui::serve_catalog_tui;
+use crate::catalog::tui::{from_catalog_tui_adapter, Notifier};
+use crate::config::Configuration;
 use animaterm::prelude::*;
 use async_std::channel::Receiver as AReceiver;
 use async_std::channel::Sender as ASender;
+use async_std::channel::{self as achannel};
+use async_std::task::{spawn, spawn_blocking};
+use std::sync::mpsc::channel;
+use std::sync::mpsc::Receiver;
 // use async_std::path::Path;
 use dapp_lib::prelude::Description;
 pub use dapp_lib::prelude::Manifest;
@@ -12,11 +19,12 @@ use dapp_lib::ToAppMgr;
 use std::collections::HashMap;
 use std::collections::HashSet;
 // use std::net::IpAddr;
+// use crate::config::Configuration;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 // mod manifest;
-use crate::tui::Direction;
-use crate::tui::{CreatorResult, FromPresentation, TileType, ToPresentation};
+use crate::catalog::tui::Direction;
+use crate::catalog::tui::{CreatorResult, FromCatalogView, TileType, ToCatalogView};
 use crate::Configuration as AppConf;
 use crate::InternalMsg;
 // pub use manifest::Manifest;
@@ -272,16 +280,17 @@ impl SwarmShell {
     }
 }
 
-pub struct ApplicationLogic {
+pub struct CatalogLogic {
     my_name: SwarmName,
     // pub_ips: Vec<(IpAddr, u16, Nat, (PortAllocationRule, i8))>,
     pub_ips: Vec<NetworkSettings>,
     state: TuiState,
     active_swarm: SwarmShell,
     to_app_mgr_send: ASender<ToAppMgr>,
-    to_tui: Sender<ToPresentation>,
-    // from_tui_send: Sender<FromPresentation>,
-    // from_tui_recv: Receiver<FromPresentation>,
+    to_tui: Sender<ToCatalogView>,
+    to_tui_recv: Option<Receiver<ToCatalogView>>,
+    from_tui_send: Sender<FromCatalogView>,
+    // from_tui_recv: Receiver<FromCatalogView>,
     to_user_send: ASender<InternalMsg>,
     to_app: AReceiver<InternalMsg>,
     notification_sender: ASender<Option<String>>,
@@ -289,24 +298,41 @@ pub struct ApplicationLogic {
     // when given SwarmID was disconnected
     visible_streets: (usize, Vec<Tag>), // (how many streets visible at once, visible street names),
     home_swarm_enforced: bool,
-    buffered_from_tui: Vec<FromPresentation>,
+    buffered_from_tui: Vec<FromCatalogView>,
     clipboard: Option<(SwarmName, ContentID)>,
     // waiting_for: (SwarmName, ContentID),
 }
-impl ApplicationLogic {
+impl CatalogLogic {
     pub fn new(
         my_name: SwarmName,
         to_app_mgr_send: ASender<ToAppMgr>,
-        to_tui_send: Sender<ToPresentation>,
-        notification_sender: ASender<Option<String>>,
+        tui_mgr: &mut Manager,
+        // to_tui_send: Sender<ToCatalogView>,
+        // notification_sender: ASender<Option<String>>,
         // from_tui_send: Sender<FromPresentation>,
-        // from_tui_recv: Receiver<FromPresentation>,
+        // from_tui_recv: Receiver<FromCatalogView>,
         // to_user_send: Sender<ToApp>,
         // to_user_recv: Receiver<ToApp>,
         to_user_send: ASender<InternalMsg>,
         to_user_recv: AReceiver<InternalMsg>,
     ) -> Self {
-        ApplicationLogic {
+        let (to_tui_send, to_tui_recv) = channel();
+        let (from_tui_send, from_tui_recv) = channel();
+        spawn(from_catalog_tui_adapter(
+            from_tui_recv,
+            to_user_send.clone(),
+            // wrapped_sender.clone(),
+        ));
+        let (notification_sender, notification_receiver) = achannel::unbounded();
+        let s_size = tui_mgr.screen_size();
+        let notifier = Notifier::new(
+            (s_size.0 as isize, 0),
+            tui_mgr,
+            (notification_sender.clone(), notification_receiver),
+            to_tui_send.clone(),
+        );
+        spawn(notifier.serve());
+        CatalogLogic {
             my_name,
             pub_ips: vec![],
             state: TuiState::Village,
@@ -320,7 +346,8 @@ impl ApplicationLogic {
             ),
             to_app_mgr_send,
             to_tui: to_tui_send,
-            // from_tui_send,
+            to_tui_recv: Some(to_tui_recv),
+            from_tui_send,
             // from_tui_recv,
             to_user_send,
             to_app: to_user_recv,
@@ -333,7 +360,33 @@ impl ApplicationLogic {
             // waiting_for: (SwarmName::new(GnomeId::any(), "".to_string()).unwrap(), 0),
         }
     }
-    pub async fn run(&mut self, config_dir: PathBuf) {
+    pub async fn run(
+        mut self,
+        config_dir: PathBuf,
+        mut config: Configuration,
+        // founder: GnomeId,
+        mut tui_mgr: Manager,
+        // from_presentation_msg_send: Sender<FromCatalogView>,
+        // to_presentation_msg_recv: std::sync::mpsc::Receiver<ToCatalogView>,
+        // wrapped_sender: ASender<InternalMsg>,
+    ) -> Option<(AppType, AReceiver<InternalMsg>, Configuration, Manager)> {
+        // TODO: notifier should send internal message
+        // so that switching between apps  should be seamless.
+        // That internal massage should be served by each app's
+        // internal logic.
+        let from_tui_send = self.from_tui_send.clone();
+        let to_tui_recv = self.to_tui_recv.take().unwrap();
+        let tui_join = spawn_blocking(move || {
+            serve_catalog_tui(
+                self.my_name.founder,
+                tui_mgr,
+                from_tui_send,
+                to_tui_recv,
+                config,
+            )
+        });
+
+        // TODO: move above inside CatalogLogic::new
         'outer: loop {
             while let Ok(internal_msg) = self.to_app.recv().await {
                 match internal_msg {
@@ -351,7 +404,7 @@ impl ApplicationLogic {
                                 indices.push(idx);
                                 idx += 1;
                             }
-                            let _ = self.to_tui.send(ToPresentation::DisplayIndexer(
+                            let _ = self.to_tui.send(ToCatalogView::DisplayIndexer(
                                 // true,
                                 // "Active Searches".to_string(),
                                 formated_phrases,
@@ -370,7 +423,7 @@ impl ApplicationLogic {
                                 texts.push(format!("{}-{}: {}", s_name, c_id, score));
                                 links.push((s_name.clone(), *c_id));
                             }
-                            let _ = self.to_tui.send(ToPresentation::DisplayIndexer(texts));
+                            let _ = self.to_tui.send(ToCatalogView::DisplayIndexer(texts));
                             self.state = TuiState::SearchResults(links);
                             eprintln!("Search results for {}{:?}", phrase, hits);
                         }
@@ -410,7 +463,7 @@ impl ApplicationLogic {
                                         .await;
                                     let _ = self
                                         .to_tui
-                                        .send(ToPresentation::SwapTiles(target_name.founder));
+                                        .send(ToCatalogView::SwapTiles(target_name.founder));
                                 } else {
                                     eprintln!(
                                         "Had to follow a link, but switched to a different swarm"
@@ -509,7 +562,7 @@ impl ApplicationLogic {
                                     if !neighbors.is_empty() {
                                         // eprintln!("{} Sending Neighbors0: {:?}", s_id, neighbors);
                                         let _ =
-                                            self.to_tui.send(ToPresentation::Neighbors(neighbors));
+                                            self.to_tui.send(ToCatalogView::Neighbors(neighbors));
                                     }
                                 } else {
                                     //TODO: here we need to insert our id as a Neighbor, and remove Swarm's founder from Neighbor list
@@ -523,7 +576,7 @@ impl ApplicationLogic {
                                     }
                                     eprintln!("Presenting Neighbors: {:?}", new_neighbors);
                                     let _ =
-                                        self.to_tui.send(ToPresentation::Neighbors(new_neighbors));
+                                        self.to_tui.send(ToCatalogView::Neighbors(new_neighbors));
                                 }
                             } else {
                                 eprintln!(
@@ -551,7 +604,7 @@ impl ApplicationLogic {
                             }
                             if s_id == self.active_swarm.swarm_id {
                                 eprintln!("Neighbor left: {}", n_id);
-                                let _ = self.to_tui.send(ToPresentation::NeighborLeft(n_id));
+                                let _ = self.to_tui.send(ToCatalogView::NeighborLeft(n_id));
                             } else {
                                 eprintln!("Neighbor left: {} for swarm {}", n_id, s_id);
                             }
@@ -692,12 +745,12 @@ impl ApplicationLogic {
                         }
                     },
                     InternalMsg::Tui(from_tui) => match from_tui {
-                        FromPresentation::VisibleStreetsCount(v_streets) => {
+                        FromCatalogView::VisibleStreetsCount(v_streets) => {
                             //TODO: store this in order to know what information to send
                             eprintln!("OK we see {} streets at once", v_streets);
                             self.visible_streets.0 = v_streets as usize;
                         }
-                        FromPresentation::TileSelected(tile) => {
+                        FromCatalogView::TileSelected(tile) => {
                             match tile {
                                 TileType::Home(g_id) => {
                                     if g_id == self.my_name.founder {
@@ -715,7 +768,7 @@ impl ApplicationLogic {
                                             },
                                         )))
                                         .await;
-                                    let _ = self.to_tui.send(ToPresentation::SwapTiles(g_id));
+                                    let _ = self.to_tui.send(ToCatalogView::SwapTiles(g_id));
                                 }
                                 TileType::Field => {
                                     // TODO: do anything?
@@ -734,7 +787,7 @@ impl ApplicationLogic {
                                 }
                             }
                         }
-                        FromPresentation::CursorOutOfScreen(direction) => {
+                        FromCatalogView::CursorOutOfScreen(direction) => {
                             match direction {
                                 Direction::Up => {
                                     //TODO
@@ -751,7 +804,7 @@ impl ApplicationLogic {
                                                 self.active_swarm.get_cids_for_tag(street.clone());
                                             streets_with_contents.push((street, contents));
                                         }
-                                        let _ = self.to_tui.send(ToPresentation::StreetNames(
+                                        let _ = self.to_tui.send(ToCatalogView::StreetNames(
                                             streets_with_contents,
                                         ));
                                     }
@@ -771,7 +824,7 @@ impl ApplicationLogic {
                                                 self.active_swarm.get_cids_for_tag(street.clone());
                                             streets_with_contents.push((street, contents));
                                         }
-                                        let _ = self.to_tui.send(ToPresentation::StreetNames(
+                                        let _ = self.to_tui.send(ToCatalogView::StreetNames(
                                             streets_with_contents,
                                         ));
                                     }
@@ -784,11 +837,11 @@ impl ApplicationLogic {
                                 }
                             }
                         }
-                        FromPresentation::CreateContent(d_type, data) => {
+                        FromCatalogView::CreateContent(d_type, data) => {
                             if !self.home_swarm_enforced {
                                 eprintln!("Push back AppendContent");
                                 self.buffered_from_tui
-                                    .push(FromPresentation::CreateContent(d_type, data));
+                                    .push(FromCatalogView::CreateContent(d_type, data));
                                 continue;
                             }
                             //TODO: we need to sync this data with Swarm
@@ -804,12 +857,11 @@ impl ApplicationLogic {
                                 ))
                                 .await;
                         }
-                        FromPresentation::UpdateContent(c_id, d_type, d_id, data) => {
+                        FromCatalogView::UpdateContent(c_id, d_type, d_id, data) => {
                             if !self.home_swarm_enforced {
                                 eprintln!("Push back AppendContent");
-                                self.buffered_from_tui.push(FromPresentation::UpdateContent(
-                                    c_id, d_type, d_id, data,
-                                ));
+                                self.buffered_from_tui
+                                    .push(FromCatalogView::UpdateContent(c_id, d_type, d_id, data));
                                 continue;
                             }
                             eprintln!("Requesting ChangeContent");
@@ -823,7 +875,7 @@ impl ApplicationLogic {
                                 ))
                                 .await;
                         }
-                        FromPresentation::AddTags(tags) => {
+                        FromCatalogView::AddTags(tags) => {
                             eprintln!("Received FromPresentation::AddTags({:?})", tags);
                             // TODO: first check if we can add a tag for given swarm
                             // and also check if given tag is not already added
@@ -858,7 +910,7 @@ impl ApplicationLogic {
                                     .await;
                             }
                         }
-                        FromPresentation::ChangeTag(tag_id, tag) => {
+                        FromCatalogView::ChangeTag(tag_id, tag) => {
                             eprintln!("Received FromPresentation::ChangeTag({tag_id},{tag:?})",);
                             if self.active_swarm.manifest.update_tag(tag_id, tag) {
                                 // Now our manifest is out of sync with swarm
@@ -888,7 +940,7 @@ impl ApplicationLogic {
                                     .await;
                             }
                         }
-                        FromPresentation::AddDataType(tag) => {
+                        FromCatalogView::AddDataType(tag) => {
                             eprintln!("Received FromPresentation::AddDataType({})", tag.0);
                             // TODO: first check if we can add a tag for given swarm
                             // and also check if given tag is not already added
@@ -924,7 +976,7 @@ impl ApplicationLogic {
                                     .await;
                             }
                         }
-                        FromPresentation::NeighborSelected(s_name) => {
+                        FromCatalogView::NeighborSelected(s_name) => {
                             eprintln!("Selected neighbor swarm: {}", s_name);
                             if self.active_swarm.swarm_name == s_name {
                                 eprintln!("Already showing selected swarm");
@@ -935,12 +987,12 @@ impl ApplicationLogic {
                                 .send(ToAppMgr::FromApp(LibRequest::SetActiveApp(s_name)))
                                 .await;
                         }
-                        FromPresentation::ShowContextMenu(ttype) => {
+                        FromCatalogView::ShowContextMenu(ttype) => {
                             match ttype {
                                 TileType::Home(_g_id) => {
                                     self.state = TuiState::ContextMenuOn(ttype);
                                     //TODO: select proper set_id depending on g_id value
-                                    let _ = self.to_tui.send(ToPresentation::DisplayCMenu(1));
+                                    let _ = self.to_tui.send(ToCatalogView::DisplayCMenu(1));
                                 }
                                 TileType::Neighbor(_g_id) => {
                                     //TODO
@@ -948,19 +1000,19 @@ impl ApplicationLogic {
                                 TileType::Content(_dtype, _c_id) => {
                                     //TODO
                                     self.state = TuiState::ContextMenuOn(ttype);
-                                    let _ = self.to_tui.send(ToPresentation::DisplayCMenu(2));
+                                    let _ = self.to_tui.send(ToCatalogView::DisplayCMenu(2));
                                 }
                                 TileType::Field => {
                                     //TODO
                                     self.state = TuiState::ContextMenuOn(ttype);
-                                    let _ = self.to_tui.send(ToPresentation::DisplayCMenu(3));
+                                    let _ = self.to_tui.send(ToCatalogView::DisplayCMenu(3));
                                 }
                                 TileType::Application => {
                                     //TODO
                                 }
                             }
                         }
-                        FromPresentation::SelectedIndices(indices) => {
+                        FromCatalogView::SelectedIndices(indices) => {
                             eprintln!(
                                 "FromPresentation::SelectedIndices({:?}), {:?}",
                                 indices, self.state
@@ -983,7 +1035,7 @@ impl ApplicationLogic {
                                             .manifest
                                             .dtype_string(creator_context.data_type().byte());
 
-                                        let _ = self.to_tui.send(ToPresentation::DisplayCreator(
+                                        let _ = self.to_tui.send(ToCatalogView::DisplayCreator(
                                             false,
                                             dtype_name,
                                             creator_context.description().text(),
@@ -1008,7 +1060,7 @@ impl ApplicationLogic {
                                             .manifest
                                             .dtype_string(creator_context.data_type().byte());
 
-                                        let _ = self.to_tui.send(ToPresentation::DisplayCreator(
+                                        let _ = self.to_tui.send(ToCatalogView::DisplayCreator(
                                             true,
                                             dtype_name,
                                             creator_context.description().text(),
@@ -1045,7 +1097,7 @@ impl ApplicationLogic {
                                             dtype_name
                                         );
 
-                                        let _ = self.to_tui.send(ToPresentation::DisplayCreator(
+                                        let _ = self.to_tui.send(ToCatalogView::DisplayCreator(
                                             c_context.is_read_only(),
                                             dtype_name,
                                             c_context.description().text(),
@@ -1067,7 +1119,7 @@ impl ApplicationLogic {
                                             .dtype_string(indices[0] as u8);
                                         eprintln!("DType name: '{}'", dtype_name);
 
-                                        let _ = self.to_tui.send(ToPresentation::DisplayCreator(
+                                        let _ = self.to_tui.send(ToCatalogView::DisplayCreator(
                                             read_only,
                                             dtype_name,
                                             c_context.description().text(),
@@ -1102,7 +1154,7 @@ impl ApplicationLogic {
                                         }
                                         1 => {
                                             new_state = TuiState::ChangeTag(*tag_id);
-                                            let _ = self.to_tui.send(ToPresentation::DisplayEditor(
+                                            let _ = self.to_tui.send(ToCatalogView::DisplayEditor(
                     (false, true),
                     " Max size: 32  Oneline  Change Street name    (TAB to finish)".to_string(),
                     Some(tag_text.clone()),
@@ -1113,7 +1165,7 @@ impl ApplicationLogic {
                                         }
                                         2 => {
                                             new_state = TuiState::AddTag;
-                                            let _ = self.to_tui.send(ToPresentation::DisplayEditor(
+                                            let _ = self.to_tui.send(ToCatalogView::DisplayEditor(
                     (false, true),
                     " Max size: 32  Oneline  Define new Tag name    (TAB to finish)".to_string(),
                     None,
@@ -1138,7 +1190,7 @@ impl ApplicationLogic {
                             self.state = new_state;
                         }
 
-                        FromPresentation::EditResult(e_result) => {
+                        FromCatalogView::EditResult(e_result) => {
                             let mut new_state = TuiState::Village;
                             let prev_state = std::mem::replace(&mut self.state, TuiState::Village);
                             match prev_state {
@@ -1150,9 +1202,9 @@ impl ApplicationLogic {
                                         //     ]));
                                         let _ = self
                                             .to_user_send
-                                            .send(InternalMsg::Tui(FromPresentation::AddTags(
-                                                vec![Tag::new(text).unwrap()],
-                                            )))
+                                            .send(InternalMsg::Tui(FromCatalogView::AddTags(vec![
+                                                Tag::new(text).unwrap(),
+                                            ])))
                                             .await;
                                     }
                                 }
@@ -1162,12 +1214,10 @@ impl ApplicationLogic {
                                             // eprintln!("We should change Tag {tag_id} to {text}");
                                             let _ = self
                                                 .to_user_send
-                                                .send(InternalMsg::Tui(
-                                                    FromPresentation::ChangeTag(
-                                                        tag_id,
-                                                        Tag::new(text).unwrap(),
-                                                    ),
-                                                ))
+                                                .send(InternalMsg::Tui(FromCatalogView::ChangeTag(
+                                                    tag_id,
+                                                    Tag::new(text).unwrap(),
+                                                )))
                                                 .await;
                                         }
                                     } else {
@@ -1181,7 +1231,7 @@ impl ApplicationLogic {
                                         // ));
                                         let _ = self
                                             .to_user_send
-                                            .send(InternalMsg::Tui(FromPresentation::AddDataType(
+                                            .send(InternalMsg::Tui(FromCatalogView::AddDataType(
                                                 Tag::new(text).unwrap(),
                                             )))
                                             .await;
@@ -1229,14 +1279,14 @@ impl ApplicationLogic {
                                             new_state = TuiState::Creator(new_context);
                                             eprintln!("Requesting display creator again");
                                             let _ =
-                                                self.to_tui.send(ToPresentation::DisplayCreator(
+                                                self.to_tui.send(ToCatalogView::DisplayCreator(
                                                     false, dtype_name, text, tag_names,
                                                 ));
                                         } else {
                                             let descr = c_context.description();
                                             new_state = TuiState::Creator(c_context);
                                             let _ =
-                                                self.to_tui.send(ToPresentation::DisplayCreator(
+                                                self.to_tui.send(ToCatalogView::DisplayCreator(
                                                     true,
                                                     dtype_name,
                                                     descr.text(),
@@ -1280,7 +1330,7 @@ impl ApplicationLogic {
                                         );
                                         let _ = self
                                             .to_tui
-                                            .send(ToPresentation::DisplayIndexer(all_headers));
+                                            .send(ToCatalogView::DisplayIndexer(all_headers));
                                     }
                                 }
                                 TuiState::AddSearch => {
@@ -1300,7 +1350,7 @@ impl ApplicationLogic {
                             }
                             self.state = new_state;
                         }
-                        FromPresentation::CMenuAction(action) => {
+                        FromCatalogView::CMenuAction(action) => {
                             let prev_state = std::mem::replace(&mut self.state, TuiState::Village);
                             match prev_state {
                                 TuiState::ContextMenuOn(ttype) => match ttype {
@@ -1331,7 +1381,7 @@ impl ApplicationLogic {
                                 }
                             }
                         }
-                        FromPresentation::CreatorResult(c_result) => {
+                        FromCatalogView::CreatorResult(c_result) => {
                             //TODO
                             match c_result {
                                 CreatorResult::SelectDType => {
@@ -1353,7 +1403,7 @@ impl ApplicationLogic {
                                                                    // tag_ids.clone(),
                                             );
                                             let _ =
-                                                self.to_tui.send(ToPresentation::DisplaySelector(
+                                                self.to_tui.send(ToCatalogView::DisplaySelector(
                                                     true,
                                                     "Catalog Application's Data Types".to_string(),
                                                     self.active_swarm.manifest.dtype_names(),
@@ -1402,7 +1452,7 @@ impl ApplicationLogic {
                                             };
 
                                             let _ =
-                                                self.to_tui.send(ToPresentation::DisplaySelector(
+                                                self.to_tui.send(ToCatalogView::DisplaySelector(
                                                     quit_on_first_select,
                                                     "Catalog Application's Tags".to_string(),
                                                     self.active_swarm.manifest.tag_names(filter),
@@ -1436,7 +1486,7 @@ impl ApplicationLogic {
                                                                    // descr.clone(),
                                                                    // tag_ids.clone(),
                                             );
-                                            let _ = self.to_tui.send(ToPresentation::DisplayEditor(
+                                            let _ = self.to_tui.send(ToCatalogView::DisplayEditor(
                                             (c_context.is_read_only(),self.my_name ==self.active_swarm.swarm_name),
                                     " Max size: 764  Multiline  Content Description    (TAB to finish)".to_string(),
                                     Some(c_context.description().text()),
@@ -1472,7 +1522,7 @@ impl ApplicationLogic {
                                         if !self.home_swarm_enforced {
                                             eprintln!("Push back AppendContent");
                                             self.buffered_from_tui.push(
-                                                FromPresentation::CreatorResult(
+                                                FromCatalogView::CreatorResult(
                                                     CreatorResult::Create,
                                                 ),
                                             );
@@ -1558,16 +1608,21 @@ impl ApplicationLogic {
                                 }
                             }
                         }
-                        FromPresentation::KeyPress(key) => {
+                        FromCatalogView::KeyPress(key) => {
+                            // This is only for testing
+                            if matches!(key, Key::F) {
+                                eprintln!("Key::F");
+                                break 'outer;
+                            }
                             if self.handle_key(key).await {
                                 // eprintln!("Sending ToAppMgr::Quit");
                                 let _ = self.to_app_mgr_send.send(ToAppMgr::Quit).await;
                             }
                         }
-                        FromPresentation::ContentInquiry(c_id) => {
+                        FromCatalogView::ContentInquiry(c_id) => {
                             if !self.home_swarm_enforced {
                                 self.buffered_from_tui
-                                    .push(FromPresentation::ContentInquiry(c_id));
+                                    .push(FromCatalogView::ContentInquiry(c_id));
                                 continue;
                             }
                             let _ = self
@@ -1580,7 +1635,7 @@ impl ApplicationLogic {
                                 .await;
                         }
 
-                        FromPresentation::IndexResult(i_result) => {
+                        FromCatalogView::IndexResult(i_result) => {
                             let mut new_state = None;
                             match &self.state {
                                 TuiState::RemovePage(c_id) => {
@@ -1632,7 +1687,7 @@ impl ApplicationLogic {
                                                         .tags_string(&tag_ids),
                                                 );
                                                 let _ = self.to_tui.send(
-                                                    ToPresentation::DisplayCreator(
+                                                    ToCatalogView::DisplayCreator(
                                                         read_only,
                                                         data_type,
                                                         descr.clone(),
@@ -1682,8 +1737,8 @@ impl ApplicationLogic {
                                                     };
                                                 let allow_newlines = true;
                                                 let byte_limit = Some(1024);
-                                                let _ = self.to_tui.send(
-                                                    ToPresentation::DisplayEditor(
+                                                let _ =
+                                                    self.to_tui.send(ToCatalogView::DisplayEditor(
                                                         (
                                                             read_only,
                                                             self.my_name
@@ -1693,8 +1748,7 @@ impl ApplicationLogic {
                                                         contents_opt.clone(),
                                                         allow_newlines,
                                                         byte_limit,
-                                                    ),
-                                                );
+                                                    ));
                                             }
                                         }
                                     } else {
@@ -1717,9 +1771,9 @@ impl ApplicationLogic {
                                                     swarm_name.clone(),
                                                 )))
                                                 .await;
-                                            let _ = self.to_tui.send(ToPresentation::SwapTiles(
-                                                swarm_name.founder,
-                                            ));
+                                            let _ = self
+                                                .to_tui
+                                                .send(ToCatalogView::SwapTiles(swarm_name.founder));
                                         }
                                     } else {
                                         eprintln!("Going back to Village");
@@ -1789,6 +1843,11 @@ impl ApplicationLogic {
                 }
             }
         }
+        // TODO: move below inside CatalogLogic::new
+        // empty note terminates notifier service
+        let _res = self.notification_sender.send(Some(format!(""))).await;
+        (tui_mgr, config) = tui_join.await;
+        Some((AppType::Forum, self.to_app, config, tui_mgr))
     }
 
     async fn process_data(&mut self, c_id: ContentID, d_type: DataType, mut d_vec: Vec<Data>) {
@@ -1856,7 +1915,7 @@ impl ApplicationLogic {
                 }
                 let _ = self
                     .to_tui
-                    .send(ToPresentation::StreetNames(streets_with_contents));
+                    .send(ToCatalogView::StreetNames(streets_with_contents));
             }
             if let Some(pending_notifications) = self
                 .pending_notifications
@@ -1944,7 +2003,7 @@ impl ApplicationLogic {
                         // eprintln!("Done pushing to all_headers");
                         let _ = self
                             .to_tui
-                            .send(ToPresentation::DisplayIndexer(all_headers.clone()));
+                            .send(ToCatalogView::DisplayIndexer(all_headers.clone()));
                         // and update state to store all data that was read
                         if !matches!(self.state, TuiState::RemovePage(_c_id)) {
                             self.state = TuiState::Indexing(
@@ -1977,7 +2036,7 @@ impl ApplicationLogic {
                                 .to_app_mgr_send
                                 .send(ToAppMgr::FromApp(LibRequest::SetActiveApp(s_name.clone())))
                                 .await;
-                            let _ = self.to_tui.send(ToPresentation::SwapTiles(s_name.founder));
+                            let _ = self.to_tui.send(ToCatalogView::SwapTiles(s_name.founder));
                             self.state =
                                 TuiState::ReadLinkToFollow(c_id, Some((s_name, target_c_id)));
                         } else {
@@ -2009,7 +2068,7 @@ impl ApplicationLogic {
             "Add new street".to_string(),
             "Cancel".to_string(),
         ];
-        let _ = self.to_tui.send(ToPresentation::DisplaySelector(
+        let _ = self.to_tui.send(ToCatalogView::DisplaySelector(
             true,
             format!("What to do with {tag_text}"),
             options,
@@ -2058,7 +2117,7 @@ impl ApplicationLogic {
             if !added.is_empty() {
                 let _ = self
                     .to_tui
-                    .send(ToPresentation::AppendContent(c_id, d_type, added, header));
+                    .send(ToCatalogView::AppendContent(c_id, d_type, added, header));
             }
             if !removed.is_empty() {
                 let mut visible_removed = vec![];
@@ -2070,7 +2129,7 @@ impl ApplicationLogic {
                 if !visible_removed.is_empty() {
                     let _ = self
                         .to_tui
-                        .send(ToPresentation::HideContent(c_id, visible_removed));
+                        .send(ToCatalogView::HideContent(c_id, visible_removed));
                 }
             }
         }
@@ -2088,7 +2147,7 @@ impl ApplicationLogic {
         let d_type = self.active_swarm.manifest.dtype_string(0);
         let tags = String::new();
         let description = String::new();
-        let _ = self.to_tui.send(ToPresentation::DisplayCreator(
+        let _ = self.to_tui.send(ToCatalogView::DisplayCreator(
             read_only,
             d_type,
             tags,
@@ -2115,7 +2174,7 @@ impl ApplicationLogic {
         let read_only = false;
         let d_type = format!("Link");
         let tags = String::new();
-        let _ = self.to_tui.send(ToPresentation::DisplayCreator(
+        let _ = self.to_tui.send(ToCatalogView::DisplayCreator(
             read_only,
             d_type,
             description.text(),
@@ -2133,7 +2192,7 @@ impl ApplicationLogic {
             ));
             public_ips.push('\n');
         }
-        let _ = self.to_tui.send(ToPresentation::DisplayEditor(
+        let _ = self.to_tui.send(ToCatalogView::DisplayEditor(
             (true, false), // (read_only, can_edit)
             format!("Publiczne IP dla {}", self.active_swarm.swarm_name),
             Some(public_ips),
@@ -2146,7 +2205,7 @@ impl ApplicationLogic {
         // eprintln!("We should create mapping swarm_id => gnome_id");
         let _ = self
             .to_tui
-            .send(ToPresentation::DisplayIndexer(active_swarms));
+            .send(ToCatalogView::DisplayIndexer(active_swarms));
     }
     async fn swarm_disconnected(
         &mut self,
@@ -2159,7 +2218,7 @@ impl ApplicationLogic {
                 .notification_sender
                 .send(Some(format!("{} disconnected", s_name)))
                 .await;
-            let _ = self.to_tui.send(ToPresentation::SwapTiles(GnomeId::any()));
+            let _ = self.to_tui.send(ToCatalogView::SwapTiles(GnomeId::any()));
             self.active_swarm.clear_tag_to_cid();
             self.state = TuiState::ShowActiveSwarms(vec![]);
             let _ = self
@@ -2215,7 +2274,7 @@ impl ApplicationLogic {
             1 => {
                 //TODO
                 self.state = TuiState::AppendData(c_id);
-                let _ = self.to_tui.send(ToPresentation::DisplayEditor(
+                let _ = self.to_tui.send(ToCatalogView::DisplayEditor(
                     (false, true),
                     "Add Note".to_string(),
                     None,
@@ -2251,7 +2310,7 @@ impl ApplicationLogic {
         match action {
             1 => {
                 self.state = TuiState::PresentTags;
-                let _ = self.to_tui.send(ToPresentation::DisplaySelector(
+                let _ = self.to_tui.send(ToCatalogView::DisplaySelector(
                     true,
                     "Catalog Application's Tags".to_string(),
                     self.active_swarm.manifest.tag_names(None),
@@ -2259,7 +2318,7 @@ impl ApplicationLogic {
                 ));
             }
             2 => {
-                let _ = self.to_tui.send(ToPresentation::DisplaySelector(
+                let _ = self.to_tui.send(ToCatalogView::DisplaySelector(
                     true,
                     "Catalog Application's Data Types".to_string(),
                     self.active_swarm.manifest.dtype_names(),
@@ -2268,7 +2327,7 @@ impl ApplicationLogic {
             }
             3 => {
                 self.state = TuiState::AddTag;
-                let _ = self.to_tui.send(ToPresentation::DisplayEditor(
+                let _ = self.to_tui.send(ToCatalogView::DisplayEditor(
                     (false, true),
                     " Max size: 32  Oneline  Define new Tag name    (TAB to finish)".to_string(),
                     None,
@@ -2278,7 +2337,7 @@ impl ApplicationLogic {
             }
             4 => {
                 self.state = TuiState::AddDType;
-                let _ = self.to_tui.send(ToPresentation::DisplayEditor(
+                let _ = self.to_tui.send(ToCatalogView::DisplayEditor(
                     (false, true),
                     " Max size: 32  Oneline  Define new Data Type    (TAB to finish)".to_string(),
                     None,
@@ -2303,7 +2362,7 @@ impl ApplicationLogic {
             8 => {
                 eprintln!("Open Add a new Search window");
                 self.state = TuiState::AddSearch;
-                let _ = self.to_tui.send(ToPresentation::DisplayEditor(
+                let _ = self.to_tui.send(ToCatalogView::DisplayEditor(
                     (false, true),
                     " Max size: 1024 Multiline  Add a new Search   (TAB to finish)".to_string(),
                     None,

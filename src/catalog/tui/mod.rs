@@ -1,6 +1,7 @@
-// use crate::logic::Manifest;
 use animaterm::prelude::*;
-use async_std::channel;
+use async_std::channel::Sender as ASender;
+use async_std::task::sleep;
+// use async_std::channel;
 // use animaterm::utilities::message_box;
 pub use content_creator::CreatorResult;
 use dapp_lib::prelude::AppError;
@@ -28,8 +29,9 @@ mod option;
 mod selector;
 mod tile;
 mod viewer;
+use crate::catalog::logic::Tag;
 use crate::config::Configuration;
-use crate::logic::Tag;
+use crate::InternalMsg;
 use ask::Question;
 use content_creator::Creator;
 use context_menu::CMenu;
@@ -470,7 +472,7 @@ pub enum Direction {
     Down,
 }
 
-pub enum ToPresentation {
+pub enum ToCatalogView {
     Neighbors(Vec<GnomeId>),
     NeighborLeft(GnomeId),
     AppendContent(ContentID, DataType, Vec<Tag>, String),
@@ -497,10 +499,11 @@ pub enum ToPresentation {
     StreetNames(Vec<(Tag, HashSet<(DataType, ContentID, String)>)>),
     SetNotification(usize, Vec<Glyph>),
     MoveNotification(usize, (isize, isize)),
+    // SwitchApp(AppType, MessagePipes),
 }
 
 #[derive(Clone)]
-pub enum FromPresentation {
+pub enum FromCatalogView {
     //TODO: we don't want to send Keys out of TUI, rather instructions depending on
     // context where given key was pressed
     AddDataType(Tag),
@@ -548,20 +551,23 @@ pub fn instantiate_tui_mgr() -> Manager {
 }
 
 /// This function is for sending requests to application and displaying user interface.
-pub fn serve_tui_mgr(
+pub fn serve_catalog_tui(
     my_id: GnomeId,
     mut mgr: Manager,
-    to_app: Sender<FromPresentation>,
+    // message_pipes: MessagePipes,
+    to_app: Sender<FromCatalogView>,
     // to_tui_send: Sender<ToPresentation>,
-    to_tui_recv: Receiver<ToPresentation>,
+    to_tui_recv: Receiver<ToCatalogView>,
     config: Configuration,
-) {
+) -> (Manager, Configuration) {
+    // let to_app = message_pipes.sender();
+    // let to_tui_recv = message_pipes.reveiver();
     let s_size = mgr.screen_size();
     let mut village = VillageLayout::new(s_size);
     let mut neighboring_villages = HashMap::new();
-    let visible_streets = village.initialize(my_id, &mut mgr, config);
+    let visible_streets = village.initialize(my_id, &mut mgr, config.clone());
     // let mut street_to_rows = HashMap::new();
-    let _ = to_app.send(FromPresentation::VisibleStreetsCount(visible_streets));
+    let _ = to_app.send(FromCatalogView::VisibleStreetsCount(visible_streets));
 
     // let mut tiles_mapping = HashMap::<(u8, u8), TileType>::new();
     // eprintln!("Serving TUI Manager scr size: {}x{}", s_size.0, s_size.1);
@@ -623,12 +629,12 @@ pub fn serve_tui_mgr(
     // let mut manifest_req: u8 = 0;
     loop {
         if let Some(key) = mgr.read_key() {
-            let terminate = key == Key::Q || key == Key::ShiftQ;
+            let terminate = key == Key::Q || key == Key::ShiftQ || key == Key::F;
             match key {
                 Key::AltEnter | Key::Space => {
                     // TODO: minimize logic in tui - simply send a Selected message to logic
                     //       and wait for instructions
-                    let _ = to_app.send(FromPresentation::ShowContextMenu(village.get_selection()));
+                    let _ = to_app.send(FromCatalogView::ShowContextMenu(village.get_selection()));
                 }
                 Key::Left | Key::H | Key::CtrlB => {
                     if village.select_next(Direction::Left, &mut mgr) {
@@ -642,17 +648,16 @@ pub fn serve_tui_mgr(
                 }
                 Key::Up | Key::K | Key::CtrlP => {
                     if village.select_next(Direction::Up, &mut mgr) {
-                        let _ = to_app.send(FromPresentation::CursorOutOfScreen(Direction::Up));
+                        let _ = to_app.send(FromCatalogView::CursorOutOfScreen(Direction::Up));
                     }
                 }
                 Key::Down | Key::J | Key::CtrlN => {
                     if village.select_next(Direction::Down, &mut mgr) {
-                        let _ = to_app.send(FromPresentation::CursorOutOfScreen(Direction::Down));
+                        let _ = to_app.send(FromCatalogView::CursorOutOfScreen(Direction::Down));
                     }
                 }
                 Key::AltCtrlH => {
-                    let _ =
-                        to_app.send(FromPresentation::NeighborSelected(village.my_name.clone()));
+                    let _ = to_app.send(FromCatalogView::NeighborSelected(village.my_name.clone()));
                     // TODO: remove swap_tiles logic from presentation, it should not be here
                     eprintln!("AltCtrlH");
                     swap_tiles(
@@ -676,11 +681,11 @@ pub fn serve_tui_mgr(
                     //     // eprintln!("Enter");
                     //     swap_tiles(*n_id, &mut village, &mut neighboring_villages, &mut mgr);
                     // }
-                    let _ = to_app.send(FromPresentation::TileSelected(tile));
+                    let _ = to_app.send(FromCatalogView::TileSelected(tile));
                 }
                 other => {
                     // eprintln!("Send to app: {} terminate: {}", other, terminate);
-                    let res = to_app.send(FromPresentation::KeyPress(other));
+                    let res = to_app.send(FromCatalogView::KeyPress(other));
                     if res.is_err() || terminate {
                         break;
                     }
@@ -689,25 +694,25 @@ pub fn serve_tui_mgr(
         }
         if let Ok(to_tui) = to_tui_recv.try_recv() {
             match to_tui {
-                ToPresentation::StreetNames(str_names) => {
+                ToCatalogView::StreetNames(str_names) => {
                     village.reset_tiles(village.my_name.founder, true, &mut mgr);
                     village.set_street_names(str_names, &mut mgr);
                 }
-                ToPresentation::DisplayCMenu(set_id) => {
+                ToCatalogView::DisplayCMenu(set_id) => {
                     let action = c_menu.show(&mut mgr, set_id, village.cm_position());
-                    let _ = to_app.send(FromPresentation::CMenuAction(action));
+                    let _ = to_app.send(FromCatalogView::CMenuAction(action));
                 }
-                ToPresentation::Neighbors(neighbors) => {
+                ToCatalogView::Neighbors(neighbors) => {
                     //TODO: first make sure neighbor is not placed on screen
                     for neighbor in neighbors.into_iter() {
                         let _tile_id = village.add_new_neighbor(neighbor, &mut mgr);
                         eprintln!("Showing Neighbor {}: {:?}", neighbor, _tile_id);
                     }
                 }
-                ToPresentation::NeighborLeft(n_id) => {
+                ToCatalogView::NeighborLeft(n_id) => {
                     let _tile_id = village.remove_neighbor(n_id, &mut mgr);
                 }
-                ToPresentation::AppendContent(c_id, d_type, tags, description) => {
+                ToCatalogView::AppendContent(c_id, d_type, tags, description) => {
                     eprintln!(
                         "ToPresentation::AppendContent({:?}, {:?})\nTags: {:?}",
                         c_id, d_type, tags
@@ -735,10 +740,10 @@ pub fn serve_tui_mgr(
                     village.add_new_content(d_type, c_id, filtered_tags, description, &mut mgr);
                     // tiles_mapping.insert(tile_id, TileType::Content(d_type, c_id));
                 }
-                ToPresentation::HideContent(c_id, tags) => {
+                ToCatalogView::HideContent(c_id, tags) => {
                     village.hide_content(c_id, tags, &mut mgr);
                 }
-                ToPresentation::ContentHeader(c_id, data) => {
+                ToCatalogView::ContentHeader(c_id, data) => {
                     eprintln!("Showing Contents of {}", c_id,);
                     // let read_only = !am_i_founder;
 
@@ -764,7 +769,7 @@ pub fn serve_tui_mgr(
                     //     eprintln!("Nothing to do from creator");
                     // };
                 }
-                ToPresentation::DisplaySelector(
+                ToCatalogView::DisplaySelector(
                     quit_on_first_select,
                     header,
                     tag_names,
@@ -790,7 +795,7 @@ pub fn serve_tui_mgr(
                     //         eprintln!("{} - {}", index, value);
                     //     }
                     // }
-                    let _ = to_app.send(FromPresentation::SelectedIndices(_selected));
+                    let _ = to_app.send(FromCatalogView::SelectedIndices(_selected));
                     // } else if manifest_req == 2 {
                     //     let tag_names = mani.dtype_names();
                     //     eprintln!("All dtype names: {:?}", tag_names);
@@ -808,7 +813,7 @@ pub fn serve_tui_mgr(
                     // }
                     // manifest_req = 0;
                 }
-                ToPresentation::DisplayEditor(
+                ToCatalogView::DisplayEditor(
                     read_only,
                     header,
                     initial_text,
@@ -826,23 +831,23 @@ pub fn serve_tui_mgr(
                         limit,
                         &mut mgr,
                     );
-                    let _ = to_app.send(FromPresentation::EditResult(edit_result));
+                    let _ = to_app.send(FromCatalogView::EditResult(edit_result));
                 }
-                ToPresentation::DisplayIndexer(headers) => {
+                ToCatalogView::DisplayIndexer(headers) => {
                     let index_result =
                         indexer.serve(main_display, "This is an Indexer", headers, &mut mgr);
-                    let _ = to_app.send(FromPresentation::IndexResult(index_result));
+                    let _ = to_app.send(FromCatalogView::IndexResult(index_result));
                 }
-                ToPresentation::DisplayCreator(read_only, d_type, description, tags) => {
+                ToCatalogView::DisplayCreator(read_only, d_type, description, tags) => {
                     //TODO
                     let c_result = creator.show(&mut mgr, read_only, d_type, tags, description);
-                    let _ = to_app.send(FromPresentation::CreatorResult(c_result));
+                    let _ = to_app.send(FromCatalogView::CreatorResult(c_result));
                 }
-                ToPresentation::SwapTiles(g_id) => {
+                ToCatalogView::SwapTiles(g_id) => {
                     eprintln!("ToPresentation::SwapTiles");
                     swap_tiles(g_id, &mut village, &mut neighboring_villages, &mut mgr);
                 }
-                ToPresentation::ReadError(c_id, error) => {
+                ToCatalogView::ReadError(c_id, error) => {
                     if question.ask(
                         &format!("Error reading CID {}:\n {}", c_id, error),
                         &mut mgr,
@@ -851,19 +856,23 @@ pub fn serve_tui_mgr(
                         // TODO: send Data to Swarm
                     }
                 }
-                ToPresentation::SetNotification(g_id, new_frame) => {
+                ToCatalogView::SetNotification(g_id, new_frame) => {
                     // eprintln!("Got SetNotification");
                     let _old_frame = mgr.swap_frame(g_id, 0, new_frame);
                     // eprintln!("Swap frame res: {:?}", _old_frame);
                 }
-                ToPresentation::MoveNotification(g_id, offset) => {
+                ToCatalogView::MoveNotification(g_id, offset) => {
                     mgr.move_graphic(g_id, 4, offset);
-                }
+                } // ToPresentation::SwitchApp(app_type, pipes) => {
+                  //     //TODO
+                  //     eprintln!("Should switch to {app_type:?}");
+                  // }
             }
         }
     }
     eprintln!("Done serving TUI");
-    mgr.terminate();
+    // mgr.terminate();
+    (mgr, config)
 }
 
 fn swap_tiles(
@@ -944,4 +953,24 @@ fn swap_tiles(
         //TODO
         eprintln!("No owner defined for village");
     }
+}
+
+pub async fn from_catalog_tui_adapter(
+    from_presentation: Receiver<FromCatalogView>,
+    wrapped_sender: ASender<InternalMsg>,
+) {
+    let timeout = Duration::from_millis(16);
+    loop {
+        let recv_res = from_presentation.recv_timeout(timeout);
+        match recv_res {
+            Ok(from_tui) => {
+                let _ = wrapped_sender.send(InternalMsg::Tui(from_tui)).await;
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => sleep(timeout).await,
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                break;
+            }
+        }
+    }
+    eprintln!("from_tui_adapter is done");
 }

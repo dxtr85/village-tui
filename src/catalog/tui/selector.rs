@@ -1,4 +1,4 @@
-use crate::tui::option;
+use crate::catalog::tui::option;
 use animaterm::prelude::map_private_char_to_key;
 use animaterm::Glyph;
 use animaterm::Graphic;
