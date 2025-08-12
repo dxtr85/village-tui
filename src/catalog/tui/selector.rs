@@ -64,6 +64,10 @@ impl Selector {
             last_updated_row: 1,
         }
     }
+    pub fn cleanup(&self, main_display: usize, mgr: &mut Manager) {
+        mgr.restore_display(self.display_id, true);
+        mgr.restore_display(main_display, false);
+    }
 
     pub fn select(
         &mut self,

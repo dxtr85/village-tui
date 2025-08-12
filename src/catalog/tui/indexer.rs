@@ -62,6 +62,11 @@ impl Indexer {
         indexer.show(mgr);
         indexer
     }
+    pub fn cleanup(&self, main_display: usize, mgr: &mut Manager) {
+        mgr.restore_display(self.display_id, true);
+        mgr.restore_display(main_display, false);
+    }
+
     pub fn show(&mut self, mgr: &mut Manager) {
         // mgr.move_graphic(self.g_id, 2, (0, 0));
         mgr.set_graphic(self.g_id, 0, true);

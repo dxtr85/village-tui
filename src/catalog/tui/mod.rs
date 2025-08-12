@@ -9,6 +9,7 @@ use dapp_lib::prelude::AppType;
 use dapp_lib::prelude::ContentID;
 use dapp_lib::prelude::DataType;
 use dapp_lib::prelude::GnomeId;
+use dapp_lib::prelude::SwarmID;
 use dapp_lib::prelude::SwarmName;
 use dapp_lib::Data;
 pub use notifier::Notifier;
@@ -514,6 +515,7 @@ pub enum FromCatalogView {
     ContentInquiry(ContentID),
     NeighborSelected(SwarmName),
     KeyPress(Key),
+    SwitchToApp(AppType, SwarmID, SwarmName),
     ShowContextMenu(TileType),
     TileSelected(TileType),
     CMenuAction(usize),
@@ -540,18 +542,19 @@ pub fn instantiate_tui_mgr() -> Manager {
         Some(vec![(Key::AltM, MacroSequence::empty())]),
     );
     mgr.set_key_receive_timeout(Duration::from_millis(16));
-    let (cols, rows) = mgr.screen_size();
-    let frame = vec![Glyph::plain(); cols * rows];
-    let mut library = HashMap::new();
-    library.insert(0, frame);
-    let bg = Graphic::new(cols, rows, 0, library, None);
-    let res = mgr.add_graphic(bg, 1, (0, 0));
-    eprintln!("TUI background index: {:?}", res);
+    // let (cols, rows) = mgr.screen_size();
+    // let frame = vec![Glyph::plain(); cols * rows];
+    // let mut library = HashMap::new();
+    // library.insert(0, frame);
+    // let bg = Graphic::new(cols, rows, 0, library, None);
+    // let res = mgr.add_graphic(bg, 1, (0, 0));
+    // eprintln!("TUI background index: {:?}", res);
     mgr
 }
 
 /// This function is for sending requests to application and displaying user interface.
 pub fn serve_catalog_tui(
+    main_display: usize,
     my_id: GnomeId,
     mut mgr: Manager,
     // message_pipes: MessagePipes,
@@ -571,11 +574,11 @@ pub fn serve_catalog_tui(
 
     // let mut tiles_mapping = HashMap::<(u8, u8), TileType>::new();
     // eprintln!("Serving TUI Manager scr size: {}x{}", s_size.0, s_size.1);
-    let main_display = 0;
-    let mut editor = Editor::new(&mut mgr);
+    // let main_display = 0;
     let mut indexer = Indexer::new(&mut mgr);
     let mut creator = Creator::new(&mut mgr);
     let mut selector = Selector::new(AppType::Catalog, &mut mgr);
+    let mut editor = Editor::new(&mut mgr);
     mgr.restore_display(main_display, true);
     let mut c_menu = CMenu::new(&mut mgr);
     let mut d_type_map = HashMap::new();
@@ -629,7 +632,7 @@ pub fn serve_catalog_tui(
     // let mut manifest_req: u8 = 0;
     loop {
         if let Some(key) = mgr.read_key() {
-            let terminate = key == Key::Q || key == Key::ShiftQ || key == Key::F;
+            let terminate = key == Key::Q || key == Key::ShiftQ;
             match key {
                 Key::AltEnter | Key::Space => {
                     // TODO: minimize logic in tui - simply send a Selected message to logic
@@ -682,6 +685,19 @@ pub fn serve_catalog_tui(
                     //     swap_tiles(*n_id, &mut village, &mut neighboring_villages, &mut mgr);
                     // }
                     let _ = to_app.send(FromCatalogView::TileSelected(tile));
+                }
+                Key::F => {
+                    // TODO: make sure we are attached to target swarm
+                    eprintln!("F: SwitchToApp");
+                    let _ = to_app.send(FromCatalogView::SwitchToApp(
+                        AppType::Forum,
+                        SwarmID(0),
+                        SwarmName {
+                            founder: my_id,
+                            name: "F".to_string(),
+                        },
+                    ));
+                    break;
                 }
                 other => {
                     // eprintln!("Send to app: {} terminate: {}", other, terminate);
@@ -870,6 +886,10 @@ pub fn serve_catalog_tui(
             }
         }
     }
+    indexer.cleanup(main_display, &mut mgr);
+    creator.cleanup(main_display, &mut mgr);
+    selector.cleanup(main_display, &mut mgr);
+    editor.cleanup(main_display, &mut mgr);
     eprintln!("Done serving TUI");
     // mgr.terminate();
     (mgr, config)
@@ -964,7 +984,7 @@ pub async fn from_catalog_tui_adapter(
         let recv_res = from_presentation.recv_timeout(timeout);
         match recv_res {
             Ok(from_tui) => {
-                let _ = wrapped_sender.send(InternalMsg::Tui(from_tui)).await;
+                let _ = wrapped_sender.send(InternalMsg::Catalog(from_tui)).await;
             }
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => sleep(timeout).await,
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {

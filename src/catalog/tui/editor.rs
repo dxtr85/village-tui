@@ -39,6 +39,11 @@ impl Editor {
         editor.show(mgr);
         editor
     }
+    pub fn cleanup(&self, main_display: usize, mgr: &mut Manager) {
+        mgr.restore_display(self.display_id, true);
+        mgr.restore_display(main_display, false);
+    }
+
     pub fn allow_newlines(&mut self, allow: bool) {
         self.allow_newlines = allow;
     }

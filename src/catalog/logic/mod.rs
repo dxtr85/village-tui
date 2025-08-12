@@ -282,7 +282,7 @@ impl SwarmShell {
 
 pub struct CatalogLogic {
     my_name: SwarmName,
-    // pub_ips: Vec<(IpAddr, u16, Nat, (PortAllocationRule, i8))>,
+    display_id: usize,
     pub_ips: Vec<NetworkSettings>,
     state: TuiState,
     active_swarm: SwarmShell,
@@ -325,6 +325,7 @@ impl CatalogLogic {
         ));
         let (notification_sender, notification_receiver) = achannel::unbounded();
         let s_size = tui_mgr.screen_size();
+        let display_id = tui_mgr.new_display(false);
         let notifier = Notifier::new(
             (s_size.0 as isize, 0),
             tui_mgr,
@@ -334,6 +335,7 @@ impl CatalogLogic {
         spawn(notifier.serve());
         CatalogLogic {
             my_name,
+            display_id,
             pub_ips: vec![],
             state: TuiState::Village,
             active_swarm: SwarmShell::new(
@@ -370,6 +372,14 @@ impl CatalogLogic {
         // to_presentation_msg_recv: std::sync::mpsc::Receiver<ToCatalogView>,
         // wrapped_sender: ASender<InternalMsg>,
     ) -> Option<(AppType, AReceiver<InternalMsg>, Configuration, Manager)> {
+        let mut return_val = None;
+        let (cols, rows) = tui_mgr.screen_size();
+        let frame = vec![Glyph::plain(); cols * rows];
+        let mut library = HashMap::new();
+        library.insert(0, frame);
+        let bg = Graphic::new(cols, rows, 0, library, None);
+        let res = tui_mgr.add_graphic(bg, 1, (0, 0));
+        eprintln!("TUI background index: {:?}", res);
         // TODO: notifier should send internal message
         // so that switching between apps  should be seamless.
         // That internal massage should be served by each app's
@@ -378,6 +388,7 @@ impl CatalogLogic {
         let to_tui_recv = self.to_tui_recv.take().unwrap();
         let tui_join = spawn_blocking(move || {
             serve_catalog_tui(
+                self.display_id,
                 self.my_name.founder,
                 tui_mgr,
                 from_tui_send,
@@ -479,8 +490,10 @@ impl CatalogLogic {
                                 self.home_swarm_enforced = true;
                                 for msg in self.buffered_from_tui.iter_mut() {
                                     // let _ = self.from_tui_send.send(msg.clone());
-                                    let _ =
-                                        self.to_user_send.send(InternalMsg::Tui(msg.clone())).await;
+                                    let _ = self
+                                        .to_user_send
+                                        .send(InternalMsg::Catalog(msg.clone()))
+                                        .await;
                                 }
                             }
                             eprintln!("Set active {}", s_id);
@@ -739,12 +752,16 @@ impl CatalogLogic {
                             // but for now we need to implement something simple
                             //
                         }
+                        // ToApp::SwitchToApp(app_type, s_id, s_name) => {
+                        //     return_val = Some((app_type, s_id, s_name));
+                        //     break 'outer;
+                        // }
                         ToApp::Quit => {
                             eprintln!("Done serving ApplicationLogic");
                             break 'outer;
                         }
                     },
-                    InternalMsg::Tui(from_tui) => match from_tui {
+                    InternalMsg::Catalog(from_tui) => match from_tui {
                         FromCatalogView::VisibleStreetsCount(v_streets) => {
                             //TODO: store this in order to know what information to send
                             eprintln!("OK we see {} streets at once", v_streets);
@@ -1202,9 +1219,9 @@ impl CatalogLogic {
                                         //     ]));
                                         let _ = self
                                             .to_user_send
-                                            .send(InternalMsg::Tui(FromCatalogView::AddTags(vec![
-                                                Tag::new(text).unwrap(),
-                                            ])))
+                                            .send(InternalMsg::Catalog(FromCatalogView::AddTags(
+                                                vec![Tag::new(text).unwrap()],
+                                            )))
                                             .await;
                                     }
                                 }
@@ -1214,10 +1231,12 @@ impl CatalogLogic {
                                             // eprintln!("We should change Tag {tag_id} to {text}");
                                             let _ = self
                                                 .to_user_send
-                                                .send(InternalMsg::Tui(FromCatalogView::ChangeTag(
-                                                    tag_id,
-                                                    Tag::new(text).unwrap(),
-                                                )))
+                                                .send(InternalMsg::Catalog(
+                                                    FromCatalogView::ChangeTag(
+                                                        tag_id,
+                                                        Tag::new(text).unwrap(),
+                                                    ),
+                                                ))
                                                 .await;
                                         }
                                     } else {
@@ -1231,9 +1250,11 @@ impl CatalogLogic {
                                         // ));
                                         let _ = self
                                             .to_user_send
-                                            .send(InternalMsg::Tui(FromCatalogView::AddDataType(
-                                                Tag::new(text).unwrap(),
-                                            )))
+                                            .send(InternalMsg::Catalog(
+                                                FromCatalogView::AddDataType(
+                                                    Tag::new(text).unwrap(),
+                                                ),
+                                            ))
                                             .await;
                                     }
                                 }
@@ -1610,10 +1631,10 @@ impl CatalogLogic {
                         }
                         FromCatalogView::KeyPress(key) => {
                             // This is only for testing
-                            if matches!(key, Key::F) {
-                                eprintln!("Key::F");
-                                break 'outer;
-                            }
+                            // if matches!(key, Key::F) {
+                            //     eprintln!("Key::F");
+                            //     break 'outer;
+                            // }
                             if self.handle_key(key).await {
                                 // eprintln!("Sending ToAppMgr::Quit");
                                 let _ = self.to_app_mgr_send.send(ToAppMgr::Quit).await;
@@ -1835,19 +1856,40 @@ impl CatalogLogic {
                                 self.state = new_state;
                             }
                         }
+                        FromCatalogView::SwitchToApp(app_type, s_id, s_name) => {
+                            eprintln!("logic got SwitchToApp");
+                            return_val = Some((app_type, s_id, s_name));
+                            break 'outer;
+                        }
                     },
                     InternalMsg::PresentOptionsForTag(tag_idx, tag_text) => {
                         // eprintln!("We should present options for {}: {}", tag_idx, tag_text);
                         let _ = self.present_options_for_tag(tag_idx, tag_text).await;
                     }
+                    _other => {
+                        eprintln!("Catalog logic received unexpected InternalMsg");
+                    }
                 }
             }
         }
+        eprintln!("out of 'outer");
         // TODO: move below inside CatalogLogic::new
         // empty note terminates notifier service
         let _res = self.notification_sender.send(Some(format!(""))).await;
         (tui_mgr, config) = tui_join.await;
-        Some((AppType::Forum, self.to_app, config, tui_mgr))
+        // tui_mgr.new_display(false);
+        if let Some((app_type, s_id, s_name)) = return_val {
+            eprintln!("return_val is: {s_id}-{s_name}");
+            let _ = self
+                .to_user_send
+                .send(InternalMsg::User(ToApp::ActiveSwarm(s_name, s_id)))
+                .await;
+            Some((app_type, self.to_app, config, tui_mgr))
+        } else {
+            eprintln!("return_val is none");
+            tui_mgr.terminate();
+            None
+        }
     }
 
     async fn process_data(&mut self, c_id: ContentID, d_type: DataType, mut d_vec: Vec<Data>) {

@@ -11,8 +11,11 @@ use catalog::tui::{instantiate_tui_mgr, FromCatalogView};
 use config::Configuration;
 use forum::logic::ForumLogic;
 
+use crate::forum::tui::FromForumView;
+
 enum InternalMsg {
-    Tui(FromCatalogView),
+    Catalog(FromCatalogView),
+    Forum(FromForumView),
     User(ToApp),
     PresentOptionsForTag(u8, String),
 }
@@ -60,6 +63,7 @@ async fn main() {
         if let Some((app_type, wrapped_receiver, config, mut tui_mgr)) = next_app.take() {
             match app_type {
                 AppType::Catalog => {
+                    tui_mgr.restore_display(0, false);
                     let c_logic = CatalogLogic::new(
                         my_name.clone(),
                         to_app_mgr_send.clone(),
