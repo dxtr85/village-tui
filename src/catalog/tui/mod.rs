@@ -3,6 +3,7 @@ use async_std::channel::Sender as ASender;
 use async_std::task::sleep;
 // use async_std::channel;
 // use animaterm::utilities::message_box;
+pub use content_creator::Creator;
 pub use content_creator::CreatorResult;
 use dapp_lib::prelude::AppError;
 use dapp_lib::prelude::AppType;
@@ -20,7 +21,7 @@ use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 mod ask;
-mod button;
+pub mod button;
 mod content_creator;
 mod context_menu;
 mod editor;
@@ -33,12 +34,12 @@ mod viewer;
 use crate::catalog::logic::Tag;
 use crate::config::Configuration;
 use crate::InternalMsg;
+use crate::Toolset;
 use ask::Question;
-use content_creator::Creator;
 use context_menu::CMenu;
-use editor::Editor;
-use indexer::Indexer;
-use selector::Selector;
+pub use editor::Editor;
+pub use indexer::Indexer;
+pub use selector::Selector;
 use tile::Tile;
 pub use tile::TileType;
 // use viewer::Viewer;
@@ -562,7 +563,11 @@ pub fn serve_catalog_tui(
     // to_tui_send: Sender<ToPresentation>,
     to_tui_recv: Receiver<ToCatalogView>,
     config: Configuration,
-) -> (Manager, Configuration) {
+    mut editor: Editor,
+    mut creator: Creator,
+    mut selector: Selector,
+    mut indexer: Indexer,
+) -> Toolset {
     // let to_app = message_pipes.sender();
     // let to_tui_recv = message_pipes.reveiver();
     let s_size = mgr.screen_size();
@@ -575,11 +580,11 @@ pub fn serve_catalog_tui(
     // let mut tiles_mapping = HashMap::<(u8, u8), TileType>::new();
     // eprintln!("Serving TUI Manager scr size: {}x{}", s_size.0, s_size.1);
     // let main_display = 0;
-    let mut indexer = Indexer::new(&mut mgr);
-    let mut creator = Creator::new(&mut mgr);
-    let mut selector = Selector::new(AppType::Catalog, &mut mgr);
-    let mut editor = Editor::new(&mut mgr);
-    mgr.restore_display(main_display, true);
+    // let mut indexer = Indexer::new(&mut mgr);
+    // let mut creator = Creator::new(&mut mgr);
+    // let mut selector = Selector::new(AppType::Catalog, &mut mgr);
+    // let mut editor = Editor::new(&mut mgr);
+    // mgr.restore_display(main_display, true);
     let mut c_menu = CMenu::new(&mut mgr);
     let mut d_type_map = HashMap::new();
     d_type_map.insert(DataType::Data(0), "Text".to_string());
@@ -691,7 +696,7 @@ pub fn serve_catalog_tui(
                     eprintln!("F: SwitchToApp");
                     let _ = to_app.send(FromCatalogView::SwitchToApp(
                         AppType::Forum,
-                        SwarmID(0),
+                        SwarmID(2),
                         SwarmName {
                             founder: my_id,
                             name: "F".to_string(),
@@ -856,7 +861,8 @@ pub fn serve_catalog_tui(
                 }
                 ToCatalogView::DisplayCreator(read_only, d_type, description, tags) => {
                     //TODO
-                    let c_result = creator.show(&mut mgr, read_only, d_type, tags, description);
+                    let c_result =
+                        creator.show(main_display, &mut mgr, read_only, d_type, tags, description);
                     let _ = to_app.send(FromCatalogView::CreatorResult(c_result));
                 }
                 ToCatalogView::SwapTiles(g_id) => {
@@ -886,13 +892,21 @@ pub fn serve_catalog_tui(
             }
         }
     }
-    indexer.cleanup(main_display, &mut mgr);
-    creator.cleanup(main_display, &mut mgr);
-    selector.cleanup(main_display, &mut mgr);
-    editor.cleanup(main_display, &mut mgr);
+    // editor.cleanup(main_display, &mut mgr);
+    // creator.cleanup(main_display, &mut mgr);
+    // selector.cleanup(main_display, &mut mgr);
+    // indexer.cleanup(main_display, &mut mgr);
     eprintln!("Done serving TUI");
     // mgr.terminate();
-    (mgr, config)
+    // (mgr, config)
+    Toolset::fold(
+        mgr,
+        config,
+        Some(editor),
+        Some(creator),
+        Some(selector),
+        Some(indexer),
+    )
 }
 
 fn swap_tiles(

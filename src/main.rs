@@ -1,3 +1,4 @@
+use animaterm::Manager;
 use async_std::channel::{self as achannel, Receiver as AReceiver, Sender};
 use async_std::task::spawn;
 use dapp_lib::prelude::*;
@@ -7,6 +8,10 @@ mod catalog;
 mod config;
 mod forum;
 use catalog::logic::CatalogLogic;
+pub use catalog::tui::Creator;
+pub use catalog::tui::Editor;
+pub use catalog::tui::Indexer;
+pub use catalog::tui::Selector;
 use catalog::tui::{instantiate_tui_mgr, FromCatalogView};
 use config::Configuration;
 use forum::logic::ForumLogic;
@@ -18,6 +23,142 @@ enum InternalMsg {
     Forum(FromForumView),
     User(ToApp),
     PresentOptionsForTag(u8, String),
+}
+
+struct Toolbox {
+    editor: Option<Editor>,
+    creator: Option<Creator>,
+    selector: Option<Selector>,
+    indexer: Option<Indexer>,
+}
+impl Toolbox {
+    pub fn empty() -> Self {
+        Toolbox {
+            editor: None,
+            creator: None,
+            selector: None,
+            indexer: None,
+        }
+    }
+    pub fn get_tools(
+        &mut self,
+        manager: Manager,
+        config: Configuration,
+        get_editor: bool,
+        get_creator: bool,
+        get_selector: bool,
+        get_indexer: bool,
+    ) -> Toolset {
+        let editor = if get_editor { self.editor.take() } else { None };
+
+        let creator = if get_creator {
+            self.creator.take()
+        } else {
+            None
+        };
+
+        let selector = if get_selector {
+            self.selector.take()
+        } else {
+            None
+        };
+
+        let indexer = if get_indexer {
+            self.indexer.take()
+        } else {
+            None
+        };
+        Toolset {
+            manager,
+            config,
+            editor,
+            creator,
+            selector,
+            indexer,
+        }
+    }
+    pub fn return_tools(
+        &mut self,
+        editor: Option<Editor>,
+        creator: Option<Creator>,
+        selector: Option<Selector>,
+        indexer: Option<Indexer>,
+    ) {
+        if editor.is_some() {
+            self.editor = editor;
+        }
+        if creator.is_some() {
+            self.creator = creator;
+        }
+        if selector.is_some() {
+            self.selector = selector;
+        }
+        if indexer.is_some() {
+            self.indexer = indexer;
+        }
+    }
+}
+
+struct Toolset {
+    manager: Manager,
+    config: Configuration,
+    editor: Option<Editor>,
+    creator: Option<Creator>,
+    selector: Option<Selector>,
+    indexer: Option<Indexer>,
+}
+impl Toolset {
+    pub fn fold(
+        manager: Manager,
+        config: Configuration,
+        editor: Option<Editor>,
+        creator: Option<Creator>,
+        selector: Option<Selector>,
+        indexer: Option<Indexer>,
+    ) -> Self {
+        Toolset {
+            manager,
+            config,
+            editor,
+            creator,
+            selector,
+            indexer,
+        }
+    }
+    pub fn unfold(
+        self,
+    ) -> (
+        Manager,
+        Configuration,
+        Option<Editor>,
+        Option<Creator>,
+        Option<Selector>,
+        Option<Indexer>,
+    ) {
+        (
+            self.manager,
+            self.config,
+            self.editor,
+            self.creator,
+            self.selector,
+            self.indexer,
+        )
+    }
+    pub fn discard(mut self) {
+        if let Some(e) = self.editor {
+            e.cleanup(0, &mut self.manager);
+        }
+        if let Some(e) = self.creator {
+            e.cleanup(0, &mut self.manager);
+        }
+        if let Some(e) = self.selector {
+            e.cleanup(0, &mut self.manager);
+        }
+        if let Some(e) = self.indexer {
+            e.cleanup(0, &mut self.manager);
+        }
+        self.manager.terminate();
+    }
 }
 
 #[async_std::main]
@@ -49,6 +190,7 @@ async fn main() {
 
     spawn(to_user_adapter(to_application_recv, wrapped_sender.clone()));
     let tui_mgr = instantiate_tui_mgr();
+    let mut toolbox = Toolbox::empty();
     // TODO: When logic.run() is done, it returns Option<AppType>,
     //       and if that option is Some, another logic is started
     //       for that new AppType.
@@ -58,9 +200,16 @@ async fn main() {
     //       Also new from_tui_adapter should be spawned,
     //       old one should self-terminate on error receiving FromPresentation.
     // TODO: InternalMessage should serve every defined AppType, and Notification
-    let mut next_app = Some((AppType::Catalog, wrapped_receiver, config, tui_mgr));
+    let toolset = Toolset::fold(tui_mgr, config, None, None, None, None);
+    let mut next_app = Some((AppType::Catalog, wrapped_receiver, toolset));
+    // TODO: Define a Toolbox struct to store all the tools an app might use.
+    // Those are Editor, Notifier, Selector etc.
+    // Once an app is done, it returns all the tools it was using back to toolbox.
+    // When next app is strating, it borrows existing tools from Toolbox
     loop {
-        if let Some((app_type, wrapped_receiver, config, mut tui_mgr)) = next_app.take() {
+        if let Some((app_type, wrapped_receiver, toolset)) = next_app.take() {
+            let (mut tui_mgr, config, e_opt, c_opt, s_opt, i_opt) = toolset.unfold();
+            toolbox.return_tools(e_opt, c_opt, s_opt, i_opt);
             match app_type {
                 AppType::Catalog => {
                     tui_mgr.restore_display(0, false);
@@ -71,7 +220,19 @@ async fn main() {
                         wrapped_sender.clone(),
                         wrapped_receiver,
                     );
-                    next_app = c_logic.run(dir.clone(), config, tui_mgr).await;
+                    let get_editor = true;
+                    let get_creator = true;
+                    let get_selector = true;
+                    let get_indexer = true;
+                    let toolset = toolbox.get_tools(
+                        tui_mgr,
+                        config,
+                        get_editor,
+                        get_creator,
+                        get_selector,
+                        get_indexer,
+                    );
+                    next_app = c_logic.run(dir.clone(), toolset).await;
                 }
                 AppType::Forum => {
                     let f_logic = ForumLogic::new(
@@ -79,9 +240,19 @@ async fn main() {
                         wrapped_sender.clone(),
                         wrapped_receiver,
                     );
-                    next_app = f_logic
-                        .run(my_name.founder, dir.clone(), config, tui_mgr)
-                        .await;
+                    let get_editor = true;
+                    let get_creator = true;
+                    let get_selector = false;
+                    let get_indexer = false;
+                    let toolset = toolbox.get_tools(
+                        tui_mgr,
+                        config,
+                        get_editor,
+                        get_creator,
+                        get_selector,
+                        get_indexer,
+                    );
+                    next_app = f_logic.run(my_name.founder, dir.clone(), toolset).await;
                 }
                 AppType::Other(_x) => {
                     //TODO

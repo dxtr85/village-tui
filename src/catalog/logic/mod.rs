@@ -25,8 +25,8 @@ use std::sync::mpsc::Sender;
 // mod manifest;
 use crate::catalog::tui::Direction;
 use crate::catalog::tui::{CreatorResult, FromCatalogView, TileType, ToCatalogView};
-use crate::Configuration as AppConf;
-use crate::InternalMsg;
+use crate::{Configuration as AppConf, Creator, Editor, Selector, Toolset};
+use crate::{Indexer, InternalMsg};
 // pub use manifest::Manifest;
 // pub use manifest::Tag;
 
@@ -325,7 +325,7 @@ impl CatalogLogic {
         ));
         let (notification_sender, notification_receiver) = achannel::unbounded();
         let s_size = tui_mgr.screen_size();
-        let display_id = tui_mgr.new_display(false);
+        let display_id = tui_mgr.new_display(true);
         let notifier = Notifier::new(
             (s_size.0 as isize, 0),
             tui_mgr,
@@ -365,13 +365,15 @@ impl CatalogLogic {
     pub async fn run(
         mut self,
         config_dir: PathBuf,
-        mut config: Configuration,
+        // mut config: Configuration,
         // founder: GnomeId,
-        mut tui_mgr: Manager,
+        // mut tui_mgr: Manager,
+        mut toolset: Toolset,
         // from_presentation_msg_send: Sender<FromCatalogView>,
         // to_presentation_msg_recv: std::sync::mpsc::Receiver<ToCatalogView>,
         // wrapped_sender: ASender<InternalMsg>,
-    ) -> Option<(AppType, AReceiver<InternalMsg>, Configuration, Manager)> {
+    ) -> Option<(AppType, AReceiver<InternalMsg>, Toolset)> {
+        let (mut tui_mgr, config, e_opt, c_opt, s_opt, i_opt) = toolset.unfold();
         let mut return_val = None;
         let (cols, rows) = tui_mgr.screen_size();
         let frame = vec![Glyph::plain(); cols * rows];
@@ -384,6 +386,27 @@ impl CatalogLogic {
         // so that switching between apps  should be seamless.
         // That internal massage should be served by each app's
         // internal logic.
+        let mut editor = if let Some(edt) = e_opt {
+            edt
+        } else {
+            Editor::new(&mut tui_mgr)
+        };
+        let mut creator = if let Some(crt) = c_opt {
+            crt
+        } else {
+            Creator::new(&mut tui_mgr)
+        };
+        let mut selector = if let Some(slc) = s_opt {
+            slc
+        } else {
+            Selector::new(AppType::Catalog, &mut tui_mgr)
+        };
+        let mut indexer = if let Some(idx) = i_opt {
+            idx
+        } else {
+            Indexer::new(&mut tui_mgr)
+        };
+        tui_mgr.restore_display(self.display_id, true);
         let from_tui_send = self.from_tui_send.clone();
         let to_tui_recv = self.to_tui_recv.take().unwrap();
         let tui_join = spawn_blocking(move || {
@@ -394,6 +417,10 @@ impl CatalogLogic {
                 from_tui_send,
                 to_tui_recv,
                 config,
+                editor,
+                creator,
+                selector,
+                indexer,
             )
         });
 
@@ -1876,7 +1903,8 @@ impl CatalogLogic {
         // TODO: move below inside CatalogLogic::new
         // empty note terminates notifier service
         let _res = self.notification_sender.send(Some(format!(""))).await;
-        (tui_mgr, config) = tui_join.await;
+        // (tui_mgr, config) = toolbox.ret tui_join.await;
+        toolset = tui_join.await;
         // tui_mgr.new_display(false);
         if let Some((app_type, s_id, s_name)) = return_val {
             eprintln!("return_val is: {s_id}-{s_name}");
@@ -1884,10 +1912,10 @@ impl CatalogLogic {
                 .to_user_send
                 .send(InternalMsg::User(ToApp::ActiveSwarm(s_name, s_id)))
                 .await;
-            Some((app_type, self.to_app, config, tui_mgr))
+            Some((app_type, self.to_app, toolset))
         } else {
             eprintln!("return_val is none");
-            tui_mgr.terminate();
+            toolset.discard();
             None
         }
     }
@@ -2579,6 +2607,14 @@ impl CatalogLogic {
                         bc_id,
                         data,
                     ))
+                    .await;
+            }
+            Key::ShiftF => {
+                let f_name = SwarmName::new(self.my_name.founder, "F".to_string()).unwrap();
+                eprintln!("ShiftF: Start a Forum swarm");
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::StartNewSwarm(AppType::Forum, f_name))
                     .await;
             }
             Key::ShiftS => {

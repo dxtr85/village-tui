@@ -20,6 +20,7 @@ use crate::forum::tui::serve_forum_tui;
 use crate::forum::tui::FromForumView;
 use crate::forum::tui::ToForumView;
 use crate::InternalMsg;
+use crate::Toolset;
 pub struct ForumLogic {
     to_app_mgr_send: ASender<ToAppMgr>,
     to_user_send: ASender<InternalMsg>,
@@ -54,28 +55,21 @@ impl ForumLogic {
         mut self,
         founder: GnomeId,
         config_dir: PathBuf,
-        mut config: Configuration,
-        mut tui_mgr: Manager,
-    ) -> Option<(AppType, AReceiver<InternalMsg>, Configuration, Manager)> {
-        let _main_display = tui_mgr.new_display(false);
-        let (cols, rows) = tui_mgr.screen_size();
-        let frame = vec![Glyph::green(); cols * rows];
-        let mut library = HashMap::new();
-        library.insert(0, frame);
-        let bg = Graphic::new(cols, rows, 0, library, None);
-        let bg_idx = tui_mgr.add_graphic(bg, 1, (0, 0)).unwrap();
-        tui_mgr.set_graphic(bg_idx, 0, true);
-        eprintln!("Forum background index: {}", bg_idx);
-        // eprintln!("Forum {}", tui_mgr.screen_size().0);
+        toolset: Toolset,
+        // mut config: Configuration,
+        // mut tui_mgr: Manager,
+        // ) -> Option<(AppType, AReceiver<InternalMsg>, Configuration, Manager)> {
+    ) -> Option<(AppType, AReceiver<InternalMsg>, Toolset)> {
         let from_presentation_msg_send = self.from_tui_send.take().unwrap();
         let to_presentation_msg_recv = self.to_tui_recv.take().unwrap();
         let tui_join = spawn_blocking(move || {
             serve_forum_tui(
                 founder,
-                tui_mgr,
+                toolset,
+                // tui_mgr,
                 from_presentation_msg_send,
                 to_presentation_msg_recv,
-                config,
+                // config,
             )
         });
         let mut switch_to_opt = None;
@@ -115,13 +109,13 @@ impl ForumLogic {
         }
 
         eprintln!("ForumLogic is done");
-        (tui_mgr, config) = tui_join.await;
+        let toolset = tui_join.await;
 
         eprintln!("Forum is all done.");
         if let Some(switch_app) = switch_to_opt {
-            Some((switch_app, self.to_user_recv, config, tui_mgr))
+            Some((switch_app, self.to_user_recv, toolset))
         } else {
-            tui_mgr.terminate();
+            toolset.discard();
             None
         }
     }

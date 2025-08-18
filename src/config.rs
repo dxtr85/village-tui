@@ -27,6 +27,11 @@ impl Configuration {
         let mut next_v4 = true;
         for sswarm in stored_swarms {
             let sstr = sswarm.to_string_lossy();
+            if !sstr.contains('-') {
+                // TODO: improve logic for loading contents from disk
+                eprintln!("Skipping {sstr}");
+                continue;
+            }
             let sstr = sstr.split('-').last().unwrap();
             eprintln!("Parsing str: {}", sstr);
             let g_id: u64 = u64::from_str_radix(&sstr, 16).unwrap();

@@ -40,6 +40,7 @@ impl Editor {
         editor
     }
     pub fn cleanup(&self, main_display: usize, mgr: &mut Manager) {
+        eprintln!("Editor cleanup");
         mgr.restore_display(self.display_id, true);
         mgr.restore_display(main_display, false);
     }

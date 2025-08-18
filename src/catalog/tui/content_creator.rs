@@ -170,6 +170,7 @@ impl Creator {
 
     pub fn show(
         &mut self,
+        main_display: usize,
         mgr: &mut Manager,
         read_only: bool,
         d_type: String,
@@ -230,7 +231,7 @@ impl Creator {
                         mgr.move_graphic(self.button_apply.g_id, 0, (0, 0));
                         mgr.move_graphic(self.button_cancel.g_id, 0, (0, 0));
                         available_buttons[selected_button].deselect(mgr, read_only);
-                        mgr.restore_display(0, true);
+                        mgr.restore_display(main_display, true);
                         match selected_button {
                             1 => {
                                 return CreatorResult::SelectDType;
