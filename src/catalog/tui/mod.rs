@@ -906,6 +906,7 @@ pub fn serve_catalog_tui(
         Some(creator),
         Some(selector),
         Some(indexer),
+        None,
     )
 }
 

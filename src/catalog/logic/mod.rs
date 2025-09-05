@@ -372,8 +372,8 @@ impl CatalogLogic {
         // from_presentation_msg_send: Sender<FromCatalogView>,
         // to_presentation_msg_recv: std::sync::mpsc::Receiver<ToCatalogView>,
         // wrapped_sender: ASender<InternalMsg>,
-    ) -> Option<(AppType, AReceiver<InternalMsg>, Toolset)> {
-        let (mut tui_mgr, config, e_opt, c_opt, s_opt, i_opt) = toolset.unfold();
+    ) -> Option<(AppType, SwarmName, AReceiver<InternalMsg>, Toolset)> {
+        let (mut tui_mgr, config, e_opt, c_opt, s_opt, i_opt, pe_opt) = toolset.unfold();
         let mut return_val = None;
         let (cols, rows) = tui_mgr.screen_size();
         let frame = vec![Glyph::plain(); cols * rows];
@@ -786,6 +786,9 @@ impl CatalogLogic {
                         ToApp::Quit => {
                             eprintln!("Done serving ApplicationLogic");
                             break 'outer;
+                        }
+                        other => {
+                            eprintln!("Unhandled msg: {:?}", other);
                         }
                     },
                     InternalMsg::Catalog(from_tui) => match from_tui {
@@ -1885,7 +1888,13 @@ impl CatalogLogic {
                         }
                         FromCatalogView::SwitchToApp(app_type, s_id, s_name) => {
                             eprintln!("logic got SwitchToApp");
-                            return_val = Some((app_type, s_id, s_name));
+                            return_val = Some((app_type, s_id, s_name.clone()));
+                            // TODO: here we need to notify app manager
+                            // that user wants to switch to a new swarm
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::StartNewSwarm(app_type, s_name))
+                                .await;
                             break 'outer;
                         }
                     },
@@ -1908,11 +1917,13 @@ impl CatalogLogic {
         // tui_mgr.new_display(false);
         if let Some((app_type, s_id, s_name)) = return_val {
             eprintln!("return_val is: {s_id}-{s_name}");
-            let _ = self
-                .to_user_send
-                .send(InternalMsg::User(ToApp::ActiveSwarm(s_name, s_id)))
-                .await;
-            Some((app_type, self.to_app, toolset))
+            // TODO: we need a dedicated messago for swarm switching
+            // now we fake that a new swarm is active, when it is not!
+            // let _ = self
+            //     .to_user_send
+            //     .send(InternalMsg::User(ToApp::ActiveSwarm(s_name.clone(), s_id)))
+            //     .await;
+            Some((app_type, s_name, self.to_app, toolset))
         } else {
             eprintln!("return_val is none");
             toolset.discard();

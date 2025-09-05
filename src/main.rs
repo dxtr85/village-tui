@@ -5,6 +5,7 @@ use dapp_lib::prelude::*;
 use std::env::args;
 use std::path::PathBuf;
 mod catalog;
+mod common;
 mod config;
 mod forum;
 use catalog::logic::CatalogLogic;
@@ -16,6 +17,7 @@ use catalog::tui::{instantiate_tui_mgr, FromCatalogView};
 use config::Configuration;
 use forum::logic::ForumLogic;
 
+use crate::common::poledit::PolicyEditor;
 use crate::forum::tui::FromForumView;
 
 enum InternalMsg {
@@ -30,6 +32,7 @@ struct Toolbox {
     creator: Option<Creator>,
     selector: Option<Selector>,
     indexer: Option<Indexer>,
+    policy_editor: Option<PolicyEditor>,
 }
 impl Toolbox {
     pub fn empty() -> Self {
@@ -38,6 +41,7 @@ impl Toolbox {
             creator: None,
             selector: None,
             indexer: None,
+            policy_editor: None,
         }
     }
     pub fn get_tools(
@@ -48,6 +52,7 @@ impl Toolbox {
         get_creator: bool,
         get_selector: bool,
         get_indexer: bool,
+        get_policy_editor: bool,
     ) -> Toolset {
         let editor = if get_editor { self.editor.take() } else { None };
 
@@ -68,6 +73,11 @@ impl Toolbox {
         } else {
             None
         };
+        let policy_editor = if get_policy_editor {
+            self.policy_editor.take()
+        } else {
+            None
+        };
         Toolset {
             manager,
             config,
@@ -75,6 +85,7 @@ impl Toolbox {
             creator,
             selector,
             indexer,
+            policy_editor,
         }
     }
     pub fn return_tools(
@@ -83,6 +94,7 @@ impl Toolbox {
         creator: Option<Creator>,
         selector: Option<Selector>,
         indexer: Option<Indexer>,
+        policy_editor: Option<PolicyEditor>,
     ) {
         if editor.is_some() {
             self.editor = editor;
@@ -96,6 +108,9 @@ impl Toolbox {
         if indexer.is_some() {
             self.indexer = indexer;
         }
+        if policy_editor.is_some() {
+            self.policy_editor = policy_editor;
+        }
     }
 }
 
@@ -106,6 +121,7 @@ struct Toolset {
     creator: Option<Creator>,
     selector: Option<Selector>,
     indexer: Option<Indexer>,
+    policy_editor: Option<PolicyEditor>,
 }
 impl Toolset {
     pub fn fold(
@@ -115,6 +131,7 @@ impl Toolset {
         creator: Option<Creator>,
         selector: Option<Selector>,
         indexer: Option<Indexer>,
+        policy_editor: Option<PolicyEditor>,
     ) -> Self {
         Toolset {
             manager,
@@ -123,6 +140,7 @@ impl Toolset {
             creator,
             selector,
             indexer,
+            policy_editor,
         }
     }
     pub fn unfold(
@@ -134,6 +152,7 @@ impl Toolset {
         Option<Creator>,
         Option<Selector>,
         Option<Indexer>,
+        Option<PolicyEditor>,
     ) {
         (
             self.manager,
@@ -142,6 +161,7 @@ impl Toolset {
             self.creator,
             self.selector,
             self.indexer,
+            self.policy_editor,
         )
     }
     pub fn discard(mut self) {
@@ -155,6 +175,9 @@ impl Toolset {
             e.cleanup(0, &mut self.manager);
         }
         if let Some(e) = self.indexer {
+            e.cleanup(0, &mut self.manager);
+        }
+        if let Some(e) = self.policy_editor {
             e.cleanup(0, &mut self.manager);
         }
         self.manager.terminate();
@@ -200,21 +223,21 @@ async fn main() {
     //       Also new from_tui_adapter should be spawned,
     //       old one should self-terminate on error receiving FromPresentation.
     // TODO: InternalMessage should serve every defined AppType, and Notification
-    let toolset = Toolset::fold(tui_mgr, config, None, None, None, None);
-    let mut next_app = Some((AppType::Catalog, wrapped_receiver, toolset));
+    let toolset = Toolset::fold(tui_mgr, config, None, None, None, None, None);
+    let mut next_app = Some((AppType::Catalog, my_name.clone(), wrapped_receiver, toolset));
     // TODO: Define a Toolbox struct to store all the tools an app might use.
     // Those are Editor, Notifier, Selector etc.
     // Once an app is done, it returns all the tools it was using back to toolbox.
     // When next app is strating, it borrows existing tools from Toolbox
     loop {
-        if let Some((app_type, wrapped_receiver, toolset)) = next_app.take() {
-            let (mut tui_mgr, config, e_opt, c_opt, s_opt, i_opt) = toolset.unfold();
-            toolbox.return_tools(e_opt, c_opt, s_opt, i_opt);
+        if let Some((app_type, s_name, wrapped_receiver, toolset)) = next_app.take() {
+            let (mut tui_mgr, config, e_opt, c_opt, s_opt, i_opt, pe_opt) = toolset.unfold();
+            toolbox.return_tools(e_opt, c_opt, s_opt, i_opt, pe_opt);
             match app_type {
                 AppType::Catalog => {
                     tui_mgr.restore_display(0, false);
                     let c_logic = CatalogLogic::new(
-                        my_name.clone(),
+                        s_name,
                         to_app_mgr_send.clone(),
                         &mut tui_mgr,
                         wrapped_sender.clone(),
@@ -224,6 +247,7 @@ async fn main() {
                     let get_creator = true;
                     let get_selector = true;
                     let get_indexer = true;
+                    let get_policy_editor = false;
                     let toolset = toolbox.get_tools(
                         tui_mgr,
                         config,
@@ -231,11 +255,13 @@ async fn main() {
                         get_creator,
                         get_selector,
                         get_indexer,
+                        get_policy_editor,
                     );
                     next_app = c_logic.run(dir.clone(), toolset).await;
                 }
                 AppType::Forum => {
                     let f_logic = ForumLogic::new(
+                        s_name,
                         to_app_mgr_send.clone(),
                         wrapped_sender.clone(),
                         wrapped_receiver,
@@ -244,6 +270,7 @@ async fn main() {
                     let get_creator = true;
                     let get_selector = false;
                     let get_indexer = false;
+                    let get_policy_editor = true;
                     let toolset = toolbox.get_tools(
                         tui_mgr,
                         config,
@@ -251,6 +278,7 @@ async fn main() {
                         get_creator,
                         get_selector,
                         get_indexer,
+                        get_policy_editor,
                     );
                     next_app = f_logic.run(my_name.founder, dir.clone(), toolset).await;
                 }
