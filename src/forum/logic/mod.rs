@@ -1,3 +1,5 @@
+use crate::common::poledit::decompose;
+use crate::common::poledit::ReqTree;
 use animaterm::prelude::*;
 use async_std::channel::Receiver as AReceiver;
 use async_std::channel::Sender as ASender;
@@ -18,6 +20,8 @@ use std::sync::mpsc::Sender;
 use std::time::Duration;
 
 use dapp_lib::prelude::AppType;
+
+#[derive(Debug)]
 enum PresentationState {
     MainLobby(Option<u16>),
     RunningPolicies(Option<(u16, HashMap<u16, (Policy, Requirement)>)>),
@@ -26,7 +30,11 @@ enum PresentationState {
     StoredPolicies(Option<u16>),
     StoredCapabilities(Option<u16>),
     StoredByteSets(Option<u16>),
+    SelectingOnePolicy(Vec<Policy>, ReqTree),
+    SelectingOneRequirement(Vec<Requirement>, Policy, ReqTree),
+    Pyramid(Policy, ReqTree),
 }
+use crate::common::poledit::PolAction;
 use crate::forum::tui::serve_forum_tui;
 use crate::forum::tui::Action;
 use crate::forum::tui::FromForumView;
@@ -204,6 +212,12 @@ impl ForumLogic {
                                 Action::Posts(topic_id) => {
                                     //TODO
                                 }
+                                Action::PolicyAction(p_act) => {
+                                    self.serve_pol_action(p_act).await;
+                                }
+                                Action::OneSelected(id) => {
+                                    self.serve_one_selected(id).await;
+                                }
                             }
                         }
                         // FromForumView::RunningPolicies => {
@@ -238,8 +252,95 @@ impl ForumLogic {
             None
         }
     }
+    async fn serve_pol_action(&mut self, pa: PolAction) {
+        eprintln!("PolAction: {:?}", pa);
+        match pa {
+            PolAction::SelectPolicy => {
+                let curr_state = std::mem::replace(
+                    &mut self.presentation_state,
+                    PresentationState::MainLobby(None),
+                );
+                if let PresentationState::Pyramid(p, r) = curr_state {
+                    let (policies, p_strings) = Policy::mapping();
+                    let _ = self.to_tui_send.send(ToForumView::SelectOne(p_strings));
+                    self.presentation_state = PresentationState::SelectingOnePolicy(policies, r);
+                } else {
+                    self.presentation_state = curr_state;
+                }
+            }
+            PolAction::SelectRequirement(mut r_tree) => {
+                //TODO: open selector with available
+                // reqs to select & allow for one to be
+                // picked
+                // Then return that req to PolEditor
+                let curr_state = std::mem::replace(
+                    &mut self.presentation_state,
+                    PresentationState::MainLobby(None),
+                );
+                if let PresentationState::Pyramid(p, r) = curr_state {
+                    let user_def_caps: Vec<u8> = vec![0];
+                    let byte_sets: Vec<u8> = vec![0, 1, 2];
+                    let two_byte_sets: Vec<u8> = vec![3];
+                    let incl_logic = r_tree.mark_location().0 != 4;
+                    let (reqs, r_strings) =
+                        Requirement::mapping(incl_logic, user_def_caps, byte_sets, two_byte_sets);
+                    self.presentation_state =
+                        PresentationState::SelectingOneRequirement(reqs, p, r_tree);
+                    let _ = self.to_tui_send.send(ToForumView::SelectOne(r_strings));
+                } else {
+                    self.presentation_state = curr_state;
+                }
+            }
+            PolAction::Store(p, r) => {
+                eprintln!("PolAction::Store");
+                // TODO: update selected policy to new value.
+                // If it is a running policy,
+                // send it to Gnome for uploading to swarm.
+                // If it was a stored Policy, we should
+                // update Manifest also at Swarm level
+                //
+                // TODO: allow for changing both
+                // running & stored Policy at once
+            }
+            PolAction::Run(p, r) => {
+                //TODO
+                eprintln!("PolAction::Run");
+            }
+        }
+    }
+    async fn serve_one_selected(&mut self, id: usize) {
+        // TODO:
+        eprintln!("OneSelected id: {id}");
+        let curr_state = std::mem::replace(
+            &mut self.presentation_state,
+            PresentationState::MainLobby(None),
+        );
+        match curr_state {
+            PresentationState::SelectingOnePolicy(p_vec, r_tree) => {
+                let p = p_vec[id];
+                // let r_tree = decompose(req.clone());
+                self.presentation_state = PresentationState::Pyramid(p.clone(), r_tree.clone());
+                let _ = self.to_tui_send.send(ToForumView::ShowPolicy(p, r_tree));
+            }
+            PresentationState::SelectingOneRequirement(req_vec, pol, mut r_tree) => {
+                eprintln!("should put req at: {:?}", r_tree.mark_location());
+                let r = req_vec[id].clone();
+                if r_tree.replace_mark(r) {
+                    self.presentation_state =
+                        PresentationState::Pyramid(pol.clone(), r_tree.clone());
+                    let _ = self.to_tui_send.send(ToForumView::ShowPolicy(pol, r_tree));
+                } else {
+                    eprintln!("Did not find a Marker to replace");
+                }
+            }
+            other => {
+                self.presentation_state = other;
+            }
+        }
+    }
     async fn serve_query(&mut self, id: u16) {
         eprintln!("Logic got a query {:?}", id);
+        let mut new_state = None;
         match &self.presentation_state {
             PresentationState::MainLobby(page_opt) => {
                 //TODO: retrieve a Topic and present it to user
@@ -261,10 +362,12 @@ impl ForumLogic {
             PresentationState::RunningPolicies(page_opt) => {
                 if let Some((_page_no, mapping)) = page_opt {
                     if let Some((p, r)) = mapping.get(&id) {
+                        let r_tree = decompose(r.clone());
+                        new_state = Some(PresentationState::Pyramid(p.clone(), r_tree.clone()));
                         //TODO: get Policy & Requirements & show it to user
                         let _ = self
                             .to_tui_send
-                            .send(ToForumView::ShowPolicy(p.clone(), r.clone()));
+                            .send(ToForumView::ShowPolicy(p.clone(), r_tree));
                     } else {
                         eprintln!("Did not find running policy for {id}");
                     }
@@ -325,6 +428,19 @@ impl ForumLogic {
                 let page = page_opt.unwrap();
                 // similar to StoredPolicies
             }
+            PresentationState::SelectingOnePolicy(pol_vec, req) => {
+                //TODO
+                eprintln!("serve queue while in SelectingOnePolicy");
+            }
+            PresentationState::SelectingOneRequirement(req_vec, pol, r_tree) => {
+                eprintln!("serve queue while in SelectingOneRequirement");
+            }
+            PresentationState::Pyramid(pol, req) => {
+                eprintln!("serve queue while in Pyramid");
+            }
+        }
+        if let Some(n_s) = new_state {
+            self.presentation_state = n_s;
         }
     }
 }

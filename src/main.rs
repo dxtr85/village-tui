@@ -268,7 +268,7 @@ async fn main() {
                     );
                     let get_editor = true;
                     let get_creator = true;
-                    let get_selector = false;
+                    let get_selector = true;
                     let get_indexer = false;
                     let get_policy_editor = true;
                     let toolset = toolbox.get_tools(

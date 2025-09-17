@@ -12,9 +12,12 @@ use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 
 use crate::catalog::tui::button::Button;
+use crate::common::poledit::PolAction;
 use crate::common::poledit::PolicyEditor;
+use crate::common::poledit::ReqTree;
 use crate::Toolset;
 
+#[derive(Debug)]
 pub enum Action {
     // Generic actions
     NextPage,
@@ -32,11 +35,14 @@ pub enum Action {
     StoredCapabilities,  // inform & ask for first page of given type
     RunningByteSets,     // inform & ask for first page of given type
     StoredByteSets,      // inform & ask for first page of given type
+    PolicyAction(PolAction),
+    OneSelected(usize),
 }
 pub enum ToForumView {
     RunningPoliciesPage(u16, Vec<(u16, String)>),
     StoredPoliciesPage(u16, Vec<(u16, String)>),
-    ShowPolicy(Policy, Requirement),
+    ShowPolicy(Policy, ReqTree),
+    SelectOne(Vec<String>),
 }
 pub enum FromForumView {
     Act(Action),
@@ -845,10 +851,12 @@ pub fn serve_forum_tui(
 ) -> Toolset {
     let (mut tui_mgr, config, e_opt, c_opt, s_opt, i_opt, pe_opt) = toolset.unfold();
     let mut creator = c_opt.unwrap();
+    let mut selector = s_opt.unwrap();
+
     // TODO: PEditor should be created once upon
     // startup & should be passed to an app
     // together with other tools
-    let pedit = if let Some(pe) = pe_opt {
+    let mut pedit = if let Some(pe) = pe_opt {
         pe
     } else {
         PolicyEditor::new(&mut tui_mgr)
@@ -905,6 +913,7 @@ pub fn serve_forum_tui(
     tui_mgr.set_graphic(bg_idx, 0, true);
     loop {
         if let Some(act) = action.take() {
+            eprintln!("Some action: {:?}", act);
             let _ = to_app.send(FromForumView::Act(act));
         }
         if let Some(key) = tui_mgr.read_key() {
@@ -958,6 +967,25 @@ pub fn serve_forum_tui(
                 }
                 ToForumView::ShowPolicy(pol, req) => {
                     eprintln!("Forum TUI Policy: {:?} – {:?} to present", pol, req);
+
+                    if let Some(p_action) = pedit.present(pol, req, &mut tui_mgr) {
+                        // TODO
+                        action = Some(Action::PolicyAction(p_action));
+                    }
+                    tui_mgr.restore_display(main_display, true);
+                }
+                ToForumView::SelectOne(list) => {
+                    let selected = selector.select("Pick one", &list, vec![], &mut tui_mgr, true);
+                    // TODO: bring up selector with
+                    // a given list & reply back to logic.
+                    eprintln!("Selected: {:?}", selected);
+                    tui_mgr.restore_display(main_display, true);
+                    if !selected.is_empty() {
+                        action = Some(Action::OneSelected(selected[0]));
+                    } else {
+                        //TODO:
+                        eprintln!("Failed to select one!");
+                    }
                 }
             }
             eprintln!("Forum TUI recv");

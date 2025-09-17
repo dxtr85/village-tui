@@ -78,7 +78,7 @@ impl Selector {
         quit_on_first_select: bool,
     ) -> Vec<usize> {
         mgr.restore_display(self.display_id, true);
-        eprintln!("Options to present: {:?}", options);
+        // eprintln!("Options to present: {:?}", options);
         mgr.move_graphic(self.g_id, 3, (0, 0));
         let gp = Glyph::plain();
         let mut g = Glyph::plain();
