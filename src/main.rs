@@ -231,6 +231,7 @@ async fn main() {
     // When next app is strating, it borrows existing tools from Toolbox
     loop {
         if let Some((app_type, s_name, wrapped_receiver, toolset)) = next_app.take() {
+            eprintln!("Next app: {} {:?}", s_name, app_type);
             let (mut tui_mgr, config, e_opt, c_opt, s_opt, i_opt, pe_opt) = toolset.unfold();
             toolbox.return_tools(e_opt, c_opt, s_opt, i_opt, pe_opt);
             match app_type {

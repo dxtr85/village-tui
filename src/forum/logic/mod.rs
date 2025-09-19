@@ -293,18 +293,23 @@ impl ForumLogic {
             }
             PolAction::Store(p, r) => {
                 eprintln!("PolAction::Store");
-                // TODO: update selected policy to new value.
-                // If it is a running policy,
-                // send it to Gnome for uploading to swarm.
-                // If it was a stored Policy, we should
-                // update Manifest also at Swarm level
-                //
+                let r_res = r.requirement();
+                if let Ok(r) = r_res {
+                    self.store_policy(p, r).await;
+                } else {
+                    eprintln!("Failed to build Requirements");
+                }
                 // TODO: allow for changing both
                 // running & stored Policy at once
             }
             PolAction::Run(p, r) => {
-                //TODO
                 eprintln!("PolAction::Run");
+                let r_res = r.requirement();
+                if let Ok(r) = r_res {
+                    self.run_policy(p, r).await;
+                } else {
+                    eprintln!("Failed to build Requirements");
+                }
             }
         }
     }
@@ -442,6 +447,31 @@ impl ForumLogic {
         if let Some(n_s) = new_state {
             self.presentation_state = n_s;
         }
+    }
+    async fn run_policy(&mut self, pol: Policy, req: Requirement) {
+        eprintln!("In run_policy");
+        // TODO: update selected policy to new value by
+        // sending a msg to Gnome in order for
+        // him to reconfigure Swarm.
+        let _ = self
+            .to_app_mgr_send
+            .send(ToAppMgr::FromApp(dapp_lib::LibRequest::SetRunningPolicy(
+                self.swarm_name.clone(),
+                pol,
+                req,
+            )))
+            .await;
+    }
+    async fn store_policy(&mut self, pol: Policy, req: Requirement) {
+        eprintln!("In store_policy");
+        // TODO: update selected policy to new value.
+        // we should update Manifest also at Swarm level
+        //
+        // We probably need a SwarmShell instance.
+        // Next we need to have retrinve Manifest from Swarm.
+        // Then we need to update/add given Policy.
+        // Now we send requests to Gnome in order to update
+        //
     }
 }
 

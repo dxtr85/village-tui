@@ -1,6 +1,6 @@
 use crate::catalog::tui::serve_catalog_tui;
 use crate::catalog::tui::{from_catalog_tui_adapter, Notifier};
-use crate::config::Configuration;
+// use crate::config::Configuration;
 use animaterm::prelude::*;
 use async_std::channel::Receiver as AReceiver;
 use async_std::channel::Sender as ASender;
@@ -169,7 +169,7 @@ enum TuiState {
         Vec<String>,
         Vec<String>,
     ),
-    ShowActiveSwarms(Vec<(SwarmName, SwarmID)>),
+    ShowActiveSwarms(Vec<(SwarmName, AppType, SwarmID)>),
 }
 
 struct SwarmShell {
@@ -545,6 +545,7 @@ impl CatalogLogic {
                             }
                         }
                         ToApp::NameToIDMapping(mapping) => {
+                            eprintln!("User got mapping: {:?}", mapping);
                             // TODO: show after mgr responds with a list
                             if mapping.is_empty() {
                                 //TODO: display a notification
@@ -554,8 +555,8 @@ impl CatalogLogic {
                             }
                             let mut map_vec = Vec::with_capacity(mapping.len());
                             let mut name_vec = Vec::with_capacity(mapping.len());
-                            for (s_name, s_id) in mapping {
-                                map_vec.push((s_name.clone(), s_id));
+                            for (s_name, (s_id, a_type)) in mapping {
+                                map_vec.push((s_name.clone(), a_type, s_id));
                                 name_vec.push(format!("Swarm ID {}: {}", s_id.0, s_name));
                             }
                             self.state = TuiState::ShowActiveSwarms(map_vec);
@@ -1814,17 +1815,40 @@ impl CatalogLogic {
                                             idx
                                         );
                                         //TODO: we need a mapping from idx -> gnome_id
-                                        if let Some((swarm_name, _s_id)) = mapping.get(idx) {
-                                            new_state = Some(TuiState::Village);
+                                        if let Some((swarm_name, app_type, s_id)) = mapping.get(idx)
+                                        {
+                                            eprintln!(
+                                                "{} Activate: {} {:?}",
+                                                s_id, swarm_name, app_type
+                                            );
                                             let _ = self
                                                 .to_app_mgr_send
                                                 .send(ToAppMgr::FromApp(LibRequest::SetActiveApp(
                                                     swarm_name.clone(),
                                                 )))
                                                 .await;
-                                            let _ = self
-                                                .to_tui
-                                                .send(ToCatalogView::SwapTiles(swarm_name.founder));
+                                            if matches!(app_type, AppType::Catalog) {
+                                                new_state = Some(TuiState::Village);
+                                                let _ = self.to_tui.send(ToCatalogView::SwapTiles(
+                                                    swarm_name.founder,
+                                                ));
+                                            } else {
+                                                // TODO: Do not start a new swarm
+                                                // when it is running
+
+                                                eprintln!("Not Catalog: {:?}", app_type);
+                                                // let _ = self
+                                                //     .to_app_mgr_send
+                                                //     .send(ToAppMgr::StartNewSwarm(
+                                                //         *app_type,
+                                                //         swarm_name.clone(),
+                                                //     ))
+                                                //     .await;
+                                                let _ = self.to_tui.send(ToCatalogView::Quit);
+                                                return_val =
+                                                    Some((*app_type, *s_id, swarm_name.clone()));
+                                                break 'outer;
+                                            }
                                         }
                                     } else {
                                         eprintln!("Going back to Village");
@@ -1838,7 +1862,8 @@ impl CatalogLogic {
                                             i_result
                                         );
                                         if let Some((text, count)) = s_list.get(idx) {
-                                            self.to_app_mgr_send
+                                            let _ = self
+                                                .to_app_mgr_send
                                                 .send(ToAppMgr::FromApp(
                                                     LibRequest::GetSearchResults(text.clone()),
                                                 ))
@@ -1856,7 +1881,8 @@ impl CatalogLogic {
                                                 0,
                                                 Some((s_name.clone(), *c_id)),
                                             ));
-                                            self.to_app_mgr_send
+                                            let _ = self
+                                                .to_app_mgr_send
                                                 .send(ToAppMgr::FromApp(LibRequest::SetActiveApp(
                                                     s_name.clone(),
                                                 )))
@@ -1891,6 +1917,7 @@ impl CatalogLogic {
                             return_val = Some((app_type, s_id, s_name.clone()));
                             // TODO: here we need to notify app manager
                             // that user wants to switch to a new swarm
+                            // TODO: Do not start a new swarm if already running!
                             let _ = self
                                 .to_app_mgr_send
                                 .send(ToAppMgr::StartNewSwarm(app_type, s_name))

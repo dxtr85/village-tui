@@ -501,7 +501,7 @@ pub enum ToCatalogView {
     StreetNames(Vec<(Tag, HashSet<(DataType, ContentID, String)>)>),
     SetNotification(usize, Vec<Glyph>),
     MoveNotification(usize, (isize, isize)),
-    // SwitchApp(AppType, MessagePipes),
+    Quit,
 }
 
 #[derive(Clone)]
@@ -885,10 +885,10 @@ pub fn serve_catalog_tui(
                 }
                 ToCatalogView::MoveNotification(g_id, offset) => {
                     mgr.move_graphic(g_id, 4, offset);
-                } // ToPresentation::SwitchApp(app_type, pipes) => {
-                  //     //TODO
-                  //     eprintln!("Should switch to {app_type:?}");
-                  // }
+                }
+                ToCatalogView::Quit => {
+                    break;
+                }
             }
         }
     }

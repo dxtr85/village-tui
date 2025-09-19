@@ -525,6 +525,22 @@ impl ReqTree {
     pub fn req(&self) -> Req {
         self.r
     }
+    pub fn requirement(self) -> Result<Requirement, ()> {
+        if self.r.is_logic_fn() {
+            let left_r = self.left().requirement();
+            let right_r = self.right().requirement();
+            if left_r.is_err() {
+                return Err(());
+            }
+            if right_r.is_err() {
+                return Err(());
+            }
+            self.r.compose(left_r.ok(), right_r.ok())
+        } else {
+            self.r.compose(None, None)
+        }
+    }
+
     pub fn none() -> ReqTree {
         ReqTree {
             r: Req::None,
@@ -671,6 +687,46 @@ enum Req {
     Marker,
 }
 impl Req {
+    pub fn compose(
+        self,
+        left: Option<Requirement>,
+        right: Option<Requirement>,
+    ) -> Result<Requirement, ()> {
+        match self {
+            Self::And => {
+                if let Some(l) = left {
+                    if let Some(r) = right {
+                        Ok(Requirement::And(Box::new(l), Box::new(r)))
+                    } else {
+                        Err(())
+                    }
+                } else {
+                    Err(())
+                }
+            }
+            Self::Or => {
+                if let Some(l) = left {
+                    if let Some(r) = right {
+                        Ok(Requirement::Or(Box::new(l), Box::new(r)))
+                    } else {
+                        Err(())
+                    }
+                } else {
+                    Err(())
+                }
+            }
+            Self::Has(c) => Ok(Requirement::Has(c)),
+            Self::DataByte2InSet(set) => Ok(Requirement::DataByte2InSet(set)),
+            Self::DataByte2Is(byte) => Ok(Requirement::DataByte2Is(byte)),
+            Self::DataByte2IsNot(byte) => Ok(Requirement::DataByte2IsNot(byte)),
+            Self::DataByte3InSet(set) => Ok(Requirement::DataByte3InSet(set)),
+            Self::DataByte3Is(byte) => Ok(Requirement::DataByte3Is(byte)),
+            Self::DataByte3IsNot(byte) => Ok(Requirement::DataByte3IsNot(byte)),
+            Self::DataBytes2And3InSet(set) => Ok(Requirement::DataBytes2And3InSet(set)),
+            Self::None => Ok(Requirement::None),
+            Self::Marker => Err(()),
+        }
+    }
     pub fn not_none(&self) -> bool {
         !matches!(self, Req::None)
     }
