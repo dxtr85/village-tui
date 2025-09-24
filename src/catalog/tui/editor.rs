@@ -52,7 +52,7 @@ impl Editor {
         self.byte_limit = limit;
     }
     pub fn show(&mut self, mgr: &mut Manager) {
-        // mgr.move_graphic(self.g_id, 2, (0, 0));
+        mgr.restore_display(self.display_id, true);
         mgr.set_graphic(self.g_id, 0, true);
     }
     pub fn take_text(&mut self, mgr: &mut Manager) -> String {

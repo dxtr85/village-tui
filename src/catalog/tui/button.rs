@@ -38,8 +38,10 @@ impl Button {
         }
 
         let mut library = HashMap::new();
-        library.insert(0, frame_deselect);
-        library.insert(1, frame_select);
+        library.insert(0, frame_deselect.clone());
+        library.insert(1, frame_select.clone());
+        library.insert(2, frame_deselect);
+        library.insert(3, frame_select);
         if let Some(text) = alt_text {
             g.set_char(' ');
             gr.set_char(' ');
@@ -79,49 +81,39 @@ impl Button {
         mgr.move_graphic(self.g_id, 2, (0, 0));
     }
     pub fn rename(&self, mgr: &mut Manager, new_name: &String) {
-        let mut g = Glyph::char(' ');
+        let mut ga = Glyph::char(' ');
+        ga.set_color(animaterm::Color::yellow());
+        ga.set_reverse(true);
+        let g = Glyph::char(' ');
         let mut gr = Glyph::char(' ');
         gr.set_reverse(true);
-        let mut c_iter = new_name.chars().into_iter();
+
+        let c_iter = new_name.chars().into_iter();
         let row = self.size.1 >> 1;
-        let mut added = 1;
-        mgr.set_graphic(self.g_id, 1, false);
-        let mut cc_iter = c_iter.clone();
-        while let Some(c) = cc_iter.next() {
-            if added >= self.size.0 - 1 {
-                break;
+        // TODO: fix deselecting button reverse
+        let loop_params = [(1, gr), (0, g), (2, ga)];
+        for (frame_id, mut glyph) in loop_params {
+            mgr.set_graphic(self.g_id, frame_id, false);
+            glyph.set_char(' ');
+            mgr.set_glyph(self.g_id, glyph, 0, row);
+            let mut added = 1;
+            let mut cc_iter = c_iter.clone();
+            while let Some(c) = cc_iter.next() {
+                if added >= self.size.0 - 1 {
+                    break;
+                }
+                glyph.set_char(c);
+                mgr.set_glyph(self.g_id, glyph, added, row);
+                added = added + 1;
             }
-            // g.set_char(c);
-            gr.set_char(c);
-            // let location = size.0 * row + added;
-            // frame_deselect[location] = g;
-            // frame_select[location] = gr;
-            mgr.set_glyph(self.g_id, gr, added, row);
-            added = added + 1;
+            glyph.set_char(' ');
+            for i in added..self.size.0 {
+                mgr.set_glyph(self.g_id, glyph, i, row);
+            }
         }
-        gr.set_char(' ');
-        for i in added..self.size.0 {
-            mgr.set_glyph(self.g_id, gr, i, row);
-        }
-        added = 1;
         mgr.set_graphic(self.g_id, 0, false);
-        while let Some(c) = c_iter.next() {
-            if added >= self.size.0 - 1 {
-                break;
-            }
-            g.set_char(c);
-            // gr.set_char(c);
-            // let location = size.0 * row + added;
-            // frame_deselect[location] = g;
-            // frame_select[location] = gr;
-            mgr.set_glyph(self.g_id, g, added, row);
-            added = added + 1;
-        }
-        g.set_char(' ');
-        for i in added..self.size.0 {
-            mgr.set_glyph(self.g_id, g, i, row);
-        }
     }
+
     pub fn select(&self, mgr: &mut Manager, alternative: bool) {
         if alternative {
             mgr.set_graphic(self.g_id, 3, false);

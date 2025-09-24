@@ -3,9 +3,11 @@ use animaterm::Glyph;
 use animaterm::Graphic;
 use animaterm::Manager;
 use dapp_lib::prelude::AppType;
+use dapp_lib::prelude::ByteSet;
+use dapp_lib::prelude::Capabilities;
 use dapp_lib::prelude::GnomeId;
 use dapp_lib::prelude::Policy;
-use dapp_lib::prelude::Requirement;
+// use dapp_lib::prelude::Requirement;
 use dapp_lib::prelude::SwarmName;
 use std::collections::HashMap;
 use std::sync::mpsc::Receiver;
@@ -16,19 +18,29 @@ use crate::common::poledit::PolAction;
 use crate::common::poledit::PolicyEditor;
 use crate::common::poledit::ReqTree;
 use crate::Toolset;
+pub struct EditorParams {
+    pub initial_text: Option<String>,
+    pub allow_newlines: bool,
+    pub chars_allowed: Option<Vec<char>>,
+    pub text_limit: Option<u16>,
+}
 
 #[derive(Debug)]
 pub enum Action {
     // Generic actions
+    AddNew,
+    Delete(u16),
     NextPage,
     PreviousPage,
     FirstPage,
     LastPage,
     Filter(String),
     Query(u16),
+    Run,
     // Specific actions
-    Topics,              // inform of viewing Topics & ask for first page
-    Posts(u16),          // inform & ask for first page of given type
+    MainMenu,   // inform of viewing Topics & ask for first page
+    Posts(u16), // inform & ask for first page of given type
+    Settings,
     RunningPolicies,     // inform & ask for first page of given type
     StoredPolicies,      // inform & ask for first page of given type
     RunningCapabilities, // inform & ask for first page of given type
@@ -37,12 +49,21 @@ pub enum Action {
     StoredByteSets,      // inform & ask for first page of given type
     PolicyAction(PolAction),
     OneSelected(usize),
+    EditorResult(Option<String>),
 }
 pub enum ToForumView {
+    TopicsPage(u16, Vec<(u16, String)>),
     RunningPoliciesPage(u16, Vec<(u16, String)>),
     StoredPoliciesPage(u16, Vec<(u16, String)>),
+    RunningCapabilitiesPage(u16, Vec<(u16, String)>),
+    StoredCapabilitiesPage(u16, Vec<(u16, String)>),
+    RunningByteSetsPage(u16, Vec<(u16, String)>),
+    StoredByteSetsPage(u16, Vec<(u16, String)>),
     ShowPolicy(Policy, ReqTree),
+    ShowCapability(Capabilities, Vec<(u16, String)>),
+    ShowByteSet(u8, ByteSet),
     SelectOne(Vec<String>),
+    OpenEditor(EditorParams),
 }
 pub enum FromForumView {
     Act(Action),
@@ -59,10 +80,10 @@ pub enum FromForumView {
 // There can also be some message being sent to logic in order
 // to retrieve or update something.
 struct ButtonsLogic {
-    menu_buttons: [(Button, bool); 4],
+    menu_buttons: [(Button, bool); 7],
     entry_buttons: Vec<(Button, bool, u16)>,
-    configs: HashMap<u8, MenuConfig>,
-    current_config_id: u8,
+    configs: HashMap<MenuType, MenuConfig>,
+    current_config_id: MenuType,
     is_menu_active: bool,
     selected_menu_button: usize,
     selected_entry_button: usize,
@@ -79,13 +100,22 @@ impl ButtonsLogic {
         button_3.show(tui_mgr);
         let button_4 = Button::new((10, 3), 2, (34, 0), "→Village", None, tui_mgr);
         button_4.show(tui_mgr);
+        let button_5 = Button::new((10, 3), 2, (45, 0), "Some", None, tui_mgr);
+        button_5.show(tui_mgr);
+        let button_6 = Button::new((10, 3), 2, (56, 0), "More", None, tui_mgr);
+        button_6.show(tui_mgr);
+        let button_7 = Button::new((10, 3), 2, (67, 0), "Actions", None, tui_mgr);
+        button_7.show(tui_mgr);
         let menu_buttons = [
             (button_1, true),
             (button_2, true),
             (button_3, true),
             (button_4, true),
+            (button_5, true),
+            (button_6, true),
+            (button_7, true),
         ];
-        let mut configs: HashMap<u8, MenuConfig> = HashMap::new();
+        let mut configs: HashMap<MenuType, MenuConfig> = HashMap::new();
         // TODO: A Button should have a function to become grayed-out
         // so that when we switch from menu to entries we know what
         // we are operating on
@@ -103,41 +133,46 @@ impl ButtonsLogic {
         // 7 – Stored Capabilities menu
         // 8 – Stored ByteSets menu
         configs.insert(
-            0,
+            MenuType::Main,
             MenuConfig::new(
                 [
                     ButtonState::Show("Fylter".to_string()),
                     ButtonState::Show("Add new".to_string()),
-                    // ButtonState::Hide,
                     ButtonState::Show("Options".to_string()),
                     ButtonState::Show("→ Village".to_string()),
+                    ButtonState::Hide,
+                    ButtonState::Hide,
+                    ButtonState::Hide,
                 ],
                 EntriesState::QueryLogic(QueryType::AllTopics),
             ),
         );
         configs.insert(
-            1, // Topic menu
+            MenuType::Topic,
             MenuConfig::new(
                 [
                     ButtonState::Show("New post".to_string()),
                     ButtonState::Hide,
                     ButtonState::Hide,
                     ButtonState::Show("← Forum".to_string()),
+                    ButtonState::Hide,
+                    ButtonState::Hide,
+                    ButtonState::Hide,
                 ],
                 EntriesState::QueryLogic(QueryType::AllPosts),
             ),
         );
         configs.insert(
-            2, // Settings menu
+            MenuType::Settings,
             MenuConfig::new(
                 [
-                    // ButtonState::Show("Active".to_string()),
-                    // ButtonState::Show("Stored".to_string()),
                     ButtonState::Show("← Forum".to_string()),
                     ButtonState::Hide,
                     ButtonState::Hide,
                     ButtonState::Hide,
-                    // ButtonState::Show("ByteSets".to_string()),
+                    ButtonState::Hide,
+                    ButtonState::Hide,
+                    ButtonState::Hide,
                 ],
                 EntriesState::Fixed(vec![
                     (
@@ -169,11 +204,14 @@ impl ButtonsLogic {
         );
 
         configs.insert(
-            3, // Running Policy
+            MenuType::RunningPolicies,
             MenuConfig::new(
                 [
                     ButtonState::Show("←Setings".to_string()),
                     ButtonState::Show("← Forum".to_string()),
+                    ButtonState::Hide,
+                    ButtonState::Hide,
+                    ButtonState::Hide,
                     ButtonState::Hide,
                     ButtonState::Hide,
                 ],
@@ -181,11 +219,14 @@ impl ButtonsLogic {
             ),
         );
         configs.insert(
-            4, // Running Capabilities
+            MenuType::RunningCapabilities,
             MenuConfig::new(
                 [
                     ButtonState::Show("←Setings".to_string()),
                     ButtonState::Show("← Forum".to_string()),
+                    ButtonState::Show("Add Cap".to_string()),
+                    ButtonState::Hide,
+                    ButtonState::Hide,
                     ButtonState::Hide,
                     ButtonState::Hide,
                 ],
@@ -193,11 +234,14 @@ impl ButtonsLogic {
             ),
         );
         configs.insert(
-            5, // Running Byte Sets
+            MenuType::RunningByteSets,
             MenuConfig::new(
                 [
                     ButtonState::Show("←Setings".to_string()),
                     ButtonState::Show("← Forum".to_string()),
+                    ButtonState::Hide,
+                    ButtonState::Hide,
+                    ButtonState::Hide,
                     ButtonState::Hide,
                     ButtonState::Hide,
                 ],
@@ -205,11 +249,14 @@ impl ButtonsLogic {
             ),
         );
         configs.insert(
-            6, // Stored Policy
+            MenuType::StoredPolicies,
             MenuConfig::new(
                 [
                     ButtonState::Show("←Setings".to_string()),
                     ButtonState::Show("← Forum".to_string()),
+                    ButtonState::Hide,
+                    ButtonState::Hide,
+                    ButtonState::Hide,
                     ButtonState::Hide,
                     ButtonState::Hide,
                 ],
@@ -217,11 +264,14 @@ impl ButtonsLogic {
             ),
         );
         configs.insert(
-            7, // Stored Capabilities
+            MenuType::StoredCapabilities,
             MenuConfig::new(
                 [
                     ButtonState::Show("←Setings".to_string()),
                     ButtonState::Show("← Forum".to_string()),
+                    ButtonState::Hide,
+                    ButtonState::Hide,
+                    ButtonState::Hide,
                     ButtonState::Hide,
                     ButtonState::Hide,
                 ],
@@ -229,13 +279,38 @@ impl ButtonsLogic {
             ),
         );
         configs.insert(
-            8, // Stored Byte Sets
+            MenuType::StoredByteSets,
             MenuConfig::new(
                 [
                     ButtonState::Show("←Setings".to_string()),
                     ButtonState::Show("← Forum".to_string()),
                     ButtonState::Hide,
                     ButtonState::Hide,
+                    ButtonState::Hide,
+                    ButtonState::Hide,
+                    ButtonState::Hide,
+                ],
+                EntriesState::QueryLogic(QueryType::StoredByteSet),
+            ),
+        );
+        // 1 - Back
+        // 2 - Filter
+        // 3 - Add
+        // 4 - Modify
+        // 5 - Delete
+        // 6 - Run
+        // 7 - Store
+        configs.insert(
+            MenuType::Capability,
+            MenuConfig::new(
+                [
+                    ButtonState::Show("←Setings".to_string()),
+                    ButtonState::Show("Filter".to_string()),
+                    ButtonState::Show("Add".to_string()),
+                    ButtonState::Show("Modify".to_string()),
+                    ButtonState::Show("Delete".to_string()),
+                    ButtonState::Show("Run".to_string()),
+                    ButtonState::Show("Store".to_string()),
                 ],
                 EntriesState::QueryLogic(QueryType::StoredByteSet),
             ),
@@ -259,20 +334,19 @@ impl ButtonsLogic {
             menu_buttons,
             entry_buttons,
             configs,
-            current_config_id: 0,
+            current_config_id: MenuType::Main,
             is_menu_active: true,
             selected_menu_button: 0,
             selected_entry_button: 0,
         }
     }
-    pub fn is_current_config_equal(&self, conf_id: u8) -> bool {
+    pub fn is_current_config_equal(&self, conf_id: MenuType) -> bool {
         self.current_config_id == conf_id
     }
     pub fn activate(&mut self, tui_mgr: &mut Manager) -> Option<Action> {
         if self.is_menu_active {
             match self.current_config_id {
-                0 => {
-                    //Main menu
+                MenuType::Main => {
                     match self.selected_menu_button {
                         0 => {
                             //TODO: Filter
@@ -284,7 +358,7 @@ impl ButtonsLogic {
                         }
                         2 => {
                             //TODO: Options
-                            self.activate_menu(2, tui_mgr);
+                            self.activate_menu(MenuType::Settings, tui_mgr);
                             None
                         }
                         3 => {
@@ -309,16 +383,11 @@ impl ButtonsLogic {
                 // be disabled by default.
                 //
                 //
-                1 => {
-                    //Topic Menu
+                MenuType::Topic => {
                     // TODO: define buttons
                     match self.selected_menu_button {
                         0 => {
-                            //TODO: Policy menu
-                            // We should request a list of active policies
-                            // from logic to present on screen
-                            // self.activate_menu(2, tui_mgr);
-                            // Some(Action::ProvideActivePolicies)
+                            // Filter
                             None
                         }
                         1 => {
@@ -326,12 +395,13 @@ impl ButtonsLogic {
                             None
                         }
                         2 => {
-                            self.activate_menu(4, tui_mgr);
+                            // self.activate_menu(4, tui_mgr);
+                            // self.activate_menu(MenuType::RunningCapabilities, tui_mgr);
                             None
                         }
                         3 => {
                             // Back to main menu
-                            self.activate_menu(0, tui_mgr);
+                            // self.activate_menu(MenuType::Main, tui_mgr);
                             None
                         }
                         _o => {
@@ -340,14 +410,13 @@ impl ButtonsLogic {
                         }
                     }
                 }
-                2 => {
-                    //Settings Menu
+                MenuType::Settings => {
                     // TODO: maybe some more buttons?
                     match self.selected_menu_button {
                         0 => {
                             // Back to menu
-                            self.activate_menu(0, tui_mgr);
-                            None
+                            self.activate_menu(MenuType::Main, tui_mgr);
+                            Some(Action::MainMenu)
                         }
                         1 => {
                             //hidden
@@ -367,18 +436,17 @@ impl ButtonsLogic {
                         }
                     }
                 }
-                3 => {
-                    //Running Policies Menu
+                MenuType::RunningPolicies => {
                     match self.selected_menu_button {
                         0 => {
                             // Back to  Settings menu
-                            self.activate_menu(2, tui_mgr);
-                            None
+                            self.activate_menu(MenuType::Settings, tui_mgr);
+                            Some(Action::Settings)
                         }
                         1 => {
                             // Back to Main menu
-                            self.activate_menu(0, tui_mgr);
-                            None
+                            self.activate_menu(MenuType::Main, tui_mgr);
+                            Some(Action::MainMenu)
                         }
                         2 => {
                             //hidden
@@ -394,22 +462,21 @@ impl ButtonsLogic {
                         }
                     }
                 }
-                4 => {
-                    //Running Capabilities Menu
+                MenuType::RunningCapabilities => {
                     match self.selected_menu_button {
                         0 => {
                             // Back to  Settings menu
-                            self.activate_menu(2, tui_mgr);
-                            None
+                            self.activate_menu(MenuType::Settings, tui_mgr);
+                            Some(Action::Settings)
                         }
                         1 => {
                             // Back to Main menu
-                            self.activate_menu(0, tui_mgr);
-                            None
+                            self.activate_menu(MenuType::Main, tui_mgr);
+                            Some(Action::MainMenu)
                         }
                         2 => {
-                            //hidden
-                            None
+                            // Add new Capability
+                            Some(Action::AddNew)
                         }
                         3 => {
                             //hidden
@@ -421,18 +488,17 @@ impl ButtonsLogic {
                         }
                     }
                 }
-                5 => {
-                    //Running Byte Sets Menu
+                MenuType::RunningByteSets => {
                     match self.selected_menu_button {
                         0 => {
                             // Back to  Settings menu
-                            self.activate_menu(2, tui_mgr);
-                            None
+                            self.activate_menu(MenuType::Settings, tui_mgr);
+                            Some(Action::Settings)
                         }
                         1 => {
                             // Back to Main menu
-                            self.activate_menu(0, tui_mgr);
-                            None
+                            self.activate_menu(MenuType::Main, tui_mgr);
+                            Some(Action::MainMenu)
                         }
                         2 => {
                             //hidden
@@ -448,18 +514,17 @@ impl ButtonsLogic {
                         }
                     }
                 }
-                6 => {
-                    //Stored Policies Menu
+                MenuType::StoredPolicies => {
                     match self.selected_menu_button {
                         0 => {
                             // Back to  Settings menu
-                            self.activate_menu(2, tui_mgr);
-                            None
+                            self.activate_menu(MenuType::Settings, tui_mgr);
+                            Some(Action::Settings)
                         }
                         1 => {
                             // Back to Main menu
-                            self.activate_menu(0, tui_mgr);
-                            None
+                            self.activate_menu(MenuType::Main, tui_mgr);
+                            Some(Action::MainMenu)
                         }
                         2 => {
                             //hidden
@@ -475,18 +540,17 @@ impl ButtonsLogic {
                         }
                     }
                 }
-                7 => {
-                    //Stored Capabilities Menu
+                MenuType::StoredCapabilities => {
                     match self.selected_menu_button {
                         0 => {
                             // Back to  Settings menu
-                            self.activate_menu(2, tui_mgr);
-                            None
+                            self.activate_menu(MenuType::Settings, tui_mgr);
+                            Some(Action::Settings)
                         }
                         1 => {
                             // Back to Main menu
-                            self.activate_menu(0, tui_mgr);
-                            None
+                            self.activate_menu(MenuType::Main, tui_mgr);
+                            Some(Action::MainMenu)
                         }
                         2 => {
                             //hidden
@@ -502,18 +566,17 @@ impl ButtonsLogic {
                         }
                     }
                 }
-                8 => {
-                    //Stored Byte Sets Menu
+                MenuType::StoredByteSets => {
                     match self.selected_menu_button {
                         0 => {
                             // Back to  Settings menu
-                            self.activate_menu(2, tui_mgr);
-                            None
+                            self.activate_menu(MenuType::Settings, tui_mgr);
+                            Some(Action::Settings)
                         }
                         1 => {
                             // Back to Main menu
-                            self.activate_menu(0, tui_mgr);
-                            None
+                            self.activate_menu(MenuType::Main, tui_mgr);
+                            Some(Action::MainMenu)
                         }
                         2 => {
                             //hidden
@@ -529,9 +592,33 @@ impl ButtonsLogic {
                         }
                     }
                 }
-                other => {
-                    eprintln!("Unexpected button config id: {other}");
-                    None
+                MenuType::Capability => {
+                    match self.selected_menu_button {
+                        0 => {
+                            // Back to  Settings menu
+                            self.activate_menu(MenuType::Settings, tui_mgr);
+                            Some(Action::Settings)
+                        }
+                        1 => None,
+                        2 => Some(Action::AddNew),
+                        3 => Some(Action::Query(
+                            self.entry_buttons
+                                .get(self.selected_entry_button)
+                                .unwrap()
+                                .2,
+                        )),
+                        4 => Some(Action::Delete(
+                            self.entry_buttons
+                                .get(self.selected_entry_button)
+                                .unwrap()
+                                .2,
+                        )),
+                        5 => Some(Action::Run),
+                        _o => {
+                            // this should not happen
+                            None
+                        }
+                    }
                 }
             }
         } else {
@@ -544,34 +631,72 @@ impl ButtonsLogic {
             let menu = self.configs.get(&self.current_config_id).unwrap();
             let action = menu.entry_action(self.selected_entry_button);
             match action {
-                EntryAction::Query => Some(Action::Query(
-                    self.entry_buttons
-                        .get(self.selected_entry_button)
-                        .unwrap()
-                        .2,
-                )),
+                EntryAction::Query => {
+                    // TODO:first we have to figure out which menu should get
+                    // activated
+                    let action = Action::Query(
+                        self.entry_buttons
+                            .get(self.selected_entry_button)
+                            .unwrap()
+                            .2,
+                    );
+                    match self.current_config_id {
+                        MenuType::Main => {
+                            // TODO: switch to Topic
+                        }
+                        MenuType::Topic => {
+                            // TODO: switch to Post
+                        }
+                        MenuType::Settings => {
+                            // DONE: switch to Settings (dedicated logic)
+                        }
+                        MenuType::RunningPolicies => {
+                            // DONE: switch to Pyramid (dedicated logic)
+                        }
+                        MenuType::RunningCapabilities => {
+                            // TODO: switch to Capability
+                            self.activate_menu(MenuType::Capability, tui_mgr);
+                        }
+                        MenuType::RunningByteSets => {
+                            // TODO: switch to ByteSet
+                        }
+                        MenuType::StoredPolicies => {
+                            // TODO: switch to Stored Policy
+                        }
+                        MenuType::StoredCapabilities => {
+                            // TODO: switch to Stored Capability
+                        }
+                        MenuType::StoredByteSets => {
+                            // TODO: switch to Stored Byte Set
+                        }
+                        MenuType::Capability => {
+                            // TODO: switch to Edit selected GnomeId
+                        }
+                    }
+                    Some(action)
+                }
                 EntryAction::RunningPolicies => {
-                    self.activate_menu(3, tui_mgr);
+                    self.activate_menu(MenuType::RunningPolicies, tui_mgr);
                     Some(Action::RunningPolicies)
                 }
                 EntryAction::RunningCapabilities => {
-                    self.activate_menu(4, tui_mgr);
+                    self.activate_menu(MenuType::RunningCapabilities, tui_mgr);
                     Some(Action::RunningCapabilities)
                 }
                 EntryAction::RunningByteSets => {
-                    self.activate_menu(5, tui_mgr);
+                    self.activate_menu(MenuType::RunningByteSets, tui_mgr);
                     Some(Action::RunningByteSets)
                 }
                 EntryAction::StoredPolicies => {
-                    self.activate_menu(6, tui_mgr);
+                    self.activate_menu(MenuType::StoredPolicies, tui_mgr);
                     Some(Action::StoredPolicies)
                 }
                 EntryAction::StoredCapabilities => {
-                    self.activate_menu(7, tui_mgr);
+                    self.activate_menu(MenuType::StoredCapabilities, tui_mgr);
                     Some(Action::StoredCapabilities)
                 }
                 EntryAction::StoredByteSets => {
-                    self.activate_menu(8, tui_mgr);
+                    self.activate_menu(MenuType::StoredByteSets, tui_mgr);
                     Some(Action::StoredByteSets)
                 }
                 EntryAction::NoAction => None,
@@ -589,7 +714,8 @@ impl ButtonsLogic {
                 butn.1 = true;
                 butn.2 = id;
             } else {
-                break;
+                butn.0.hide(tui_mgr);
+                butn.1 = false;
             }
         }
         if !new_list.is_empty() {
@@ -648,9 +774,10 @@ impl ButtonsLogic {
                 .select(tui_mgr, false);
         } else {
             self.is_menu_active = true;
+            let set_to_alt = self.current_config_id == MenuType::Capability;
             self.entry_buttons[self.selected_entry_button]
                 .0
-                .deselect(tui_mgr, false);
+                .deselect(tui_mgr, set_to_alt);
             self.menu_buttons[self.selected_menu_button]
                 .0
                 .select(tui_mgr, false);
@@ -667,9 +794,10 @@ impl ButtonsLogic {
                 .select(tui_mgr, false);
         } else {
             self.is_menu_active = true;
+            let set_to_alt = self.current_config_id == MenuType::Capability;
             self.entry_buttons[self.selected_entry_button]
                 .0
-                .deselect(tui_mgr, false);
+                .deselect(tui_mgr, set_to_alt);
             self.menu_buttons[self.selected_menu_button]
                 .0
                 .select(tui_mgr, false);
@@ -713,14 +841,14 @@ impl ButtonsLogic {
             }
         }
     }
-    fn activate_menu(&mut self, cfg_idx: u8, tui_mgr: &mut Manager) {
+    fn activate_menu(&mut self, cfg_idx: MenuType, tui_mgr: &mut Manager) {
         self.is_menu_active = true;
         if let Some(ms) = self.configs.get(&cfg_idx) {
             self.current_config_id = cfg_idx;
             self.selected_menu_button = 0;
             self.selected_entry_button = 0;
 
-            for i in 0..4 {
+            for i in 0..7 {
                 match &ms.menu[i] {
                     ButtonState::Hide => {
                         self.menu_buttons[i].0.hide(tui_mgr);
@@ -815,14 +943,27 @@ pub enum QueryType {
     StoredByteSet,
 }
 
+#[derive(Eq, PartialEq, Debug, Hash)]
+enum MenuType {
+    Main,
+    Topic,
+    Settings,
+    RunningPolicies,
+    RunningCapabilities,
+    RunningByteSets,
+    StoredPolicies,
+    StoredCapabilities,
+    StoredByteSets,
+    Capability,
+}
 struct MenuConfig {
-    menu: [ButtonState; 4],
+    menu: [ButtonState; 7],
     entries: EntriesState,
     // button_to_id
 }
 
 impl MenuConfig {
-    pub fn new(menu: [ButtonState; 4], entries: EntriesState) -> Self {
+    pub fn new(menu: [ButtonState; 7], entries: EntriesState) -> Self {
         MenuConfig { menu, entries }
     }
     pub fn entry_action(&self, id: usize) -> EntryAction {
@@ -856,6 +997,7 @@ pub fn serve_forum_tui(
     // TODO: PEditor should be created once upon
     // startup & should be passed to an app
     // together with other tools
+    let mut editor = e_opt.unwrap();
     let mut pedit = if let Some(pe) = pe_opt {
         pe
     } else {
@@ -953,13 +1095,41 @@ pub fn serve_forum_tui(
         if let Ok(msg) = to_tui_res {
             //TODO
             match msg {
+                ToForumView::TopicsPage(_pg_id, topics) => {
+                    buttons_logic.activate_menu(MenuType::Main, &mut tui_mgr);
+                    buttons_logic.update_entries(topics, &mut tui_mgr);
+                }
                 ToForumView::RunningPoliciesPage(_pg_no, plcs) => {
-                    if buttons_logic.is_current_config_equal(3) {
+                    if buttons_logic.is_current_config_equal(MenuType::RunningPolicies) {
                         buttons_logic.update_entries(plcs, &mut tui_mgr);
                     }
                 }
                 ToForumView::StoredPoliciesPage(_pg_no, plcs) => {
-                    if buttons_logic.is_current_config_equal(6) {
+                    if buttons_logic.is_current_config_equal(MenuType::StoredPolicies) {
+                        buttons_logic.update_entries(plcs, &mut tui_mgr);
+                        // TODO: present them to user if in right menu
+                        // we might be showing stored config by this time…
+                    }
+                }
+                ToForumView::RunningCapabilitiesPage(_pg_no, plcs) => {
+                    if buttons_logic.is_current_config_equal(MenuType::RunningCapabilities) {
+                        buttons_logic.update_entries(plcs, &mut tui_mgr);
+                    }
+                }
+                ToForumView::StoredCapabilitiesPage(_pg_no, plcs) => {
+                    if buttons_logic.is_current_config_equal(MenuType::StoredCapabilities) {
+                        buttons_logic.update_entries(plcs, &mut tui_mgr);
+                        // TODO: present them to user if in right menu
+                        // we might be showing stored config by this time…
+                    }
+                }
+                ToForumView::RunningByteSetsPage(_pg_no, plcs) => {
+                    if buttons_logic.is_current_config_equal(MenuType::RunningByteSets) {
+                        buttons_logic.update_entries(plcs, &mut tui_mgr);
+                    }
+                }
+                ToForumView::StoredByteSetsPage(_pg_no, plcs) => {
+                    if buttons_logic.is_current_config_equal(MenuType::StoredByteSets) {
                         buttons_logic.update_entries(plcs, &mut tui_mgr);
                         // TODO: present them to user if in right menu
                         // we might be showing stored config by this time…
@@ -971,8 +1141,50 @@ pub fn serve_forum_tui(
                     if let Some(p_action) = pedit.present(pol, req, &mut tui_mgr) {
                         // TODO
                         action = Some(Action::PolicyAction(p_action));
+                    } else {
+                        action = Some(Action::Settings);
                     }
                     tui_mgr.restore_display(main_display, true);
+                    buttons_logic.activate_menu(MenuType::Settings, &mut tui_mgr);
+                }
+                ToForumView::ShowCapability(cap, v_gids) => {
+                    // TODO: First approach is to reuse existing Selector.
+                    // One item could be for adding new GnomeId into this Cap.
+                    // But we can not currently apply dedicated logic for
+                    // single selector's item…
+                    // Maybe we should reuse Forum's menu logic instead?
+                    // Top buttons could allow for Addition, Deletion and
+                    // Edition of an entry.
+                    // We should only slightly modify existing logic so that
+                    // when we are navigating through top Menu buttons,
+                    // element on main list would need to stay selected,
+                    // maybe grayed out.
+                    // This way when we want to delete/modify an item
+                    // we see which one is going to be affected.
+                    // And when we select one of those actions then Editor
+                    // shows up and allow us to type in a one liner with
+                    // exactly 16 chars all of them from a restricted set
+                    // of characters that GnomeId can have.
+                    // Once we're done, we exit Editor & an updated item
+                    // shows up on Capability Menu.
+                    // Menu should have up to 7 Buttons:
+                    // 1 - Back
+                    // 2 - Filter
+                    // 3 - Add
+                    // 4 - Modify
+                    // 5 - Delete
+                    // 6 - Run
+                    // 7 - Store
+                    if buttons_logic.is_current_config_equal(MenuType::Capability) {
+                        buttons_logic.update_entries(v_gids, &mut tui_mgr);
+                        // TODO: present them to user if in right menu
+                        // we might be showing stored config by this time…
+                    }
+                    eprintln!("ForumTUI should present cap",);
+                }
+                ToForumView::ShowByteSet(bs_id, bs) => {
+                    // TODO
+                    eprintln!("ForumTUI should present ByteSet({bs_id})");
                 }
                 ToForumView::SelectOne(list) => {
                     let selected = selector.select("Pick one", &list, vec![], &mut tui_mgr, true);
@@ -986,6 +1198,19 @@ pub fn serve_forum_tui(
                         //TODO:
                         eprintln!("Failed to select one!");
                     }
+                }
+                ToForumView::OpenEditor(e_p) => {
+                    editor.show(&mut tui_mgr);
+                    editor.set_limit(e_p.text_limit);
+                    editor.allow_newlines(e_p.allow_newlines);
+                    if let Some(text) = e_p.initial_text {
+                        editor.set_text(&mut tui_mgr, &text);
+                    }
+                    editor.set_mode((false, true));
+                    editor.move_to_line_end(&mut tui_mgr);
+                    let e_res = editor.run(&mut tui_mgr);
+                    action = Some(Action::EditorResult(e_res));
+                    tui_mgr.restore_display(main_display, true);
                 }
             }
             eprintln!("Forum TUI recv");

@@ -40,7 +40,7 @@ impl PolicyEditor {
         // mgr.swap_frame(self.blinker_id, 1, frame);
         library.insert(1, frame);
         let anim = Animation::new(
-            true,
+            false,
             true,
             vec![(1, Timestamp::new(0, 750)), (0, Timestamp::new(0, 750))],
             Timestamp::now(),
