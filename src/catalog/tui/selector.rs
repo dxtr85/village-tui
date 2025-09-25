@@ -77,6 +77,8 @@ impl Selector {
         mgr: &mut Manager,
         quit_on_first_select: bool,
     ) -> Vec<usize> {
+        // TODO: allow for swaping pages of options
+        // if we can not fit all of them on one screen
         mgr.restore_display(self.display_id, true);
         // eprintln!("Options to present: {:?}", options);
         mgr.move_graphic(self.g_id, 3, (0, 0));

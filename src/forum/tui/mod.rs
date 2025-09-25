@@ -28,7 +28,7 @@ pub struct EditorParams {
 #[derive(Debug)]
 pub enum Action {
     // Generic actions
-    AddNew,
+    AddNew(bool),
     Delete(u16),
     NextPage,
     PreviousPage,
@@ -36,7 +36,7 @@ pub enum Action {
     LastPage,
     Filter(String),
     Query(u16),
-    Run,
+    Run(Option<usize>),
     // Specific actions
     MainMenu,   // inform of viewing Topics & ask for first page
     Posts(u16), // inform & ask for first page of given type
@@ -45,10 +45,10 @@ pub enum Action {
     StoredPolicies,      // inform & ask for first page of given type
     RunningCapabilities, // inform & ask for first page of given type
     StoredCapabilities,  // inform & ask for first page of given type
-    RunningByteSets,     // inform & ask for first page of given type
-    StoredByteSets,      // inform & ask for first page of given type
+    ByteSets(bool),      // inform & ask for first page of given type
+    // StoredByteSets,        // inform & ask for first page of given type
     PolicyAction(PolAction),
-    OneSelected(usize),
+    Selected(Vec<usize>),
     EditorResult(Option<String>),
 }
 pub enum ToForumView {
@@ -62,7 +62,7 @@ pub enum ToForumView {
     ShowPolicy(Policy, ReqTree),
     ShowCapability(Capabilities, Vec<(u16, String)>),
     ShowByteSet(u8, ByteSet),
-    SelectOne(Vec<String>),
+    Select(bool, Vec<String>, Vec<usize>), // bool indicates if only one can be selected
     OpenEditor(EditorParams),
 }
 pub enum FromForumView {
@@ -239,10 +239,10 @@ impl ButtonsLogic {
                 [
                     ButtonState::Show("←Setings".to_string()),
                     ButtonState::Show("← Forum".to_string()),
-                    ButtonState::Hide,
-                    ButtonState::Hide,
-                    ButtonState::Hide,
-                    ButtonState::Hide,
+                    ButtonState::Show("New 1Bte".to_string()),
+                    ButtonState::Show("New 2Bts".to_string()),
+                    ButtonState::Show("Run".to_string()),
+                    ButtonState::Show("Store".to_string()),
                     ButtonState::Hide,
                 ],
                 EntriesState::QueryLogic(QueryType::ActiveByteSet),
@@ -476,7 +476,7 @@ impl ButtonsLogic {
                         }
                         2 => {
                             // Add new Capability
-                            Some(Action::AddNew)
+                            Some(Action::AddNew(false))
                         }
                         3 => {
                             //hidden
@@ -501,11 +501,20 @@ impl ButtonsLogic {
                             Some(Action::MainMenu)
                         }
                         2 => {
-                            //hidden
-                            None
+                            //New 1 Byte
+                            Some(Action::AddNew(false))
                         }
                         3 => {
-                            //hidden
+                            //New 2 Bytes
+                            Some(Action::AddNew(true))
+                        }
+                        4 => {
+                            //Run selected
+                            Some(Action::Run(Some(self.selected_entry_button)))
+                        }
+                        5 => {
+                            //Store selected
+                            // Some(Action::Store)
                             None
                         }
                         _o => {
@@ -600,7 +609,7 @@ impl ButtonsLogic {
                             Some(Action::Settings)
                         }
                         1 => None,
-                        2 => Some(Action::AddNew),
+                        2 => Some(Action::AddNew(false)),
                         3 => Some(Action::Query(
                             self.entry_buttons
                                 .get(self.selected_entry_button)
@@ -613,7 +622,7 @@ impl ButtonsLogic {
                                 .unwrap()
                                 .2,
                         )),
-                        5 => Some(Action::Run),
+                        5 => Some(Action::Run(None)),
                         _o => {
                             // this should not happen
                             None
@@ -685,7 +694,7 @@ impl ButtonsLogic {
                 }
                 EntryAction::RunningByteSets => {
                     self.activate_menu(MenuType::RunningByteSets, tui_mgr);
-                    Some(Action::RunningByteSets)
+                    Some(Action::ByteSets(true))
                 }
                 EntryAction::StoredPolicies => {
                     self.activate_menu(MenuType::StoredPolicies, tui_mgr);
@@ -697,7 +706,7 @@ impl ButtonsLogic {
                 }
                 EntryAction::StoredByteSets => {
                     self.activate_menu(MenuType::StoredByteSets, tui_mgr);
-                    Some(Action::StoredByteSets)
+                    Some(Action::ByteSets(false))
                 }
                 EntryAction::NoAction => None,
             }
@@ -774,7 +783,8 @@ impl ButtonsLogic {
                 .select(tui_mgr, false);
         } else {
             self.is_menu_active = true;
-            let set_to_alt = self.current_config_id == MenuType::Capability;
+            let set_to_alt = self.current_config_id == MenuType::Capability
+                || self.current_config_id == MenuType::RunningByteSets;
             self.entry_buttons[self.selected_entry_button]
                 .0
                 .deselect(tui_mgr, set_to_alt);
@@ -794,7 +804,8 @@ impl ButtonsLogic {
                 .select(tui_mgr, false);
         } else {
             self.is_menu_active = true;
-            let set_to_alt = self.current_config_id == MenuType::Capability;
+            let set_to_alt = self.current_config_id == MenuType::Capability
+                || self.current_config_id == MenuType::RunningByteSets;
             self.entry_buttons[self.selected_entry_button]
                 .0
                 .deselect(tui_mgr, set_to_alt);
@@ -1186,14 +1197,20 @@ pub fn serve_forum_tui(
                     // TODO
                     eprintln!("ForumTUI should present ByteSet({bs_id})");
                 }
-                ToForumView::SelectOne(list) => {
-                    let selected = selector.select("Pick one", &list, vec![], &mut tui_mgr, true);
+                ToForumView::Select(only_one, list, preselected) => {
+                    let text = if only_one {
+                        "Pick one & press Enter"
+                    } else {
+                        "Pick many with Enter, Escape to finish"
+                    };
+                    let selected =
+                        selector.select(text, &list, preselected, &mut tui_mgr, only_one);
                     // TODO: bring up selector with
                     // a given list & reply back to logic.
                     eprintln!("Selected: {:?}", selected);
                     tui_mgr.restore_display(main_display, true);
                     if !selected.is_empty() {
-                        action = Some(Action::OneSelected(selected[0]));
+                        action = Some(Action::Selected(selected));
                     } else {
                         //TODO:
                         eprintln!("Failed to select one!");

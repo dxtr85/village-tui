@@ -18,6 +18,7 @@ use dapp_lib::prelude::SwarmName;
 use dapp_lib::ToApp;
 use dapp_lib::ToAppMgr;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::mpsc::channel;
 use std::sync::mpsc::Receiver;
@@ -32,16 +33,17 @@ enum PresentationState {
     Settings,
     RunningPolicies(Option<(u16, HashMap<u16, (Policy, Requirement)>)>),
     RunningCapabilities(Option<(u16, HashMap<u16, (Capabilities, Vec<GnomeId>)>)>),
-    RunningByteSets(Option<(u16, HashMap<u8, ByteSet>)>),
+    ByteSets(bool, Option<(u8, HashMap<u8, ByteSet>)>),
     StoredPolicies(Option<u16>),
     StoredCapabilities(Option<u16>),
-    StoredByteSets(Option<u16>),
+    // StoredByteSets(Option<u16>),
     SelectingOnePolicy(Vec<Policy>, ReqTree),
     SelectingOneRequirement(Vec<Requirement>, Policy, ReqTree),
     Pyramid(Policy, ReqTree),
     Capability(Capabilities, Vec<GnomeId>),
     SelectingOneCapability(Vec<Capabilities>, Box<PresentationState>),
     Editing(Option<u16>, Box<PresentationState>),
+    CreatingByteSet(Vec<u16>, bool, Option<(u8, HashMap<u8, ByteSet>)>),
 }
 // use crate::common::poledit::PolAction;
 use crate::forum::tui::serve_forum_tui;
@@ -179,11 +181,12 @@ impl ForumLogic {
                             }
                             mapping.insert(bs_id, bs_list);
                         }
+                        let running = true;
                         self.presentation_state =
-                            PresentationState::RunningByteSets(Some((bs_page, mapping)));
+                            PresentationState::ByteSets(running, Some((bs_page, mapping)));
                         let _ = self
                             .to_tui_send
-                            .send(ToForumView::RunningByteSetsPage(bs_page, bbsets));
+                            .send(ToForumView::RunningByteSetsPage(bs_page.into(), bbsets));
                     }
                     _other => {
                         eprintln!("InternalMsg::User");
@@ -240,7 +243,7 @@ impl ForumLogic {
                                     self.presentation_state =
                                         PresentationState::StoredCapabilities(None);
                                 }
-                                Action::RunningByteSets => {
+                                Action::ByteSets(is_run) => {
                                     //TODO:
                                     self.presentation_state =
                                         PresentationState::RunningCapabilities(None);
@@ -253,19 +256,19 @@ impl ForumLogic {
                                         ))
                                         .await;
                                 }
-                                Action::StoredByteSets => {
-                                    //TODO:
-                                    self.presentation_state =
-                                        PresentationState::StoredByteSets(None);
-                                }
-                                Action::AddNew => {
-                                    self.add_new_action().await;
+                                // Action::StoredByteSets => {
+                                //     //TODO:
+                                //     self.presentation_state =
+                                //         PresentationState::ByteSets(false, None);
+                                // }
+                                Action::AddNew(param) => {
+                                    self.add_new_action(param).await;
                                 }
                                 Action::Delete(id) => {
                                     self.delete_action(id).await;
                                 }
-                                Action::Run => {
-                                    self.run_action().await;
+                                Action::Run(id_opt) => {
+                                    self.run_action(id_opt).await;
                                 }
                                 Action::NextPage => {
                                     //TODO
@@ -294,8 +297,8 @@ impl ForumLogic {
                                 Action::PolicyAction(p_act) => {
                                     self.serve_pol_action(p_act).await;
                                 }
-                                Action::OneSelected(id) => {
-                                    self.serve_one_selected(id).await;
+                                Action::Selected(id_vec) => {
+                                    self.serve_selected(id_vec).await;
                                 }
                                 Action::EditorResult(str_o) => self.process_edit_result(str_o),
                             }
@@ -332,7 +335,7 @@ impl ForumLogic {
             None
         }
     }
-    async fn add_new_action(&mut self) {
+    async fn add_new_action(&mut self, param: bool) {
         let curr_state =
             std::mem::replace(&mut self.presentation_state, PresentationState::Settings);
 
@@ -378,12 +381,42 @@ impl ForumLogic {
                 } else {
                     Capabilities::mapping()
                 };
-                let _ = self.to_tui_send.send(ToForumView::SelectOne(avail_cstrs));
+                let _ = self
+                    .to_tui_send
+                    .send(ToForumView::Select(true, avail_cstrs, vec![]));
                 self.presentation_state = PresentationState::SelectingOneCapability(
                     avail_caps,
                     Box::new(PresentationState::RunningCapabilities(old_caps_opt)),
                 );
                 yield_now().await;
+            }
+            PresentationState::ByteSets(is_run, existing_opt) => {
+                //TODO: we need to open a Selector and
+                // depending on param's value populate it with
+                // 0..=255 or
+                // 0..=65536 (or so)
+                let (options, strgs) = if param {
+                    let mut opts = Vec::with_capacity(u16::MAX as usize);
+                    let mut sts = Vec::with_capacity(u16::MAX as usize);
+                    for i in 0..=u16::MAX {
+                        opts.push(i);
+                        sts.push(format!("{i}"));
+                    }
+                    (opts, sts)
+                } else {
+                    let mut opts = Vec::with_capacity(256);
+                    let mut sts = Vec::with_capacity(256);
+                    for i in 0..=255 {
+                        opts.push(i);
+                        sts.push(format!("{i}"));
+                    }
+                    (opts, sts)
+                };
+                let _ = self
+                    .to_tui_send
+                    .send(ToForumView::Select(false, strgs, vec![]));
+                self.presentation_state =
+                    PresentationState::CreatingByteSet(options, is_run, existing_opt);
             }
             other => {
                 eprintln!("Adding not supported yet");
@@ -391,7 +424,7 @@ impl ForumLogic {
             }
         }
     }
-    async fn run_action(&self) {
+    async fn run_action(&self, id_opt: Option<usize>) {
         match &self.presentation_state {
             PresentationState::Capability(c, v_gids) => {
                 let _ = self
@@ -404,6 +437,23 @@ impl ForumLogic {
                         ),
                     ))
                     .await;
+            }
+            PresentationState::ByteSets(_is_run, id_map_opt) => {
+                if let Some(id) = id_opt {
+                    if let Some((_i, mapping)) = id_map_opt {
+                        if let Some(bset) = mapping.get(&(id as u8)) {
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::FromApp(dapp_lib::LibRequest::SetRunningByteSet(
+                                    self.swarm_name.clone(),
+                                    id as u8,
+                                    bset.clone(),
+                                )))
+                                .await;
+                        }
+                    }
+                }
+                // eprintln!("TODO: we should run a ByteSet({})", id_opt.unwrap());
             }
             _other => {
                 eprintln!("Can not run_action ");
@@ -515,7 +565,9 @@ impl ForumLogic {
                 );
                 if let PresentationState::Pyramid(p, r) = curr_state {
                     let (policies, p_strings) = Policy::mapping();
-                    let _ = self.to_tui_send.send(ToForumView::SelectOne(p_strings));
+                    let _ = self
+                        .to_tui_send
+                        .send(ToForumView::Select(true, p_strings, vec![]));
                     self.presentation_state = PresentationState::SelectingOnePolicy(policies, r);
                 } else {
                     self.presentation_state = curr_state;
@@ -539,7 +591,9 @@ impl ForumLogic {
                         Requirement::mapping(incl_logic, user_def_caps, byte_sets, two_byte_sets);
                     self.presentation_state =
                         PresentationState::SelectingOneRequirement(reqs, p, r_tree);
-                    let _ = self.to_tui_send.send(ToForumView::SelectOne(r_strings));
+                    let _ = self
+                        .to_tui_send
+                        .send(ToForumView::Select(true, r_strings, vec![]));
                 } else {
                     self.presentation_state = curr_state;
                 }
@@ -571,9 +625,14 @@ impl ForumLogic {
             }
         }
     }
-    async fn serve_one_selected(&mut self, id: usize) {
+    async fn serve_selected(&mut self, ids: Vec<usize>) {
         // TODO:
-        eprintln!("OneSelected id: {id}");
+        if ids.is_empty() {
+            eprintln!("No item was selected!");
+            return;
+        }
+        let id = ids[0];
+        eprintln!("Selected ids: {:?}", ids);
         let curr_state = std::mem::replace(
             &mut self.presentation_state,
             PresentationState::MainLobby(None),
@@ -640,6 +699,88 @@ impl ForumLogic {
                     let _ = self.to_tui_send.send(ToForumView::ShowPolicy(pol, r_tree));
                 } else {
                     eprintln!("Did not find a Marker to replace");
+                }
+            }
+            PresentationState::CreatingByteSet(opts, is_run, exist_opt) => {
+                let bset = if opts.len() == 256 {
+                    let mut hset = HashSet::with_capacity(ids.len());
+                    for id in ids {
+                        hset.insert(id as u8);
+                    }
+                    eprintln!("We have a ByteSet");
+                    ByteSet::Bytes(hset)
+                } else {
+                    let mut hset = HashSet::with_capacity(ids.len());
+                    for id in ids {
+                        hset.insert(id as u16);
+                    }
+                    eprintln!("We have a Pair ByteSet");
+                    ByteSet::Pairs(hset)
+                };
+                let (id, mut h_map) = if let Some((i, s)) = exist_opt {
+                    (i, s)
+                } else {
+                    (0, HashMap::new())
+                };
+                // If we run out of avail IDs, 0 will get overwritten…
+                let mut avail_id = 0;
+                for i in 0..=255 {
+                    if !h_map.contains_key(&i) {
+                        avail_id = i;
+                        break;
+                    }
+                }
+                h_map.insert(avail_id, bset);
+                // TODO: rework below
+                let mut bbsets = Vec::with_capacity(10);
+                let entries_len = 10;
+                for (id, bset) in &h_map {
+                    if bbsets.len() < entries_len {
+                        if bset.is_pair() {
+                            bbsets.push((*id as u16, format!("PairSet({id})")));
+                        } else {
+                            bbsets.push((*id as u16, format!("ByteSet({id})")));
+                        }
+                    }
+                }
+                self.presentation_state = PresentationState::ByteSets(is_run, Some((id, h_map)));
+                if is_run {
+                    let _ = self
+                        .to_tui_send
+                        .send(ToForumView::RunningByteSetsPage(id.into(), bbsets));
+                } else {
+                    let _ = self
+                        .to_tui_send
+                        .send(ToForumView::StoredByteSetsPage(id.into(), bbsets));
+                }
+                // TODO: now we return back to previous presentation_state
+                // with updated list.
+                // User can now hit "Run" or "Store" button for selected BSet
+            }
+            PresentationState::ByteSets(is_run, mapping_opt) => {
+                eprintln!("Got Selected while in ByteSets");
+                if let Some((id, mut hm)) = mapping_opt {
+                    if let Some(bset) = hm.get_mut(&id) {
+                        //TODO: update contents of ByteSet
+                        let new_bset = if bset.is_pair() {
+                            let mut new_hset = HashSet::with_capacity(ids.len());
+                            for i in ids {
+                                new_hset.insert(i as u16);
+                            }
+                            ByteSet::Pairs(new_hset)
+                        } else {
+                            let mut new_hset = HashSet::with_capacity(ids.len());
+                            for i in ids {
+                                new_hset.insert(i as u8);
+                            }
+                            ByteSet::Bytes(new_hset)
+                        };
+                        hm.insert(id, new_bset);
+                        self.presentation_state =
+                            PresentationState::ByteSets(is_run, Some((id, hm)));
+                    } else {
+                        // TODO: create new bset (this should not happen)
+                    }
                 }
             }
             other => {
@@ -724,13 +865,45 @@ impl ForumLogic {
                     }
                 }
             }
-            PresentationState::RunningByteSets(page_opt) => {
+            PresentationState::ByteSets(is_run, page_opt) => {
                 //TODO: get ByteSet & show it to user
                 if page_opt.is_none() {
                     eprintln!("Unable to tell which page is shown (4)");
                     return;
                 }
                 eprintln!("Got non-empty BSets page");
+                if let Some((_i, hm)) = page_opt {
+                    if let Some(bset) = hm.get(&(id as u8)) {
+                        let (strings, preselected) = if bset.is_pair() {
+                            let mut strings = vec![];
+                            let mut preselected = vec![];
+                            for p in 0..=u16::MAX {
+                                strings.push(format!("Pair{p}"));
+                                if bset.contains_pair(&p) {
+                                    preselected.push(p as usize);
+                                }
+                            }
+                            (strings, preselected)
+                        } else {
+                            let mut strings = vec![];
+                            let mut preselected = vec![];
+                            for p in 0..=255 {
+                                strings.push(format!("Byte{p}"));
+                                if bset.contains(&p) {
+                                    preselected.push(p as usize);
+                                }
+                            }
+                            (strings, preselected)
+                        };
+                        let _ =
+                            self.to_tui_send
+                                .send(ToForumView::Select(false, strings, preselected));
+                        new_state = Some(PresentationState::ByteSets(
+                            *is_run,
+                            Some((id as u8, hm.clone())),
+                        ));
+                    };
+                }
                 // let page = page_opt.unwrap();
                 // similar to RunningPolicies
             }
@@ -755,15 +928,15 @@ impl ForumLogic {
                 let page = page_opt.unwrap();
                 // similar to StoredPolicies
             }
-            PresentationState::StoredByteSets(page_opt) => {
-                //TODO: get ByteSet & show it to user
-                if page_opt.is_none() {
-                    eprintln!("Unable to tell which page is shown (7)");
-                    return;
-                }
-                let page = page_opt.unwrap();
-                // similar to StoredPolicies
-            }
+            // PresentationState::StoredByteSets(page_opt) => {
+            //     //TODO: get ByteSet & show it to user
+            //     if page_opt.is_none() {
+            //         eprintln!("Unable to tell which page is shown (7)");
+            //         return;
+            //     }
+            //     let page = page_opt.unwrap();
+            //     // similar to StoredPolicies
+            // }
             PresentationState::SelectingOnePolicy(pol_vec, req) => {
                 //TODO
                 eprintln!("serve queue while in SelectingOnePolicy");
@@ -797,6 +970,9 @@ impl ForumLogic {
             }
             PresentationState::SelectingOneCapability(_v_caps, _p_state) => {
                 eprintln!("Got ID when in state SelectingOneCapability");
+            }
+            PresentationState::CreatingByteSet(opts, is_run, ex_opt) => {
+                eprintln!("Got ID when creating ByteSet");
             }
         }
         if let Some(n_s) = new_state {
