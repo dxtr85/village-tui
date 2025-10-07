@@ -24,6 +24,7 @@ pub struct EditorParams {
     pub allow_newlines: bool,
     pub chars_limit: Option<Vec<char>>,
     pub text_limit: Option<u16>,
+    pub read_only: bool,
 }
 
 #[derive(Debug)]
@@ -55,6 +56,7 @@ pub enum Action {
 }
 pub enum ToForumView {
     TopicsPage(u16, Vec<(u16, String)>),
+    PostsPage(u16, Vec<(u16, String)>),
     RunningPoliciesPage(u16, Vec<(u16, String)>),
     StoredPoliciesPage(u16, Vec<(u16, String)>),
     RunningCapabilitiesPage(u16, Vec<(u16, String)>),
@@ -387,7 +389,7 @@ impl ButtonsLogic {
                             //TODO: Add new topic
                             // Open Creator and allow user
                             // to define a new topic.
-                            None
+                            Some(Action::AddNew(false))
                         }
                         3 => {
                             //TODO: Options
@@ -427,8 +429,8 @@ impl ButtonsLogic {
                     // TODO: define buttons
                     match self.selected_menu_button {
                         0 => {
-                            // Filter
-                            None
+                            // Add Post
+                            Some(Action::AddNew(false))
                         }
                         1 => {
                             // self.activate_menu(3, tui_mgr);
@@ -441,8 +443,8 @@ impl ButtonsLogic {
                         }
                         3 => {
                             // Back to main menu
-                            // self.activate_menu(MenuType::Main, tui_mgr);
-                            None
+                            self.activate_menu(MenuType::Main, tui_mgr);
+                            Some(Action::MainMenu)
                         }
                         _o => {
                             // this should not happen
@@ -758,6 +760,7 @@ impl ButtonsLogic {
     }
     pub fn update_entries(&mut self, mut new_list: Vec<(u16, String)>, tui_mgr: &mut Manager) {
         // TODO:
+        eprintln!("New list len: {:?}", new_list);
         for butn in &mut self.entry_buttons {
             if !new_list.is_empty() {
                 let (id, text) = new_list.remove(0);
@@ -1155,6 +1158,10 @@ pub fn serve_forum_tui(
                     buttons_logic.activate_menu(MenuType::Main, &mut tui_mgr);
                     buttons_logic.update_entries(topics, &mut tui_mgr);
                 }
+                ToForumView::PostsPage(_pg_id, topics) => {
+                    buttons_logic.activate_menu(MenuType::Topic, &mut tui_mgr);
+                    buttons_logic.update_entries(topics, &mut tui_mgr);
+                }
                 ToForumView::RunningPoliciesPage(_pg_no, plcs) => {
                     if buttons_logic.is_current_config_equal(MenuType::RunningPolicies) {
                         buttons_logic.update_entries(plcs, &mut tui_mgr);
@@ -1265,10 +1272,11 @@ pub fn serve_forum_tui(
                     editor.show(&mut tui_mgr);
                     editor.set_limit(e_p.text_limit);
                     editor.allow_newlines(e_p.allow_newlines);
+
                     if let Some(text) = e_p.initial_text {
                         editor.set_text(&mut tui_mgr, &text);
                     }
-                    editor.set_mode((false, true));
+                    editor.set_mode((e_p.read_only, e_p.read_only));
                     editor.move_to_line_end(&mut tui_mgr);
                     let e_res = editor.run(&mut tui_mgr);
                     action = Some(Action::EditorResult(e_res));

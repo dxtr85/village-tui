@@ -301,6 +301,7 @@ async fn main() {
                 }
             }
         } else {
+            // let _ = to_app_mgr_send.send(dapp_lib::ToAppMgr::Quit).await;
             break;
         }
     }

@@ -481,7 +481,7 @@ impl CatalogLogic {
                                 .await;
                             let _ = self
                                 .to_app_mgr_send
-                                .send(ToAppMgr::FromApp(LibRequest::ReadAllFirstPages(s_id)))
+                                .send(ToAppMgr::FromApp(LibRequest::ReadFirstPages(s_id, None)))
                                 .await;
                             let prev_state = std::mem::replace(&mut self.state, TuiState::Village);
                             if let TuiState::ReadLinkToFollow(
@@ -705,7 +705,7 @@ impl CatalogLogic {
                                 );
                             }
                         }
-                        ToApp::ReadSuccess(s_id, s_name, c_id, d_type, d_vec) => {
+                        ToApp::ReadSuccess(s_id, s_name, c_id, d_type, start_page, d_vec) => {
                             eprintln!(
                                 "Received ReadSuccess {} CID-{} (len: {})",
                                 s_id,
@@ -714,7 +714,7 @@ impl CatalogLogic {
                             );
                             if s_id == self.active_swarm.swarm_id {
                                 // eprintln!("processing it");
-                                self.process_data(c_id, d_type, d_vec).await;
+                                self.process_data(c_id, d_type, start_page, d_vec).await;
                             } else {
                                 //TODO: if this is content we are waiting for
                                 // we should process it
@@ -729,7 +729,9 @@ impl CatalogLogic {
                                 self.pending_notifications
                                     .entry(s_id)
                                     .or_insert(vec![])
-                                    .push(ToApp::ReadSuccess(s_id, s_name, c_id, d_type, d_vec));
+                                    .push(ToApp::ReadSuccess(
+                                        s_id, s_name, c_id, d_type, start_page, d_vec,
+                                    ));
                                 // }
                             }
                         }
@@ -1958,8 +1960,14 @@ impl CatalogLogic {
         }
     }
 
-    async fn process_data(&mut self, c_id: ContentID, d_type: DataType, mut d_vec: Vec<Data>) {
-        if c_id == 0 {
+    async fn process_data(
+        &mut self,
+        c_id: ContentID,
+        d_type: DataType,
+        start_page: u16,
+        mut d_vec: Vec<Data>,
+    ) {
+        if c_id == 0 && start_page == 0 {
             // eprintln!(
             //     "Sending Manifest d_vec.len: {} to Presentation",
             //     d_vec.len()
