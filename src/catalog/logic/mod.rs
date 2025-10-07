@@ -169,15 +169,15 @@ enum TuiState {
         Vec<String>,
         Vec<String>,
     ),
-    ShowActiveSwarms(Vec<(SwarmName, AppType, SwarmID)>),
+    ShowActiveSwarms(Vec<(SwarmName, Option<AppType>, SwarmID)>),
 }
 
-struct SwarmShell {
-    swarm_id: SwarmID,
-    swarm_name: SwarmName,
-    manifest: Manifest,
-    tag_to_cid: HashMap<Tag, HashSet<(DataType, ContentID, String)>>,
-    tag_ring: Vec<Vec<Tag>>,
+pub struct SwarmShell {
+    pub swarm_id: SwarmID,
+    pub swarm_name: SwarmName,
+    pub manifest: Manifest,
+    pub tag_to_cid: HashMap<Tag, HashSet<(DataType, ContentID, String)>>,
+    pub tag_ring: Vec<Vec<Tag>>,
 }
 
 impl SwarmShell {
@@ -372,7 +372,7 @@ impl CatalogLogic {
         // from_presentation_msg_send: Sender<FromCatalogView>,
         // to_presentation_msg_recv: std::sync::mpsc::Receiver<ToCatalogView>,
         // wrapped_sender: ASender<InternalMsg>,
-    ) -> Option<(AppType, SwarmName, AReceiver<InternalMsg>, Toolset)> {
+    ) -> Option<(Option<AppType>, SwarmName, AReceiver<InternalMsg>, Toolset)> {
         let (mut tui_mgr, config, e_opt, c_opt, s_opt, i_opt, pe_opt) = toolset.unfold();
         let mut return_val = None;
         let (cols, rows) = tui_mgr.screen_size();
@@ -557,7 +557,7 @@ impl CatalogLogic {
                             let mut name_vec = Vec::with_capacity(mapping.len());
                             for (s_name, (s_id, a_type)) in mapping {
                                 map_vec.push((s_name.clone(), a_type, s_id));
-                                name_vec.push(format!("Swarm ID {}: {}", s_id.0, s_name));
+                                name_vec.push(format!("{:?} SID {}: {}", a_type, s_id.0, s_name));
                             }
                             self.state = TuiState::ShowActiveSwarms(map_vec);
                             self.show_active_swarms(name_vec);
@@ -1827,7 +1827,7 @@ impl CatalogLogic {
                                                     swarm_name.clone(),
                                                 )))
                                                 .await;
-                                            if matches!(app_type, AppType::Catalog) {
+                                            if app_type.is_some_and(|at| at.is_catalog()) {
                                                 new_state = Some(TuiState::Village);
                                                 let _ = self.to_tui.send(ToCatalogView::SwapTiles(
                                                     swarm_name.founder,
@@ -1914,7 +1914,7 @@ impl CatalogLogic {
                         }
                         FromCatalogView::SwitchToApp(app_type, s_id, s_name) => {
                             eprintln!("logic got SwitchToApp");
-                            return_val = Some((app_type, s_id, s_name.clone()));
+                            return_val = Some((Some(app_type), s_id, s_name.clone()));
                             // TODO: here we need to notify app manager
                             // that user wants to switch to a new swarm
                             // TODO: Do not start a new swarm if already running!
@@ -2677,7 +2677,7 @@ impl CatalogLogic {
                     )))
                     .await;
             }
-            Key::M => {
+            Key::CtrlM => {
                 // Here we send request to read manifest data
                 let _ = self
                     .to_app_mgr_send
@@ -2688,7 +2688,7 @@ impl CatalogLogic {
                     )))
                     .await;
             }
-            Key::N => {
+            Key::CtrlN => {
                 let _res = self
                     .notification_sender
                     .send(Some(format!("Testowa notka")))

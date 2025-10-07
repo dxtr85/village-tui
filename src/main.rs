@@ -224,13 +224,24 @@ async fn main() {
     //       old one should self-terminate on error receiving FromPresentation.
     // TODO: InternalMessage should serve every defined AppType, and Notification
     let toolset = Toolset::fold(tui_mgr, config, None, None, None, None, None);
-    let mut next_app = Some((AppType::Catalog, my_name.clone(), wrapped_receiver, toolset));
+    let mut next_app = Some((
+        Some(AppType::Catalog),
+        my_name.clone(),
+        wrapped_receiver,
+        toolset,
+    ));
     // TODO: Define a Toolbox struct to store all the tools an app might use.
     // Those are Editor, Notifier, Selector etc.
     // Once an app is done, it returns all the tools it was using back to toolbox.
     // When next app is strating, it borrows existing tools from Toolbox
     loop {
         if let Some((app_type, s_name, wrapped_receiver, toolset)) = next_app.take() {
+            if app_type.is_none() {
+                eprintln!("Dunno what AppType that is,terminating");
+                // TODO: discover AppType
+                break;
+            }
+            let app_type = app_type.unwrap();
             eprintln!("Next app: {} {:?}", s_name, app_type);
             let (mut tui_mgr, config, e_opt, c_opt, s_opt, i_opt, pe_opt) = toolset.unfold();
             toolbox.return_tools(e_opt, c_opt, s_opt, i_opt, pe_opt);
@@ -262,6 +273,7 @@ async fn main() {
                 }
                 AppType::Forum => {
                     let f_logic = ForumLogic::new(
+                        my_name.founder,
                         s_name,
                         to_app_mgr_send.clone(),
                         wrapped_sender.clone(),

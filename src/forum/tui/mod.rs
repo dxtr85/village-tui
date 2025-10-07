@@ -5,6 +5,7 @@ use animaterm::Manager;
 use dapp_lib::prelude::AppType;
 use dapp_lib::prelude::ByteSet;
 use dapp_lib::prelude::Capabilities;
+use dapp_lib::prelude::ContentID;
 use dapp_lib::prelude::GnomeId;
 use dapp_lib::prelude::Policy;
 // use dapp_lib::prelude::Requirement;
@@ -21,7 +22,7 @@ use crate::Toolset;
 pub struct EditorParams {
     pub initial_text: Option<String>,
     pub allow_newlines: bool,
-    pub chars_allowed: Option<Vec<char>>,
+    pub chars_limit: Option<Vec<char>>,
     pub text_limit: Option<u16>,
 }
 
@@ -50,6 +51,7 @@ pub enum Action {
     PolicyAction(PolAction),
     Selected(Vec<usize>),
     EditorResult(Option<String>),
+    FollowLink(SwarmName, ContentID, u16), //last is page id
 }
 pub enum ToForumView {
     TopicsPage(u16, Vec<(u16, String)>),
@@ -64,6 +66,7 @@ pub enum ToForumView {
     ShowByteSet(u8, ByteSet),
     Select(bool, Vec<String>, Vec<usize>), // bool indicates if only one can be selected
     OpenEditor(EditorParams),
+    Finish,
 }
 pub enum FromForumView {
     Act(Action),
@@ -90,21 +93,29 @@ struct ButtonsLogic {
 }
 impl ButtonsLogic {
     pub fn new(tui_mgr: &mut Manager) -> Self {
-        // TODO
-        let button_1 = Button::new((10, 3), 2, (1, 0), " Filter", None, tui_mgr);
+        // TODO:
+        // 1. Category filter
+        // 2. Filter by text
+        // 3. + Topic
+        // 4. Options
+        // 5. →Village
+        //
+        // 6. 7. unocuppied
+        // (in options +Category)
+        let button_1 = Button::new((10, 3), 2, (1, 0), " CatFltr", None, tui_mgr);
         button_1.show(tui_mgr);
         button_1.select(tui_mgr, false);
-        let button_2 = Button::new((10, 3), 2, (12, 0), "Add new", None, tui_mgr);
+        let button_2 = Button::new((10, 3), 2, (12, 0), "Filter", None, tui_mgr);
         button_2.show(tui_mgr);
-        let button_3 = Button::new((10, 3), 2, (23, 0), "Options", None, tui_mgr);
+        let button_3 = Button::new((10, 3), 2, (23, 0), "+ Topic", None, tui_mgr);
         button_3.show(tui_mgr);
-        let button_4 = Button::new((10, 3), 2, (34, 0), "→Village", None, tui_mgr);
+        let button_4 = Button::new((10, 3), 2, (34, 0), "Options", None, tui_mgr);
         button_4.show(tui_mgr);
-        let button_5 = Button::new((10, 3), 2, (45, 0), "Some", None, tui_mgr);
+        let button_5 = Button::new((10, 3), 2, (45, 0), "→Village", None, tui_mgr);
         button_5.show(tui_mgr);
-        let button_6 = Button::new((10, 3), 2, (56, 0), "More", None, tui_mgr);
+        let button_6 = Button::new((10, 3), 2, (56, 0), "…More", None, tui_mgr);
         button_6.show(tui_mgr);
-        let button_7 = Button::new((10, 3), 2, (67, 0), "Actions", None, tui_mgr);
+        let button_7 = Button::new((10, 3), 2, (67, 0), "…Actions", None, tui_mgr);
         button_7.show(tui_mgr);
         let menu_buttons = [
             (button_1, true),
@@ -136,11 +147,11 @@ impl ButtonsLogic {
             MenuType::Main,
             MenuConfig::new(
                 [
-                    ButtonState::Show("Fylter".to_string()),
-                    ButtonState::Show("Add new".to_string()),
+                    ButtonState::Show("CatFlter".to_string()),
+                    ButtonState::Show("Filter".to_string()),
+                    ButtonState::Show("+ Topic".to_string()),
                     ButtonState::Show("Options".to_string()),
                     ButtonState::Show("→ Village".to_string()),
-                    ButtonState::Hide,
                     ButtonState::Hide,
                     ButtonState::Hide,
                 ],
@@ -198,6 +209,10 @@ impl ButtonsLogic {
                     (
                         ButtonState::Show("Stored Byte Sets".to_string()),
                         EntryAction::StoredByteSets,
+                    ),
+                    (
+                        ButtonState::Show("Change Forum's description".to_string()),
+                        EntryAction::EditDescription,
                     ),
                 ]),
             ),
@@ -349,21 +364,46 @@ impl ButtonsLogic {
                 MenuType::Main => {
                     match self.selected_menu_button {
                         0 => {
-                            //TODO: Filter
+                            //TODO: Category Filter
+                            // Read all Categories(Tags)
+                            // from Manifest
+                            // Open up Selector and let
+                            // user choose categories.
+                            // Filter Topics to only include
+                            // Topics marked with at least
+                            // one of selected Catagories.
                             None
                         }
                         1 => {
-                            //TODO: Add new
+                            //TODO: Filter
+                            // Open Editor and read user
+                            // input.
+                            // Filter Topics to only include
+                            // those containing at least one
+                            // word from user-defined Filter
                             None
                         }
                         2 => {
-                            //TODO: Options
-                            self.activate_menu(MenuType::Settings, tui_mgr);
+                            //TODO: Add new topic
+                            // Open Creator and allow user
+                            // to define a new topic.
                             None
                         }
                         3 => {
+                            //TODO: Options
+                            // Allow definition of new
+                            // Category (Tag)
+                            self.activate_menu(MenuType::Settings, tui_mgr);
+                            Some(Action::Settings)
+                        }
+                        4 => {
                             // TODO: Village
-                            None
+                            // Improve this logic.
+                            Some(Action::FollowLink(
+                                SwarmName::new(GnomeId::any(), format!("/")).unwrap(),
+                                0,
+                                0,
+                            ))
                         }
                         _o => {
                             // this should not happen
@@ -708,6 +748,10 @@ impl ButtonsLogic {
                     self.activate_menu(MenuType::StoredByteSets, tui_mgr);
                     Some(Action::ByteSets(false))
                 }
+                EntryAction::EditDescription => {
+                    self.activate_menu(MenuType::Main, tui_mgr);
+                    Some(Action::Query(0))
+                }
                 EntryAction::NoAction => None,
             }
         }
@@ -938,6 +982,7 @@ enum EntryAction {
     StoredPolicies,
     StoredCapabilities,
     StoredByteSets,
+    EditDescription,
     Query,
 }
 #[derive(Clone, Copy, Debug)]
@@ -1228,6 +1273,10 @@ pub fn serve_forum_tui(
                     let e_res = editor.run(&mut tui_mgr);
                     action = Some(Action::EditorResult(e_res));
                     tui_mgr.restore_display(main_display, true);
+                }
+                ToForumView::Finish => {
+                    eprintln!("Forum is finished");
+                    break;
                 }
             }
             eprintln!("Forum TUI recv");

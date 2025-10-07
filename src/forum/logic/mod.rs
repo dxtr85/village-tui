@@ -1,8 +1,9 @@
+use crate::catalog::logic::SwarmShell;
 use crate::common::poledit::decompose;
 use crate::common::poledit::PolAction;
 use crate::common::poledit::ReqTree;
 use crate::forum::tui::EditorParams;
-use animaterm::prelude::*;
+// use animaterm::prelude::*;
 use async_std::channel::Receiver as AReceiver;
 use async_std::channel::Sender as ASender;
 use async_std::task::sleep;
@@ -11,10 +12,14 @@ use async_std::task::spawn_blocking;
 use async_std::task::yield_now;
 use dapp_lib::prelude::ByteSet;
 use dapp_lib::prelude::Capabilities;
+use dapp_lib::prelude::ContentID;
+use dapp_lib::prelude::DataType;
 use dapp_lib::prelude::GnomeId;
+use dapp_lib::prelude::Manifest;
 use dapp_lib::prelude::Policy;
 use dapp_lib::prelude::Requirement;
 use dapp_lib::prelude::SwarmName;
+use dapp_lib::Data;
 use dapp_lib::ToApp;
 use dapp_lib::ToAppMgr;
 use std::collections::HashMap;
@@ -53,7 +58,10 @@ use crate::forum::tui::ToForumView;
 use crate::InternalMsg;
 use crate::Toolset;
 pub struct ForumLogic {
-    swarm_name: SwarmName,
+    my_id: GnomeId,
+    shell: SwarmShell,
+    topics: Vec<String>,
+    // posts: ()
     presentation_state: PresentationState,
     to_app_mgr_send: ASender<ToAppMgr>,
     to_user_send: ASender<InternalMsg>,
@@ -64,6 +72,7 @@ pub struct ForumLogic {
 }
 impl ForumLogic {
     pub fn new(
+        my_id: GnomeId,
         swarm_name: SwarmName,
         to_app_mgr_send: ASender<ToAppMgr>,
         to_user_send: ASender<InternalMsg>,
@@ -76,9 +85,12 @@ impl ForumLogic {
             to_user_send.clone(),
             // wrapped_sender.clone(),
         ));
+        let shell = SwarmShell::new(dapp_lib::prelude::SwarmID(0), swarm_name, AppType::Forum);
         ForumLogic {
             presentation_state: PresentationState::MainLobby(None),
-            swarm_name,
+            my_id,
+            shell,
+            topics: vec![],
             to_app_mgr_send,
             to_user_send,
             to_user_recv,
@@ -95,7 +107,7 @@ impl ForumLogic {
         // mut config: Configuration,
         // mut tui_mgr: Manager,
         // ) -> Option<(AppType, AReceiver<InternalMsg>, Configuration, Manager)> {
-    ) -> Option<(AppType, SwarmName, AReceiver<InternalMsg>, Toolset)> {
+    ) -> Option<(Option<AppType>, SwarmName, AReceiver<InternalMsg>, Toolset)> {
         let from_presentation_msg_send = self.from_tui_send.take().unwrap();
         let to_presentation_msg_recv = self.to_tui_recv.take().unwrap();
         let tui_join = spawn_blocking(move || {
@@ -109,6 +121,12 @@ impl ForumLogic {
             )
         });
         let mut switch_to_opt = None;
+        let _ = self
+            .to_app_mgr_send
+            .send(ToAppMgr::FromApp(dapp_lib::LibRequest::SetActiveApp(
+                self.shell.swarm_name.clone(),
+            )))
+            .await;
 
         loop {
             let int_msg_res = self.to_user_recv.recv().await;
@@ -118,204 +136,14 @@ impl ForumLogic {
             }
             let msg = int_msg_res.unwrap();
             match msg {
-                InternalMsg::User(to_app) => match to_app {
-                    ToApp::ActiveSwarm(s_name, s_id) => {
-                        eprintln!("Forum: ToApp::ActiveSwarm({s_id},{s_name})");
-                    }
-                    ToApp::RunningPolicies(mut policies) => {
-                        eprintln!("#{} RunningPolicies in forum logic", policies.len());
-                        let pol_page = 0;
+                InternalMsg::User(to_app) => self.process_to_app_msg(to_app).await,
 
-                        // TODO: store how many entries there are in menu.
-                        let mut pols = Vec::with_capacity(10);
-                        let mut mapping = HashMap::with_capacity(policies.len());
-                        let entries_len = 10;
-                        for i in 0..policies.len() as u16 {
-                            let pol = policies.remove(0);
-                            if i < entries_len {
-                                pols.push((i, pol.0.text()));
-                            }
-                            mapping.insert(i, pol);
-                        }
-                        self.presentation_state =
-                            PresentationState::RunningPolicies(Some((pol_page, mapping)));
-                        let _ = self
-                            .to_tui_send
-                            .send(ToForumView::RunningPoliciesPage(pol_page, pols));
-                    }
-                    ToApp::RunningCapabilities(mut caps) => {
-                        eprintln!("#{} RunningCapabilities in forum logic", caps.len());
-                        let cs_page = 0;
-
-                        // TODO: store how many entries there are in menu.
-                        let mut ccaps = Vec::with_capacity(10);
-                        let mut mapping = HashMap::with_capacity(caps.len());
-                        let entries_len = 10;
-                        for i in 0..caps.len() as u16 {
-                            let (cap, gid_list) = caps.remove(0);
-                            if i < entries_len {
-                                ccaps.push((i, cap.text()));
-                            }
-                            mapping.insert(i, (cap, gid_list));
-                        }
-                        self.presentation_state =
-                            PresentationState::RunningCapabilities(Some((cs_page, mapping)));
-                        let _ = self
-                            .to_tui_send
-                            .send(ToForumView::RunningCapabilitiesPage(cs_page, ccaps));
-                    }
-                    ToApp::RunningByteSets(mut bsets) => {
-                        //TODO
-
-                        eprintln!("#{} RunningByteSets in forum logic", bsets.len());
-                        let bs_page = 0;
-
-                        // TODO: store how many entries there are in menu.
-                        let mut bbsets = Vec::with_capacity(10);
-                        let mut mapping = HashMap::with_capacity(bsets.len());
-                        let entries_len = 10;
-                        while !bsets.is_empty() {
-                            let (bs_id, bs_list) = bsets.remove(0);
-                            if bbsets.len() < entries_len {
-                                bbsets.push((bs_id as u16, format!("ByteSet({bs_id})")));
-                            }
-                            mapping.insert(bs_id, bs_list);
-                        }
-                        let running = true;
-                        self.presentation_state =
-                            PresentationState::ByteSets(running, Some((bs_page, mapping)));
-                        let _ = self
-                            .to_tui_send
-                            .send(ToForumView::RunningByteSetsPage(bs_page.into(), bbsets));
-                    }
-                    _other => {
-                        eprintln!("InternalMsg::User");
-                    }
-                },
                 InternalMsg::Forum(from_tui) => {
-                    // eprintln!("InternalMsg::Forum");
-                    match from_tui {
-                        FromForumView::Act(action) => {
-                            match action {
-                                Action::Settings => {
-                                    self.presentation_state = PresentationState::Settings;
-                                }
-                                Action::RunningPolicies => {
-                                    self.presentation_state =
-                                        PresentationState::RunningPolicies(None);
-                                    let _ = self
-                                        .to_app_mgr_send
-                                        .send(ToAppMgr::FromApp(
-                                            dapp_lib::LibRequest::RunningPolicies(
-                                                self.swarm_name.clone(),
-                                            ),
-                                        ))
-                                        .await;
-                                }
-                                Action::StoredPolicies => {
-                                    self.presentation_state =
-                                        PresentationState::StoredPolicies(None);
-                                    //TODO: Send policies from Manifest
-                                    let pol_page = 0;
-                                    let pols = vec![
-                                        (11, "Stored Policy One".to_string()),
-                                        (22, "Stored Policy Two".to_string()),
-                                    ];
-                                    let _ = self
-                                        .to_tui_send
-                                        .send(ToForumView::StoredPoliciesPage(pol_page, pols));
-                                }
-                                Action::RunningCapabilities => {
-                                    //TODO:
-                                    self.presentation_state =
-                                        PresentationState::RunningCapabilities(None);
-                                    let _ = self
-                                        .to_app_mgr_send
-                                        .send(ToAppMgr::FromApp(
-                                            dapp_lib::LibRequest::RunningCapabilities(
-                                                self.swarm_name.clone(),
-                                            ),
-                                        ))
-                                        .await;
-                                }
-                                Action::StoredCapabilities => {
-                                    //TODO:
-                                    self.presentation_state =
-                                        PresentationState::StoredCapabilities(None);
-                                }
-                                Action::ByteSets(is_run) => {
-                                    //TODO:
-                                    self.presentation_state =
-                                        PresentationState::RunningCapabilities(None);
-                                    let _ = self
-                                        .to_app_mgr_send
-                                        .send(ToAppMgr::FromApp(
-                                            dapp_lib::LibRequest::RunningByteSets(
-                                                self.swarm_name.clone(),
-                                            ),
-                                        ))
-                                        .await;
-                                }
-                                // Action::StoredByteSets => {
-                                //     //TODO:
-                                //     self.presentation_state =
-                                //         PresentationState::ByteSets(false, None);
-                                // }
-                                Action::AddNew(param) => {
-                                    self.add_new_action(param).await;
-                                }
-                                Action::Delete(id) => {
-                                    self.delete_action(id).await;
-                                }
-                                Action::Run(id_opt) => {
-                                    self.run_action(id_opt).await;
-                                }
-                                Action::NextPage => {
-                                    //TODO
-                                }
-                                Action::PreviousPage => {
-                                    //TODO
-                                }
-                                Action::FirstPage => {
-                                    //TODO
-                                }
-                                Action::LastPage => {
-                                    //TODO
-                                }
-                                Action::Filter(filter) => {
-                                    //TODO
-                                }
-                                Action::Query(qt) => {
-                                    self.serve_query(qt).await;
-                                }
-                                Action::MainMenu => {
-                                    //TODO
-                                }
-                                Action::Posts(topic_id) => {
-                                    //TODO
-                                }
-                                Action::PolicyAction(p_act) => {
-                                    self.serve_pol_action(p_act).await;
-                                }
-                                Action::Selected(id_vec) => {
-                                    self.serve_selected(id_vec).await;
-                                }
-                                Action::EditorResult(str_o) => self.process_edit_result(str_o),
-                            }
-                        }
-                        // FromForumView::RunningPolicies => {
-                        //     eprintln!("Should send running policies");
-                        // }
-                        // FromForumView::StoredPolicies => {
-                        //     eprintln!("Should send stored policies");
-                        // }
-                        FromForumView::Quit => {
-                            break;
-                        }
-                        FromForumView::SwitchTo(app_type, s_name) => {
-                            switch_to_opt = Some((app_type, s_name));
-                            break;
-                        }
+                    if self
+                        .process_from_tui_msg(from_tui, &mut switch_to_opt)
+                        .await
+                    {
+                        break;
                     }
                 }
                 _other => {
@@ -329,12 +157,381 @@ impl ForumLogic {
 
         eprintln!("Forum is all done.");
         if let Some((switch_app, s_name)) = switch_to_opt {
-            Some((switch_app, s_name, self.to_user_recv, toolset))
+            Some((Some(switch_app), s_name, self.to_user_recv, toolset))
         } else {
             toolset.discard();
             None
         }
     }
+    async fn process_to_app_msg(&mut self, to_app: ToApp) {
+        match to_app {
+            ToApp::ActiveSwarm(s_name, s_id) => {
+                eprintln!("Forum: ToApp::ActiveSwarm({s_id},{s_name})");
+                if s_name == self.shell.swarm_name {
+                    self.shell.swarm_id = s_id;
+
+                    // eprintln!("Forum request FirstPages");
+                    let _ = self
+                        .to_app_mgr_send
+                        .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadAllFirstPages(
+                            s_id,
+                        )))
+                        .await;
+                    let _ = self
+                        .to_app_mgr_send
+                        .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadAllPages(
+                            s_id, 0,
+                        )))
+                        .await;
+                } else {
+                    // TODO: wait a bit and try again
+                    // How do we do that?
+                    // The simplest way is to spawn
+                    // an async task that will sleep for
+                    // specified time period and then send
+                    // provided message.
+                    //
+                    // We could extend InternalMessage
+                    // but that just complicates things
+
+                    let message = ToAppMgr::FromApp(dapp_lib::LibRequest::SetActiveApp(
+                        self.shell.swarm_name.clone(),
+                    ));
+                    spawn(start_a_timer(
+                        self.to_app_mgr_send.clone(),
+                        message,
+                        Duration::from_secs(3),
+                    ));
+                    eprintln!("Try again in 3 sec…)");
+                }
+            }
+            ToApp::ReadSuccess(_s_id, s_name, c_id, d_type, d_vec) => {
+                if s_name == self.shell.swarm_name {
+                    if c_id == 0 {
+                        self.process_manifest(d_type, d_vec);
+                    } else {
+                        self.process_content(c_id, d_type, d_vec).await;
+                    }
+                    self.present_topics().await;
+                } else {
+                    eprintln!("Received Content from other Swarm");
+                }
+            }
+            ToApp::RunningPolicies(mut policies) => {
+                eprintln!("#{} RunningPolicies in forum logic", policies.len());
+                let pol_page = 0;
+
+                // TODO: store how many entries there are in menu.
+                let mut pols = Vec::with_capacity(10);
+                let mut mapping = HashMap::with_capacity(policies.len());
+                let entries_len = 10;
+                for i in 0..policies.len() as u16 {
+                    let pol = policies.remove(0);
+                    if i < entries_len {
+                        pols.push((i, pol.0.text()));
+                    }
+                    mapping.insert(i, pol);
+                }
+                self.presentation_state =
+                    PresentationState::RunningPolicies(Some((pol_page, mapping)));
+                let _ = self
+                    .to_tui_send
+                    .send(ToForumView::RunningPoliciesPage(pol_page, pols));
+            }
+            ToApp::RunningCapabilities(mut caps) => {
+                eprintln!("#{} RunningCapabilities in forum logic", caps.len());
+                let cs_page = 0;
+
+                // TODO: store how many entries there are in menu.
+                let mut ccaps = Vec::with_capacity(10);
+                let mut mapping = HashMap::with_capacity(caps.len());
+                let entries_len = 10;
+                for i in 0..caps.len() as u16 {
+                    let (cap, gid_list) = caps.remove(0);
+                    if i < entries_len {
+                        ccaps.push((i, cap.text()));
+                    }
+                    mapping.insert(i, (cap, gid_list));
+                }
+                self.presentation_state =
+                    PresentationState::RunningCapabilities(Some((cs_page, mapping)));
+                let _ = self
+                    .to_tui_send
+                    .send(ToForumView::RunningCapabilitiesPage(cs_page, ccaps));
+            }
+            ToApp::RunningByteSets(mut bsets) => {
+                //TODO
+
+                eprintln!("#{} RunningByteSets in forum logic", bsets.len());
+                let bs_page = 0;
+
+                // TODO: store how many entries there are in menu.
+                let mut bbsets = Vec::with_capacity(10);
+                let mut mapping = HashMap::with_capacity(bsets.len());
+                let entries_len = 10;
+                while !bsets.is_empty() {
+                    let (bs_id, bs_list) = bsets.remove(0);
+                    if bbsets.len() < entries_len {
+                        bbsets.push((bs_id as u16, format!("ByteSet({bs_id})")));
+                    }
+                    mapping.insert(bs_id, bs_list);
+                }
+                let running = true;
+                self.presentation_state =
+                    PresentationState::ByteSets(running, Some((bs_page, mapping)));
+                let _ = self
+                    .to_tui_send
+                    .send(ToForumView::RunningByteSetsPage(bs_page.into(), bbsets));
+            }
+            ToApp::FirstPages(s_id, pg_vec) => {
+                if s_id == self.shell.swarm_id {
+                    self.process_first_pages(pg_vec).await;
+                    self.present_topics().await;
+                } else {
+                    eprintln!("FirstPages of other swarm");
+                }
+            }
+            _other => {
+                eprintln!("InternalMsg::User {:?}", _other);
+            }
+        }
+    }
+    async fn process_from_tui_msg(
+        &mut self,
+        from_tui: FromForumView,
+        switch_to_opt: &mut Option<(AppType, SwarmName)>,
+    ) -> bool {
+        match from_tui {
+            FromForumView::Act(action) => {
+                match action {
+                    Action::Settings => {
+                        self.presentation_state = PresentationState::Settings;
+                    }
+                    Action::RunningPolicies => {
+                        self.presentation_state = PresentationState::RunningPolicies(None);
+                        let _ = self
+                            .to_app_mgr_send
+                            .send(ToAppMgr::FromApp(dapp_lib::LibRequest::RunningPolicies(
+                                self.shell.swarm_name.clone(),
+                            )))
+                            .await;
+                    }
+                    Action::StoredPolicies => {
+                        self.presentation_state = PresentationState::StoredPolicies(None);
+                        //TODO: Send policies from Manifest
+                        let pol_page = 0;
+                        let pols = vec![
+                            (11, "Stored Policy One".to_string()),
+                            (22, "Stored Policy Two".to_string()),
+                        ];
+                        let _ = self
+                            .to_tui_send
+                            .send(ToForumView::StoredPoliciesPage(pol_page, pols));
+                    }
+                    Action::RunningCapabilities => {
+                        //TODO:
+                        self.presentation_state = PresentationState::RunningCapabilities(None);
+                        let _ = self
+                            .to_app_mgr_send
+                            .send(ToAppMgr::FromApp(
+                                dapp_lib::LibRequest::RunningCapabilities(
+                                    self.shell.swarm_name.clone(),
+                                ),
+                            ))
+                            .await;
+                    }
+                    Action::StoredCapabilities => {
+                        //TODO:
+                        self.presentation_state = PresentationState::StoredCapabilities(None);
+                    }
+                    Action::ByteSets(is_run) => {
+                        //TODO:
+                        self.presentation_state = PresentationState::RunningCapabilities(None);
+                        let _ = self
+                            .to_app_mgr_send
+                            .send(ToAppMgr::FromApp(dapp_lib::LibRequest::RunningByteSets(
+                                self.shell.swarm_name.clone(),
+                            )))
+                            .await;
+                    }
+                    // Action::StoredByteSets => {
+                    //     //TODO:
+                    //     self.presentation_state =
+                    //         PresentationState::ByteSets(false, None);
+                    // }
+                    Action::AddNew(param) => {
+                        self.add_new_action(param).await;
+                    }
+                    Action::Delete(id) => {
+                        self.delete_action(id).await;
+                    }
+                    Action::Run(id_opt) => {
+                        self.run_action(id_opt).await;
+                    }
+                    Action::NextPage => {
+                        //TODO
+                    }
+                    Action::PreviousPage => {
+                        //TODO
+                    }
+                    Action::FirstPage => {
+                        //TODO
+                    }
+                    Action::LastPage => {
+                        //TODO
+                    }
+                    Action::Filter(filter) => {
+                        //TODO
+                    }
+                    Action::Query(qt) => {
+                        self.serve_query(qt).await;
+                    }
+                    Action::MainMenu => {
+                        //TODO
+                    }
+                    Action::Posts(topic_id) => {
+                        //TODO
+                    }
+                    Action::PolicyAction(p_act) => {
+                        self.serve_pol_action(p_act).await;
+                    }
+                    Action::Selected(id_vec) => {
+                        self.serve_selected(id_vec).await;
+                    }
+                    Action::EditorResult(str_o) => self.process_edit_result(str_o).await,
+                    Action::FollowLink(s_name, c_id, pg_id) => {
+                        // Follow Link
+                        if s_name.founder.is_any() {
+                            eprintln!("Should go back to Village");
+                            *switch_to_opt = Some((
+                                AppType::Catalog,
+                                SwarmName::new(self.my_id, s_name.name).unwrap(),
+                            ));
+                        } else {
+                            // eprintln!("Should follow link");
+                            *switch_to_opt = Some((AppType::Catalog, s_name));
+                        }
+                        let _ = self.to_tui_send.send(ToForumView::Finish);
+                        return true;
+                    }
+                }
+            }
+            // FromForumView::RunningPolicies => {
+            //     eprintln!("Should send running policies");
+            // }
+            // FromForumView::StoredPolicies => {
+            //     eprintln!("Should send stored policies");
+            // }
+            FromForumView::Quit => {
+                return true;
+            }
+            FromForumView::SwitchTo(app_type, s_name) => {
+                *switch_to_opt = Some((app_type, s_name));
+                return true;
+            }
+        }
+        false
+    }
+    async fn process_first_pages(&mut self, mut pg_vec: Vec<(ContentID, DataType, Data)>) {
+        // First pages start from CID==1
+        if pg_vec.is_empty() {
+            // eprintln!("process_first_pages EMPTY");
+            return;
+        }
+        eprintln!("process_first_pages");
+        for (c_id, d_type, data) in pg_vec {
+            self.process_content(c_id, d_type, vec![data]).await;
+        }
+    }
+
+    async fn process_content(&mut self, c_id: ContentID, d_type: DataType, mut d_vec: Vec<Data>) {
+        if d_vec.is_empty() {
+            return;
+        }
+        // This check is made elsewhere
+        // if c_id == 0 {
+        //     return self.process_manifest(d_type, d_vec);
+        // }
+        //TODO: We need to store entire Manifest,
+        // and all first page headers
+        // in order to present and filter Topics to be
+        // displayed.
+        // Once we select a Topic we should retrieve it's
+        // Data - first 64 pages should be fine.
+        // If user moves out of that range of 64 pages
+        // then we read more data, we can discard previous
+        // data as it is dapp-lib's responsibility to
+        // provide up to date pages and do it fast.
+        match d_type {
+            DataType::Data(id) => {
+                if id == 0 {
+                    //TODO: regular post
+                    let first = d_vec.remove(0);
+                    if let Ok(text) = std::str::from_utf8(&first.bytes()) {
+                        let t_len = self.topics.len();
+                        for _i in t_len..(c_id as usize) {
+                            self.topics.push(String::new());
+                        }
+                        self.topics[c_id as usize] = text.chars().take(64).collect();
+                    };
+                } else {
+                    eprintln!("Forum DType: {id}");
+                }
+            }
+            DataType::Link => {
+                //TODO: link
+            }
+        }
+        // eprintln!("Should process CID-{} (len: {})", c_id, d_vec.len());
+    }
+
+    fn process_manifest(&mut self, d_type: DataType, d_vec: Vec<Data>) {
+        eprintln!("Mfest DType: {:?}", d_type);
+        let manifest = Manifest::from(d_vec);
+        let mut desc = if manifest.description.is_empty() {
+            format!("Manifest: no description")
+        } else {
+            let line: String = manifest.description.lines().take(1).collect();
+            line.chars().take(64).collect()
+        };
+        desc = desc.trim().to_string();
+        if self.topics.is_empty() {
+            self.topics.push(desc);
+        } else {
+            self.topics[0] = desc;
+        }
+        self.shell.manifest = manifest;
+    }
+    async fn present_topics(&mut self) {
+        let curr_state =
+            std::mem::replace(&mut self.presentation_state, PresentationState::Settings);
+        match curr_state {
+            PresentationState::MainLobby(pg_opt) => {
+                let pg = if let Some(pg) = pg_opt { pg } else { 0 };
+                let topics = self.read_topics(pg, 10).await;
+                let _ = self.to_tui_send.send(ToForumView::TopicsPage(pg, topics));
+                self.presentation_state = PresentationState::MainLobby(Some(pg));
+            }
+            other => {
+                self.presentation_state = other;
+            }
+        }
+    }
+    async fn read_topics(&self, page: u16, page_size: u16) -> Vec<(u16, String)> {
+        let first_idx = (page * page_size) as usize;
+        let last_idx = ((page + 1) * page_size) as usize;
+        let t_len = self.topics.len();
+        let mut res = Vec::with_capacity(page_size as usize);
+        for i in first_idx..last_idx {
+            if i < t_len {
+                res.push((i as u16, self.topics[i].clone()));
+            } else {
+                break;
+            }
+        }
+        res
+    }
+
     async fn add_new_action(&mut self, param: bool) {
         let curr_state =
             std::mem::replace(&mut self.presentation_state, PresentationState::Settings);
@@ -347,7 +544,7 @@ impl ForumLogic {
                     initial_text: Some(format!("GID-0123456789abcdef")),
 
                     allow_newlines: false,
-                    chars_allowed: Some("0123456789abcdef".chars().collect()),
+                    chars_limit: Some("0123456789abcdef".chars().collect()),
                     text_limit: Some(20),
                 };
                 let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
@@ -431,7 +628,7 @@ impl ForumLogic {
                     .to_app_mgr_send
                     .send(ToAppMgr::FromApp(
                         dapp_lib::LibRequest::SetRunningCapability(
-                            self.swarm_name.clone(),
+                            self.shell.swarm_name.clone(),
                             *c,
                             v_gids.clone(),
                         ),
@@ -445,7 +642,7 @@ impl ForumLogic {
                             let _ = self
                                 .to_app_mgr_send
                                 .send(ToAppMgr::FromApp(dapp_lib::LibRequest::SetRunningByteSet(
-                                    self.swarm_name.clone(),
+                                    self.shell.swarm_name.clone(),
                                     id as u8,
                                     bset.clone(),
                                 )))
@@ -478,7 +675,7 @@ impl ForumLogic {
                     None,
                     Box::new(PresentationState::Capability(c, v_gid)),
                 );
-                self.process_edit_result(None);
+                self.process_edit_result(None).await;
                 yield_now().await;
             }
             other => {
@@ -488,7 +685,7 @@ impl ForumLogic {
         }
     }
 
-    fn process_edit_result(&mut self, text: Option<String>) {
+    async fn process_edit_result(&mut self, text: Option<String>) {
         // eprintln!("FLogic got: {:?}", text);
         // DONE: validate received text against
         // what was expected to arrive.
@@ -541,6 +738,23 @@ impl ForumLogic {
                             .to_tui_send
                             .send(ToForumView::ShowCapability(cap, presentation_elems));
                         self.presentation_state = PresentationState::Capability(cap, vec_gid);
+                    }
+                    PresentationState::Settings => {
+                        if let Some(text) = text {
+                            //TODO: we have an updated Manifest descr.
+                            eprintln!("New descr: {}", text);
+                            self.shell.manifest.set_description(text);
+                            let d_vec = self.shell.manifest.to_data();
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::ChangeContent(
+                                    self.shell.swarm_id,
+                                    0,
+                                    DataType::Data(0),
+                                    d_vec,
+                                ))
+                                .await;
+                        }
                     }
                     other => {
                         eprintln!("Editing not supported yet");
@@ -789,7 +1003,7 @@ impl ForumLogic {
         }
     }
     async fn serve_query(&mut self, id: u16) {
-        eprintln!("Logic got a query {:?}", id);
+        eprintln!("Logic got a query {:?} ({:?})", id, self.presentation_state);
         let mut new_state = None;
         match &self.presentation_state {
             PresentationState::MainLobby(page_opt) => {
@@ -810,7 +1024,23 @@ impl ForumLogic {
                 // other logic handles them.
             }
             PresentationState::Settings => {
-                // TODO: do we need to do anything here?
+                // TODO: when we get Query in settings
+                // it means User wants to change Manifest
+                // description
+                eprintln!("Should edit Manifest Descr.");
+                let e_params = EditorParams {
+                    initial_text: Some(self.shell.manifest.description.clone()),
+                    allow_newlines: true,
+                    chars_limit: None,
+                    text_limit: Some(1000),
+                };
+                let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_params));
+                // TODO: maybe we should create a dedicated
+                // state for Editing anything?
+                new_state = Some(PresentationState::Editing(
+                    None,
+                    Box::new(PresentationState::Settings),
+                ));
             }
             PresentationState::RunningPolicies(page_opt) => {
                 if let Some((_page_no, mapping)) = page_opt {
@@ -956,7 +1186,7 @@ impl ForumLogic {
                     initial_text: Some(format!("{g_id}")),
 
                     allow_newlines: false,
-                    chars_allowed: Some("0123456789abcdef".chars().collect()),
+                    chars_limit: Some("0123456789abcdef".chars().collect()),
                     text_limit: Some(20),
                 };
                 let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
@@ -987,7 +1217,7 @@ impl ForumLogic {
         let _ = self
             .to_app_mgr_send
             .send(ToAppMgr::FromApp(dapp_lib::LibRequest::SetRunningPolicy(
-                self.swarm_name.clone(),
+                self.shell.swarm_name.clone(),
                 pol,
                 req,
             )))
@@ -1024,4 +1254,10 @@ pub async fn from_forum_tui_adapter(
         }
     }
     eprintln!("from_tui_adapter is done");
+}
+pub async fn start_a_timer(sender: ASender<ToAppMgr>, message: ToAppMgr, timeout: Duration) {
+    // let timeout = Duration::from_secs(5);
+    sleep(timeout).await;
+    eprintln!("Timeout {:?} is over, sending message…", timeout);
+    let _ = sender.send(message).await;
 }
