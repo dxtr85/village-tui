@@ -25,6 +25,8 @@ impl Configuration {
         let mut storage_neighbors = vec![];
         let mut added_gids = vec![];
         let mut next_v4 = true;
+        // We cycle through swarms in storege disk location to collect some Neighbor's IPs
+        // TODO: maybe limit this search until we have enough IPs?
         for sswarm in stored_swarms {
             let sstr = sswarm.to_string_lossy();
             if !sstr.contains('-') {
@@ -36,10 +38,10 @@ impl Configuration {
             eprintln!("Parsing str: {}", sstr);
             let g_id: u64 = u64::from_str_radix(&sstr, 16).unwrap();
             let g_id = GnomeId(g_id);
-            let dsync_store = sswarm.join("datastore.sync");
-            let (zero_type, zero_hash) = if dsync_store.exists() {
+            let dsync_file = sswarm.join("datastore.sync");
+            let (zero_type, zero_hash) = if dsync_file.exists() {
                 let app_data = read_datastore_from_disk(
-                    dsync_store.clone(),
+                    sswarm.clone(),
                     // app_data_send.clone(),
                 )
                 .await;
@@ -55,8 +57,13 @@ impl Configuration {
                 continue;
             }
             if let Some(c_zero) = load_content_from_disk(sswarm, 0, zero_type, zero_hash).await {
-                let data_vec = vec![c_zero.read_data(0).unwrap()];
-                eprintln!("Building Manifest from single data page (for larger manifests this will probably crash)");
+                let c_len = c_zero.len();
+                let mut data_vec = Vec::with_capacity(c_len as usize);
+                for i in 0..c_len {
+                    data_vec.push(c_zero.read_data(i).unwrap());
+                }
+                //vec![c_zero.read_data(0).unwrap()];
+                // eprintln!("Building Manifest from single data page (for larger manifests this will probably crash)");
                 let manifest = Manifest::from(data_vec);
                 let pub_ips = manifest.get_pub_ips();
                 let mut pubiplen = pub_ips.len();
