@@ -1,10 +1,12 @@
-use dapp_lib::prelude::{load_content_from_disk, read_datastore_from_disk, GnomeId, Transport};
+use dapp_lib::prelude::{
+    load_content_from_disk, read_datastore_from_disk, GnomeId, StoragePolicy, Transport,
+};
 use dapp_lib::prelude::{DataType, NetworkSettings};
 use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader};
-use std::net::IpAddr;
+// use std::net::IpAddr;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
+// use std::str::FromStr;
 
 use crate::catalog::logic::Manifest;
 
@@ -42,7 +44,8 @@ impl Configuration {
             let (zero_type, zero_hash) = if dsync_file.exists() {
                 let app_data = read_datastore_from_disk(
                     sswarm.clone(),
-                    // app_data_send.clone(),
+                    false,
+                    StoragePolicy::Discard, // app_data_send.clone(),
                 )
                 .await;
                 if let Ok((dtype, hash)) = app_data.content_root_hash(0) {
