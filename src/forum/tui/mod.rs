@@ -32,6 +32,7 @@ pub enum Action {
     // Generic actions
     AddNew(bool),
     Delete(u16),
+    Edit(u16),
     NextPage,
     PreviousPage,
     FirstPage,
@@ -165,7 +166,7 @@ impl ButtonsLogic {
             MenuConfig::new(
                 [
                     ButtonState::Show("New post".to_string()),
-                    ButtonState::Hide,
+                    ButtonState::Show("Edit".to_string()),
                     ButtonState::Hide,
                     ButtonState::Show("← Forum".to_string()),
                     ButtonState::Hide,
@@ -433,8 +434,8 @@ impl ButtonsLogic {
                             Some(Action::AddNew(false))
                         }
                         1 => {
-                            // self.activate_menu(3, tui_mgr);
-                            None
+                            // Test button for UserDefined SyncMessage posting
+                            Some(Action::Edit(1))
                         }
                         2 => {
                             // self.activate_menu(4, tui_mgr);

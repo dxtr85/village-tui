@@ -782,10 +782,9 @@ impl CatalogLogic {
                             // but for now we need to implement something simple
                             //
                         }
-                        // ToApp::SwitchToApp(app_type, s_id, s_name) => {
-                        //     return_val = Some((app_type, s_id, s_name));
-                        //     break 'outer;
-                        // }
+                        ToApp::HeapData(s_id, m_type, data, singed_by) => {
+                            eprintln!("Catalog recv HeapData({})", m_type);
+                        }
                         ToApp::Quit => {
                             eprintln!("Done serving ApplicationLogic");
                             break 'outer;

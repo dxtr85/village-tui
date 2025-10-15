@@ -3,7 +3,6 @@ use crate::common::poledit::decompose;
 use crate::common::poledit::PolAction;
 use crate::common::poledit::ReqTree;
 use crate::forum::tui::EditorParams;
-// use animaterm::prelude::*;
 use async_std::channel::Receiver as AReceiver;
 use async_std::channel::Sender as ASender;
 use async_std::task::sleep;
@@ -353,6 +352,13 @@ impl ForumLogic {
                     self.present_topics().await;
                 }
             }
+            ToApp::HeapData(s_id, m_type, data, signed_by) => {
+                if s_id == self.shell.swarm_id {
+                    eprintln!("Forum recv Heap Data {}", m_type);
+                } else {
+                    eprintln!("Heap data of {} ignored", s_id);
+                }
+            }
             _other => {
                 eprintln!("InternalMsg::User {:?}", _other);
             }
@@ -423,6 +429,20 @@ impl ForumLogic {
                     // }
                     Action::AddNew(param) => {
                         self.add_new_action(param).await;
+                    }
+                    Action::Edit(id) => {
+                        // Here we directly send a SyncMessage::UserDefined for testing
+                        let _ = self
+                            .to_app_mgr_send
+                            .send(ToAppMgr::UserDefined(
+                                self.shell.swarm_id,
+                                21,
+                                17,
+                                111,
+                                Data::new(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]).unwrap(),
+                            ))
+                            .await;
+                        eprintln!("Posted UserDefined request");
                     }
                     Action::Delete(id) => {
                         self.delete_action(id).await;
