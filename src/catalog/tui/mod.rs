@@ -634,6 +634,20 @@ pub fn serve_catalog_tui(
         ],
     );
     eprintln!("Added CMenu set: {}", _set_id);
+    let _set_id = c_menu.add_set(
+        &mut mgr,
+        vec![
+            " Żądanie".to_string(),
+            " Odpowiedź".to_string(),
+            " Żądanie2".to_string(),
+            " Odpowiedź2".to_string(),
+            " Żądanie3".to_string(),
+            " Odpowiedź3".to_string(),
+            " Żądanie4".to_string(),
+            " Odpowiedź4".to_string(),
+        ],
+    );
+    eprintln!("Added CMenu set: {}", _set_id);
     // let mut manifest_req: u8 = 0;
     loop {
         if let Some(key) = mgr.read_key() {

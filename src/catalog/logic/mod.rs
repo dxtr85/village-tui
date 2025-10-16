@@ -785,6 +785,14 @@ impl CatalogLogic {
                         ToApp::HeapData(s_id, m_type, data, singed_by) => {
                             eprintln!("Catalog recv HeapData({})", m_type);
                         }
+                        ToApp::CustomNeighborRequest(s_id, g_id, req_id, c_data) => {
+                            //TODO
+                            eprintln!("Catalog: CustomNeighborRequest({req_id})");
+                        }
+                        ToApp::CustomNeighborResponse(s_id, g_id, resp_id, c_data) => {
+                            //TODO
+                            eprintln!("Catalog: CustomNeighborResponse({resp_id})");
+                        }
                         ToApp::Quit => {
                             eprintln!("Done serving ApplicationLogic");
                             break 'outer;
@@ -1045,6 +1053,8 @@ impl CatalogLogic {
                                 }
                                 TileType::Neighbor(_g_id) => {
                                     //TODO
+                                    self.state = TuiState::ContextMenuOn(ttype);
+                                    let _ = self.to_tui.send(ToCatalogView::DisplayCMenu(4));
                                 }
                                 TileType::Content(_dtype, _c_id) => {
                                     //TODO
@@ -1405,6 +1415,7 @@ impl CatalogLogic {
                         }
                         FromCatalogView::CMenuAction(action) => {
                             let prev_state = std::mem::replace(&mut self.state, TuiState::Village);
+                            eprintln!("CMenuAction on: {prev_state:?}");
                             match prev_state {
                                 TuiState::ContextMenuOn(ttype) => match ttype {
                                     TileType::Home(_g_id) => {
@@ -1416,6 +1427,9 @@ impl CatalogLogic {
                                     }
                                     TileType::Field => {
                                         self.run_cmenu_action_on_field(action).await;
+                                    }
+                                    TileType::Neighbor(n_id) => {
+                                        self.run_cmenu_action_on_neighbor(n_id, action).await;
                                     }
                                     other => {
                                         eprintln!(
@@ -2487,6 +2501,122 @@ impl CatalogLogic {
             }
             _other => {
                 //TODO
+            }
+        }
+    }
+    async fn run_cmenu_action_on_neighbor(&mut self, neighbor_id: GnomeId, action: usize) {
+        // TODO
+        match action {
+            1 => {
+                // żądanie
+                let c_data = CastData::new(vec![1, 11, 21, 31, 41, 51, 61, 71, 81, 91]).unwrap();
+                let _r = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::FromApp(LibRequest::CustomNeighborRequest(
+                        self.my_name.clone(),
+                        neighbor_id,
+                        1,
+                        c_data,
+                    )))
+                    .await;
+                eprintln!("Request sent: {_r:?}");
+            }
+            2 => {
+                // odpowiedź
+                let c_data = CastData::new(vec![92, 82, 72, 62, 52, 42, 32, 22, 12, 2]).unwrap();
+                let _r = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::FromApp(LibRequest::CustomNeighborResponse(
+                        self.my_name.clone(),
+                        neighbor_id,
+                        2,
+                        c_data,
+                    )))
+                    .await;
+            }
+            3 => {
+                // żądanie
+                let c_data = CastData::new(vec![3, 13, 23, 33, 43, 53, 63, 73, 83, 93]).unwrap();
+                let _r = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::FromApp(LibRequest::CustomNeighborRequest(
+                        self.my_name.clone(),
+                        neighbor_id,
+                        3,
+                        c_data,
+                    )))
+                    .await;
+                eprintln!("Request sent: {_r:?}");
+            }
+            4 => {
+                // odpowiedź
+                let c_data = CastData::new(vec![94, 84, 74, 64, 54, 44, 34, 24, 14, 4]).unwrap();
+                let _r = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::FromApp(LibRequest::CustomNeighborResponse(
+                        self.my_name.clone(),
+                        neighbor_id,
+                        4,
+                        c_data,
+                    )))
+                    .await;
+            }
+            5 => {
+                // żądanie
+                let c_data = CastData::new(vec![5, 15, 25, 35, 45, 55, 65, 75, 85, 95]).unwrap();
+                let _r = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::FromApp(LibRequest::CustomNeighborRequest(
+                        self.my_name.clone(),
+                        neighbor_id,
+                        5,
+                        c_data,
+                    )))
+                    .await;
+                eprintln!("Request sent: {_r:?}");
+            }
+            6 => {
+                // odpowiedź
+                let c_data = CastData::new(vec![96, 86, 76, 66, 56, 46, 36, 26, 16, 6]).unwrap();
+                let _r = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::FromApp(LibRequest::CustomNeighborResponse(
+                        self.my_name.clone(),
+                        neighbor_id,
+                        6,
+                        c_data,
+                    )))
+                    .await;
+            }
+            7 => {
+                // żądanie
+                let c_data = CastData::new(vec![7, 17, 27, 37, 47, 57, 67, 77, 87, 97]).unwrap();
+                let _r = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::FromApp(LibRequest::CustomNeighborRequest(
+                        self.my_name.clone(),
+                        neighbor_id,
+                        250,
+                        c_data,
+                    )))
+                    .await;
+                eprintln!("Request sent: {_r:?}");
+            }
+            8 => {
+                // odpowiedź
+                let c_data = CastData::new(vec![98, 88, 78, 68, 58, 48, 38, 28, 18, 8]).unwrap();
+                let _r = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::FromApp(LibRequest::CustomNeighborResponse(
+                        self.my_name.clone(),
+                        neighbor_id,
+                        251,
+                        c_data,
+                    )))
+                    .await;
+            }
+            o => {
+                eprintln!("Unexpected Neighbor context item {o}");
             }
         }
     }
