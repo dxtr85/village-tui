@@ -186,6 +186,12 @@ impl ForumLogic {
 
         eprintln!("Forum is all done.");
         if let Some((switch_app, s_name)) = switch_to_opt {
+            let _ = self
+                .to_app_mgr_send
+                .send(ToAppMgr::FromApp(dapp_lib::LibRequest::SetActiveApp(
+                    s_name.clone(),
+                )))
+                .await;
             Some((Some(switch_app), s_name, self.to_user_recv, toolset))
         } else {
             let _ = self.to_app_mgr_send.send(ToAppMgr::Quit).await;
