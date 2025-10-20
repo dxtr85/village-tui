@@ -1,6 +1,4 @@
-use dapp_lib::prelude::{
-    load_content_from_disk, read_datastore_from_disk, GnomeId, StoragePolicy, Transport,
-};
+use dapp_lib::prelude::{load_content_from_disk, read_datastore_from_disk, GnomeId, StoragePolicy};
 use dapp_lib::prelude::{DataType, NetworkSettings};
 use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader};

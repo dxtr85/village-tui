@@ -947,7 +947,7 @@ impl ButtonsLogic {
                         i = i + 1;
                     }
                 }
-                EntriesState::QueryLogic(qt) => {
+                EntriesState::QueryLogic(_qt) => {
                     for b in &mut self.entry_buttons {
                         b.1 = false;
                         b.0.hide(tui_mgr);
@@ -1041,7 +1041,7 @@ impl MenuConfig {
     }
 }
 pub fn serve_forum_tui(
-    my_id: GnomeId,
+    _my_id: GnomeId,
     toolset: Toolset,
     // mut tui_mgr: Manager,
     to_app: Sender<FromForumView>,
@@ -1050,8 +1050,8 @@ pub fn serve_forum_tui(
     // config: Configuration,
     // ) -> (Manager, Configuration) {
 ) -> Toolset {
-    let (mut tui_mgr, config, e_opt, c_opt, s_opt, i_opt, pe_opt) = toolset.unfold();
-    let mut creator = c_opt.unwrap();
+    let (mut tui_mgr, config, e_opt, _c_opt, s_opt, _i_opt, pe_opt) = toolset.unfold();
+    // let mut creator = c_opt.unwrap();
     let mut selector = s_opt.unwrap();
 
     // TODO: PEditor should be created once upon
@@ -1066,11 +1066,10 @@ pub fn serve_forum_tui(
     // TODO: do not create a new display every time Forum App is opened
     let main_display = tui_mgr.new_display(true);
     let (cols, rows) = tui_mgr.screen_size();
-    let mut frame = vec![Glyph::blue(); cols * rows];
+    let frame = vec![Glyph::blue(); cols * rows];
     // Forum
     let mut buttons_logic = ButtonsLogic::new(&mut tui_mgr);
-    let mut action = None;
-    action = buttons_logic.activate(&mut tui_mgr);
+    let mut action = buttons_logic.activate(&mut tui_mgr);
     // let mut active_button = 0;
     // let mut entry_buttons = Vec::with_capacity((rows - 4) >> 1);
     // let mut active_entry = 0;
@@ -1211,7 +1210,7 @@ pub fn serve_forum_tui(
                     tui_mgr.restore_display(main_display, true);
                     buttons_logic.activate_menu(MenuType::Settings, &mut tui_mgr);
                 }
-                ToForumView::ShowCapability(cap, v_gids) => {
+                ToForumView::ShowCapability(_cap, v_gids) => {
                     // TODO: First approach is to reuse existing Selector.
                     // One item could be for adding new GnomeId into this Cap.
                     // But we can not currently apply dedicated logic for
@@ -1246,7 +1245,7 @@ pub fn serve_forum_tui(
                     }
                     eprintln!("ForumTUI should present cap",);
                 }
-                ToForumView::ShowByteSet(bs_id, bs) => {
+                ToForumView::ShowByteSet(bs_id, _bs) => {
                     // TODO
                     eprintln!("ForumTUI should present ByteSet({bs_id})");
                 }

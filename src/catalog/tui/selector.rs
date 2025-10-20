@@ -31,7 +31,7 @@ pub struct Selector {
     height: usize,
     options: Vec<Option>,
     selected_option: usize,
-    last_updated_row: usize,
+    _last_updated_row: usize,
 }
 
 impl Selector {
@@ -61,7 +61,7 @@ impl Selector {
             height,
             options: tags,
             selected_option: 0,
-            last_updated_row: 1,
+            _last_updated_row: 1,
         }
     }
     pub fn cleanup(&self, main_display: usize, mgr: &mut Manager) {
@@ -137,7 +137,7 @@ impl Selector {
             option_pages.push(vec![]);
         }
         let mut curr_page = 0;
-        let mut options_count = total_added;
+        let options_count = total_added;
         let mut filter_updated = false;
         options_len = option_pages[curr_page].len();
         let mut opt_page = &option_pages[curr_page];
@@ -152,7 +152,7 @@ impl Selector {
 
         loop {
             if let Some(char) = mgr.read_char() {
-                let mut action = Action::None;
+                let action;
                 // eprintln!("A char read {:?}", char);
                 if let Some(key) = map_private_char_to_key(char) {
                     // Now that we added filter and read char instead of Key

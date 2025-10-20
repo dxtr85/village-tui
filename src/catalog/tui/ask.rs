@@ -58,7 +58,7 @@ impl Question {
                         break;
                     }
                     Key::N | Key::ShiftN => break,
-                    other => {}
+                    _other => {}
                 }
             }
         }

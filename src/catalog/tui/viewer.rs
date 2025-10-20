@@ -48,14 +48,14 @@ impl Viewer {
     pub fn show(
         &mut self,
         mgr: &mut Manager,
-        manifest: &Manifest,
+        _manifest: &Manifest,
         read_only: bool,
         d_type: DataType,
-        tags: Vec<u8>,
-        description: String,
+        _tags: Vec<u8>,
+        _description: String,
         d_type_map: &HashMap<DataType, String>,
     ) -> Option<(DataType, Data)> {
-        let d_text = if let Some(text) = d_type_map.get(&d_type) {
+        let d_text = if let Some(_text) = d_type_map.get(&d_type) {
             &format!(
                 "Define new DataType                       bytes left: {}",
                 30

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use animaterm::{Animation, Color, Glyph, Graphic, Manager, Timestamp};
+use animaterm::{Animation, Glyph, Graphic, Manager, Timestamp};
 use dapp_lib::prelude::{Capabilities, Policy, Requirement};
 
 #[derive(Debug)]
@@ -195,12 +195,13 @@ impl PolicyEditor {
             return;
         }
         let mut frame = vec![Glyph::transparent(); self.size.0 * self.size.1];
-        let mut block = &Block {
-            start_x: 0,
-            size_x: 0,
-            start_y: 0,
-            size_y: 0,
-        };
+        let block;
+        //  = &Block {
+        //     start_x: 0,
+        //     size_x: 0,
+        //     start_y: 0,
+        //     size_y: 0,
+        // };
         match self.selection.0 {
             0 => {
                 block = &self.pyramid.top;
@@ -292,12 +293,13 @@ impl PolicyEditor {
             return;
         }
         let mut frame = vec![Glyph::transparent(); self.size.0 * self.size.1];
-        let mut block = &Block {
-            start_x: 0,
-            size_x: 0,
-            start_y: 0,
-            size_y: 0,
-        };
+        let block;
+        //  = &Block {
+        //     start_x: 0,
+        //     size_x: 0,
+        //     start_y: 0,
+        //     size_y: 0,
+        // };
         match self.selection.0 {
             0 => {
                 match self.selection.1 {
@@ -672,7 +674,7 @@ impl ReqTree {
     }
 }
 #[derive(Clone, Copy, Debug)]
-enum Req {
+pub enum Req {
     And,
     Or,
     Has(Capabilities),

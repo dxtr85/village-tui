@@ -39,7 +39,7 @@ pub struct CMenu {
 
 impl CMenu {
     pub fn new(mgr: &mut Manager) -> Self {
-        let (cols, rows) = mgr.screen_size();
+        let (_cols, _rows) = mgr.screen_size();
         let width = 15;
         let height = 8;
         let g = Glyph::char(' ');

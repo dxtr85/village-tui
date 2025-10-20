@@ -755,10 +755,10 @@ pub fn serve_catalog_tui(
                     //TODO: First we check if this content should be displayed on screen
                     let mut filtered_tags = village.filter_visible_tags(tags);
                     // if so, we get all it's current instances as Tile
-                    let mut t_headers = village.get_tile_headers();
+                    let t_headers = village.get_tile_headers();
                     let tile_locations = t_headers
                         .iter()
-                        .filter(|(_loc, ttype)| matches!(ttype, TileType::Content(d_type, c_id)));
+                        .filter(|(_loc, ttype)| matches!(ttype, TileType::Content(_d_type, _c_id)));
                     eprintln!("tlocs: {:?}", tile_locations);
                     for (loc, _t) in tile_locations {
                         eprintln!("tlocs: {:?}", _t);
@@ -778,7 +778,7 @@ pub fn serve_catalog_tui(
                 ToCatalogView::HideContent(c_id, tags) => {
                     village.hide_content(c_id, tags, &mut mgr);
                 }
-                ToCatalogView::ContentHeader(c_id, data) => {
+                ToCatalogView::ContentHeader(c_id, _data) => {
                     eprintln!("Showing Contents of {}", c_id,);
                     // let read_only = !am_i_founder;
 
@@ -983,7 +983,7 @@ fn swap_tiles(
                     TileType::Application => {
                         //TODO
                     }
-                    TileType::Content(d_type, c_id) => {
+                    TileType::Content(_d_type, _c_id) => {
                         // TODO: need to define a better algorithm
                         //
                         // if let Some(tile) = village.tiles.get_mut(&slot) {

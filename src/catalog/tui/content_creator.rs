@@ -42,7 +42,7 @@ pub struct Creator {
     button_apply: Button,
     button_cancel: Button,
     width: usize,
-    height: usize,
+    _height: usize,
 }
 
 impl Creator {
@@ -70,7 +70,7 @@ impl Creator {
             button_apply,
             button_cancel,
             width,
-            height,
+            _height: height,
         }
     }
 

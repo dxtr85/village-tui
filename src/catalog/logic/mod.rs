@@ -373,7 +373,7 @@ impl CatalogLogic {
         // to_presentation_msg_recv: std::sync::mpsc::Receiver<ToCatalogView>,
         // wrapped_sender: ASender<InternalMsg>,
     ) -> Option<(Option<AppType>, SwarmName, AReceiver<InternalMsg>, Toolset)> {
-        let (mut tui_mgr, config, e_opt, c_opt, s_opt, i_opt, pe_opt) = toolset.unfold();
+        let (mut tui_mgr, config, e_opt, c_opt, s_opt, i_opt, _pe_opt) = toolset.unfold();
         let mut return_val = None;
         let (cols, rows) = tui_mgr.screen_size();
         let frame = vec![Glyph::plain(); cols * rows];
@@ -386,22 +386,22 @@ impl CatalogLogic {
         // so that switching between apps  should be seamless.
         // That internal massage should be served by each app's
         // internal logic.
-        let mut editor = if let Some(edt) = e_opt {
+        let editor = if let Some(edt) = e_opt {
             edt
         } else {
             Editor::new(&mut tui_mgr)
         };
-        let mut creator = if let Some(crt) = c_opt {
+        let creator = if let Some(crt) = c_opt {
             crt
         } else {
             Creator::new(&mut tui_mgr)
         };
-        let mut selector = if let Some(slc) = s_opt {
+        let selector = if let Some(slc) = s_opt {
             slc
         } else {
             Selector::new(AppType::Catalog, &mut tui_mgr)
         };
-        let mut indexer = if let Some(idx) = i_opt {
+        let indexer = if let Some(idx) = i_opt {
             idx
         } else {
             Indexer::new(&mut tui_mgr)
@@ -782,14 +782,14 @@ impl CatalogLogic {
                             // but for now we need to implement something simple
                             //
                         }
-                        ToApp::HeapData(s_id, m_type, data, singed_by) => {
+                        ToApp::HeapData(_s_id, m_type, _data, _singed_by) => {
                             eprintln!("Catalog recv HeapData({})", m_type);
                         }
-                        ToApp::CustomNeighborRequest(s_id, g_id, req_id, c_data) => {
+                        ToApp::CustomNeighborRequest(_s_id, _g_id, req_id, _c_data) => {
                             //TODO
                             eprintln!("Catalog: CustomNeighborRequest({req_id})");
                         }
-                        ToApp::CustomNeighborResponse(s_id, g_id, resp_id, c_data) => {
+                        ToApp::CustomNeighborResponse(_s_id, _g_id, resp_id, _c_data) => {
                             //TODO
                             eprintln!("Catalog: CustomNeighborResponse({resp_id})");
                         }
@@ -1729,7 +1729,7 @@ impl CatalogLogic {
                                 }
                                 TuiState::Indexing(
                                     c_id,
-                                    d_id_opt,
+                                    _d_id_opt,
                                     d_type,
                                     tag_ids,
                                     descr,
@@ -1876,7 +1876,7 @@ impl CatalogLogic {
                                             "Supposed to show search results of {:?}",
                                             i_result
                                         );
-                                        if let Some((text, count)) = s_list.get(idx) {
+                                        if let Some((text, _count)) = s_list.get(idx) {
                                             let _ = self
                                                 .to_app_mgr_send
                                                 .send(ToAppMgr::FromApp(
@@ -2156,7 +2156,7 @@ impl CatalogLogic {
                         let link_res = data_to_link(first_data);
                         if link_res.is_err() {
                             eprintln!("Unable to ReadLink: {}", link_res.err().unwrap());
-                        } else if let Some((s_name, target_c_id, descr, data, ti_opt)) =
+                        } else if let Some((s_name, target_c_id, _descr, _data, _ti_opt)) =
                             link_res.unwrap().link_params()
                         {
                             // 3 set target swarm active
@@ -2396,7 +2396,7 @@ impl CatalogLogic {
     async fn run_cmenu_action_on_content(
         &mut self,
         c_id: ContentID,
-        d_type: DataType,
+        _d_type: DataType,
         action: usize,
     ) {
         match action {
@@ -2644,7 +2644,8 @@ impl CatalogLogic {
             8 => {
                 //TODO
                 eprintln!("Shold list all Searches running");
-                self.to_app_mgr_send
+                let _ = self
+                    .to_app_mgr_send
                     .send(ToAppMgr::FromApp(LibRequest::ListSearches))
                     .await;
             }

@@ -13,9 +13,9 @@ pub struct Indexer {
     visible_buttons: usize,
     cursor_position: usize,
     max_position: (usize, usize),
-    allow_newlines: bool,
-    read_only: bool,
-    byte_limit: Option<u16>,
+    _allow_newlines: bool,
+    _read_only: bool,
+    _byte_limit: Option<u16>,
 }
 impl Indexer {
     pub fn new(mgr: &mut Manager) -> Self {
@@ -55,9 +55,9 @@ impl Indexer {
             visible_buttons,
             cursor_position: 0,
             max_position: (cols - 2, rows - 2),
-            allow_newlines: true,
-            read_only: false,
-            byte_limit: None,
+            _allow_newlines: true,
+            _read_only: false,
+            _byte_limit: None,
         };
         indexer.show(mgr);
         indexer
@@ -137,7 +137,7 @@ impl Indexer {
     ) -> Option<usize> {
         mgr.restore_display(self.display_id, true);
         self.header_chunks = vec![];
-        let h_len = headers.len();
+        // let h_len = headers.len();
         let b_len = self.buttons.len();
         let mut curr_chunk = Vec::with_capacity(b_len);
         let mut curr_size = 0;

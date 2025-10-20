@@ -93,7 +93,7 @@ pub struct ForumLogic {
     // posts: ()
     presentation_state: PresentationState,
     to_app_mgr_send: ASender<ToAppMgr>,
-    to_user_send: ASender<InternalMsg>,
+    _to_user_send: ASender<InternalMsg>,
     to_user_recv: AReceiver<InternalMsg>,
     to_tui_send: Sender<ToForumView>,
     to_tui_recv: Option<Receiver<ToForumView>>,
@@ -121,7 +121,7 @@ impl ForumLogic {
             shell,
             topics: vec![],
             to_app_mgr_send,
-            to_user_send,
+            _to_user_send: to_user_send,
             to_user_recv,
             to_tui_send,
             to_tui_recv: Some(to_tui_recv),
@@ -131,7 +131,7 @@ impl ForumLogic {
     pub async fn run(
         mut self,
         founder: GnomeId,
-        config_dir: PathBuf,
+        _config_dir: PathBuf,
         toolset: Toolset,
         // mut config: Configuration,
         // mut tui_mgr: Manager,
@@ -247,14 +247,14 @@ impl ForumLogic {
                     eprintln!("Received Content from other Swarm");
                 }
             }
-            ToApp::FirstPages(s_id, fp_vec) => {
-                if s_id == self.shell.swarm_id {
-                    //TODO
-                    self.process_first_pages(fp_vec).await;
-                    self.present_topics().await;
-                    eprintln!("Got first pages");
-                }
-            }
+            // ToApp::FirstPages(s_id, fp_vec) => {
+            //     if s_id == self.shell.swarm_id {
+            //         //TODO
+            //         self.process_first_pages(fp_vec).await;
+            //         self.present_topics().await;
+            //         eprintln!("Got first pages");
+            //     }
+            // }
             ToApp::ContentChanged(s_id, c_id, d_type, first_page_opt) => {
                 if s_id == self.shell.swarm_id {
                     if let Some(first_page) = first_page_opt {
@@ -352,7 +352,7 @@ impl ForumLogic {
                     self.present_topics().await;
                 }
             }
-            ToApp::HeapData(s_id, m_type, data, signed_by) => {
+            ToApp::HeapData(s_id, m_type, _data, _signed_by) => {
                 if s_id == self.shell.swarm_id {
                     eprintln!("Forum recv Heap Data {}", m_type);
                 } else {
@@ -412,7 +412,7 @@ impl ForumLogic {
                         //TODO:
                         self.presentation_state = PresentationState::StoredCapabilities(None);
                     }
-                    Action::ByteSets(is_run) => {
+                    Action::ByteSets(_is_run) => {
                         //TODO:
                         self.presentation_state = PresentationState::RunningCapabilities(None);
                         let _ = self
@@ -430,7 +430,7 @@ impl ForumLogic {
                     Action::AddNew(param) => {
                         self.add_new_action(param).await;
                     }
-                    Action::Edit(id) => {
+                    Action::Edit(_id) => {
                         // Here we directly send a SyncMessage::UserDefined for testing
                         let _ = self
                             .to_app_mgr_send
@@ -462,7 +462,7 @@ impl ForumLogic {
                     Action::LastPage => {
                         //TODO
                     }
-                    Action::Filter(filter) => {
+                    Action::Filter(_filter) => {
                         //TODO
                     }
                     Action::Query(qt) => {
@@ -491,7 +491,7 @@ impl ForumLogic {
                         self.update_topic(0, m_head);
                         self.present_topics().await;
                     }
-                    Action::Posts(topic_id) => {
+                    Action::Posts(_topic_id) => {
                         //TODO
                     }
                     Action::PolicyAction(p_act) => {
@@ -501,7 +501,7 @@ impl ForumLogic {
                         self.serve_selected(id_vec).await;
                     }
                     Action::EditorResult(str_o) => self.process_edit_result(str_o).await,
-                    Action::FollowLink(s_name, c_id, pg_id) => {
+                    Action::FollowLink(s_name, _c_id, _pg_id) => {
                         // Follow Link
                         if s_name.founder.is_any() {
                             eprintln!("Should go back to Village");
@@ -537,7 +537,7 @@ impl ForumLogic {
     async fn append_first_page(&mut self, c_id: ContentID, d_type: DataType, data: Data) {
         self.process_content(c_id, d_type, 0, vec![data]).await;
     }
-    async fn process_first_pages(&mut self, mut pg_vec: Vec<(ContentID, DataType, Data)>) {
+    async fn process_first_pages(&mut self, pg_vec: Vec<(ContentID, DataType, Data)>) {
         // First pages start from CID==1
         if pg_vec.is_empty() {
             // eprintln!("process_first_pages EMPTY");
@@ -1004,7 +1004,7 @@ impl ForumLogic {
                     &mut self.presentation_state,
                     PresentationState::MainLobby(None),
                 );
-                if let PresentationState::Pyramid(p, r) = curr_state {
+                if let PresentationState::Pyramid(_p, r) = curr_state {
                     let (policies, p_strings) = Policy::mapping();
                     let _ = self
                         .to_tui_send
@@ -1023,7 +1023,7 @@ impl ForumLogic {
                     &mut self.presentation_state,
                     PresentationState::MainLobby(None),
                 );
-                if let PresentationState::Pyramid(p, r) = curr_state {
+                if let PresentationState::Pyramid(p, _r) = curr_state {
                     let user_def_caps: Vec<u8> = vec![0];
                     let byte_sets: Vec<u8> = vec![0, 1, 2];
                     let two_byte_sets: Vec<u8> = vec![3];
@@ -1429,7 +1429,7 @@ impl ForumLogic {
                     eprintln!("Unable to tell which page is shown (5)");
                     return;
                 }
-                let page = page_opt.unwrap();
+                // let page = page_opt.unwrap();
                 // Here we should store only a mapping from on_page_id
                 // to actual policy.
                 // And now we should retrieve that Policy from Manifest,
@@ -1441,7 +1441,7 @@ impl ForumLogic {
                     eprintln!("Unable to tell which page is shown (6)");
                     return;
                 }
-                let page = page_opt.unwrap();
+                // let page = page_opt.unwrap();
                 // similar to StoredPolicies
             }
             // PresentationState::StoredByteSets(page_opt) => {
@@ -1453,14 +1453,14 @@ impl ForumLogic {
             //     let page = page_opt.unwrap();
             //     // similar to StoredPolicies
             // }
-            PresentationState::SelectingOnePolicy(pol_vec, req) => {
+            PresentationState::SelectingOnePolicy(_pol_vec, _req) => {
                 //TODO
                 eprintln!("serve queue while in SelectingOnePolicy");
             }
-            PresentationState::SelectingOneRequirement(req_vec, pol, r_tree) => {
+            PresentationState::SelectingOneRequirement(_req_vec, _pol, _r_tree) => {
                 eprintln!("serve queue while in SelectingOneRequirement");
             }
-            PresentationState::Pyramid(pol, req) => {
+            PresentationState::Pyramid(_pol, _req) => {
                 eprintln!("serve queue while in Pyramid");
             }
             PresentationState::Capability(c, v_gid) => {
@@ -1482,13 +1482,13 @@ impl ForumLogic {
                     Box::new(PresentationState::Capability(*c, v_gid.clone())),
                 ));
             }
-            PresentationState::Editing(id, _prev_state) => {
+            PresentationState::Editing(_id, _prev_state) => {
                 eprintln!("Got ID when in state Editing");
             }
             PresentationState::SelectingOneCapability(_v_caps, _p_state) => {
                 eprintln!("Got ID when in state SelectingOneCapability");
             }
-            PresentationState::CreatingByteSet(opts, is_run, ex_opt) => {
+            PresentationState::CreatingByteSet(_opts, _is_run, _ex_opt) => {
                 eprintln!("Got ID when creating ByteSet");
             }
             PresentationState::ShowingPost(_c, _p) => {
@@ -1513,7 +1513,7 @@ impl ForumLogic {
             )))
             .await;
     }
-    async fn store_policy(&mut self, pol: Policy, req: Requirement) {
+    async fn store_policy(&mut self, _pol: Policy, _req: Requirement) {
         eprintln!("In store_policy");
         // TODO: update selected policy to new value.
         // we should update Manifest also at Swarm level
