@@ -1217,7 +1217,7 @@ impl CatalogLogic {
                     (false, true),
                     " Max size: 32  Oneline  Change Street name    (TAB to finish)".to_string(),
                     Some(tag_text.clone()),
-                    true,
+                    false,
                     Some(32),
                 ));
                                             eprintln!("Should change street name for id {tag_id}");
@@ -1336,11 +1336,16 @@ impl CatalogLogic {
                                             .dtype_string(c_context.data_type().byte());
                                         if !c_context.is_read_only() {
                                             let mut new_context = c_context.clone();
-                                            new_context.set_description(
-                                                Description::new(text.clone()).unwrap(),
-                                            );
-                                            new_state = TuiState::Creator(new_context);
-                                            eprintln!("Requesting display creator again");
+
+                                            // TODO: limit chars for Description
+                                            let desc_opt = Description::new(text.clone());
+                                            if let Ok(descr) = desc_opt {
+                                                new_context.set_description(descr);
+                                                new_state = TuiState::Creator(new_context);
+                                            } else {
+                                                eprintln!("Description too long!");
+                                            }
+                                            // eprintln!("Requesting display creator again");
                                             let _ =
                                                 self.to_tui.send(ToCatalogView::DisplayCreator(
                                                     false, dtype_name, text, tag_names,
@@ -1555,10 +1560,10 @@ impl CatalogLogic {
                                             );
                                             let _ = self.to_tui.send(ToCatalogView::DisplayEditor(
                                             (c_context.is_read_only(),self.my_name ==self.active_swarm.swarm_name),
-                                    " Max size: 764  Multiline  Content Description    (TAB to finish)".to_string(),
+                                    " Max size: 128  Multiline  Content Description    (TAB to finish)".to_string(),
                                     Some(c_context.description().text()),
                                     true,
-                                    Some(764),
+                                    Some(128),
                                     ));
                                         }
                                         other => {
