@@ -34,7 +34,7 @@ use dapp_lib::prelude::AppType;
 #[derive(Debug)]
 enum PresentationState {
     MainLobby(Option<u16>),
-    Topics(u16, Option<u16>),
+    Topic(u16, Option<u16>),
     ShowingPost(u16, u16),
     Settings,
     RunningPolicies(Option<(u16, HashMap<u16, (Policy, Requirement)>)>),
@@ -52,33 +52,40 @@ enum PresentationState {
     CreatingByteSet(Vec<u16>, bool, Option<(u8, HashMap<u8, ByteSet>)>),
 }
 
-impl PresentationState {
-    pub fn is_main_menu(&self) -> bool {
-        if let PresentationState::MainLobby(_pg_o) = self {
-            true
-        } else {
-            false
-        }
-    }
-    pub fn is_topic(&self) -> bool {
-        if let PresentationState::Topics(_c_id, _pg_o) = self {
-            true
-        } else {
-            false
-        }
-    }
-    pub fn is_showing_post(&self, c_id: &u16, d_id: &u16) -> bool {
-        if let PresentationState::ShowingPost(c, d) = self {
-            if c == c_id && d == d_id {
-                true
-            } else {
-                false
-            }
-        } else {
-            false
-        }
-    }
-}
+// impl PresentationState {
+//     pub fn is_main_menu(&self) -> bool {
+//         if let PresentationState::MainLobby(_pg_o) = self {
+//             true
+//         } else {
+//             false
+//         }
+//     }
+//     pub fn is_topic(&self) -> bool {
+//         if let PresentationState::Topic(_c_id, _pg_o) = self {
+//             true
+//         } else {
+//             false
+//         }
+//     }
+//     pub fn is_showing_post(&self, c_id: &u16, d_id: &u16) -> bool {
+//         if let PresentationState::ShowingPost(c, d) = self {
+//             if c == c_id && d == d_id {
+//                 true
+//             } else {
+//                 false
+//             }
+//         } else {
+//             false
+//         }
+//     }
+//     pub fn is_editing(&self) -> bool {
+//         if let PresentationState::Editing(_pg_o, _prev_st) = self {
+//             true
+//         } else {
+//             false
+//         }
+//     }
+// }
 // use crate::common::poledit::PolAction;
 use crate::forum::tui::serve_forum_tui;
 use crate::forum::tui::Action;
@@ -89,7 +96,7 @@ use crate::Toolset;
 pub struct ForumLogic {
     my_id: GnomeId,
     shell: SwarmShell,
-    topics: Vec<String>,
+    entries: Vec<String>,
     // posts: ()
     presentation_state: PresentationState,
     to_app_mgr_send: ASender<ToAppMgr>,
@@ -119,7 +126,7 @@ impl ForumLogic {
             presentation_state: PresentationState::MainLobby(None),
             my_id,
             shell,
-            topics: vec![],
+            entries: vec![],
             to_app_mgr_send,
             _to_user_send: to_user_send,
             to_user_recv,
@@ -263,6 +270,7 @@ impl ForumLogic {
             // }
             ToApp::ContentChanged(s_id, c_id, d_type, first_page_opt) => {
                 if s_id == self.shell.swarm_id {
+                    eprintln!("ContentChanged for {c_id}");
                     if let Some(first_page) = first_page_opt {
                         if c_id == 0 {
                             // TODO: this will crash once
@@ -273,7 +281,11 @@ impl ForumLogic {
                                 .await
                         }
                         self.present_topics().await;
+                    } else {
+                        eprintln!("But no first page!");
                     }
+                } else {
+                    eprintln!("ContentChanged for {s_id}, my_id:{}", self.shell.swarm_id);
                 }
             }
             ToApp::RunningPolicies(mut policies) => {
@@ -437,18 +449,51 @@ impl ForumLogic {
                         self.add_new_action(param).await;
                     }
                     Action::Edit(_id) => {
+                        let curr_state = std::mem::replace(
+                            &mut self.presentation_state,
+                            PresentationState::Settings,
+                        );
+                        match curr_state {
+                            PresentationState::Topic(c_id, pg_opt) => {
+                                eprintln!("Action Edit when in Topic");
+                                if let Some(page) = pg_opt {
+                                    let post_id = (page * 10) + _id;
+                                    // TODO: read contents of post,
+                                    let _ = self
+                                        .to_app_mgr_send
+                                        .send(ToAppMgr::FromApp(
+                                            dapp_lib::LibRequest::ReadPagesRange(
+                                                self.shell.swarm_id,
+                                                c_id,
+                                                post_id,
+                                                post_id,
+                                            ),
+                                        ))
+                                        .await;
+                                    self.presentation_state =
+                                        PresentationState::Editing(None, Box::new(curr_state));
+                                    // present them to user in writable editor
+                                    // once finished editing send regular ChangeData msg (for now)
+                                } else {
+                                    eprintln!("Can not edit, unknown Page.");
+                                }
+                            }
+                            _other => {
+                                eprintln!("Edit not supported in {:?}", _other);
+                            }
+                        }
                         // Here we directly send a SyncMessage::UserDefined for testing
-                        let _ = self
-                            .to_app_mgr_send
-                            .send(ToAppMgr::UserDefined(
-                                self.shell.swarm_id,
-                                21,
-                                17,
-                                111,
-                                Data::new(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]).unwrap(),
-                            ))
-                            .await;
-                        eprintln!("Posted UserDefined request");
+                        // let _ = self
+                        //     .to_app_mgr_send
+                        //     .send(ToAppMgr::UserDefined(
+                        //         self.shell.swarm_id,
+                        //         21,
+                        //         17,
+                        //         111,
+                        //         Data::new(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]).unwrap(),
+                        //     ))
+                        //     .await;
+                        // eprintln!("Posted UserDefined request");
                     }
                     Action::Delete(id) => {
                         self.delete_action(id).await;
@@ -478,7 +523,7 @@ impl ForumLogic {
                         //TODO
                         eprintln!("Action::MainMenu presenting topics");
                         self.presentation_state = PresentationState::MainLobby(None);
-                        self.topics = vec![];
+                        self.entries = vec![];
                         let _ = self
                             .to_app_mgr_send
                             .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadFirstPages(
@@ -584,21 +629,15 @@ impl ForumLogic {
                 if id == 0 {
                     // regular Topic
                     // TODO: include start_page
-                    if self.presentation_state.is_main_menu() {
-                        //TODO
-                        let first = d_vec.remove(0);
-                        if let Ok(text) = std::str::from_utf8(&first.bytes()) {
-                            let first_line = if let Some(line) = text.lines().next() {
-                                line.to_string()
-                            } else {
-                                "Empty".to_string()
-                            };
-                            let header: String = first_line.chars().take(64).collect();
-                            self.update_topic(c_id as usize, header.trim().to_string());
-                        };
-                    } else if self.presentation_state.is_topic() {
-                        // TODO: include start_page
-                        for (id, first) in d_vec.into_iter().enumerate() {
+                    let curr_state = std::mem::replace(
+                        &mut self.presentation_state,
+                        PresentationState::Settings,
+                    );
+                    match curr_state {
+                        PresentationState::MainLobby(_pg_opt) => {
+                            // if self.presentation_state.is_main_menu() {
+                            //TODO
+                            let first = d_vec.remove(0);
                             if let Ok(text) = std::str::from_utf8(&first.bytes()) {
                                 let first_line = if let Some(line) = text.lines().next() {
                                     line.to_string()
@@ -606,20 +645,69 @@ impl ForumLogic {
                                     "Empty".to_string()
                                 };
                                 let header: String = first_line.chars().take(64).collect();
-                                self.update_topic(id, header.trim().to_string());
+                                self.update_topic(c_id as usize, header.trim().to_string());
                             };
+                            self.presentation_state = curr_state;
                         }
-                    } else if self.presentation_state.is_showing_post(&c_id, &start_page) {
-                        let initial_text =
-                            Some(String::from_utf8(d_vec[0].clone().bytes()).unwrap());
-                        let e_p = EditorParams {
-                            initial_text,
-                            allow_newlines: true,
-                            chars_limit: None,
-                            text_limit: None,
-                            read_only: true,
-                        };
-                        let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
+                        PresentationState::Topic(_t_id, _pg_opt) => {
+                            // } else if self.presentation_state.is_topic() {
+                            // TODO: include start_page
+                            for (id, first) in d_vec.into_iter().enumerate() {
+                                if let Ok(text) = std::str::from_utf8(&first.bytes()) {
+                                    let first_line = if let Some(line) = text.lines().next() {
+                                        line.to_string()
+                                    } else {
+                                        "Empty".to_string()
+                                    };
+                                    let header: String = first_line.chars().take(64).collect();
+                                    self.update_topic(id, header.trim().to_string());
+                                };
+                            }
+                            self.presentation_state = curr_state;
+                        }
+                        PresentationState::ShowingPost(_t_id, _p_id) => {
+                            // } else if self.presentation_state.is_showing_post(&c_id, &start_page) {
+                            let initial_text =
+                                Some(String::from_utf8(d_vec[0].clone().bytes()).unwrap());
+                            let e_p = EditorParams {
+                                initial_text,
+                                allow_newlines: true,
+                                chars_limit: None,
+                                text_limit: None,
+                                read_only: true,
+                            };
+                            let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
+                            self.presentation_state = curr_state;
+                        }
+
+                        PresentationState::Editing(what_opt, prev_state) => {
+                            eprintln!("ReadSuccess in Editing State");
+                            // TODO: check if what we got matches what we want!
+
+                            let new_what;
+                            if what_opt.is_none() {
+                                new_what = Some(start_page);
+                                let initial_text =
+                                    Some(String::from_utf8(d_vec[0].clone().bytes()).unwrap());
+                                let e_p = EditorParams {
+                                    initial_text,
+                                    allow_newlines: true,
+                                    chars_limit: None,
+                                    text_limit: Some(1000),
+                                    read_only: false,
+                                };
+                                let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
+                            } else {
+                                new_what = None;
+                            }
+                            eprintln!("NewWhat: {new_what:?}");
+                            self.presentation_state =
+                                PresentationState::Editing(new_what, prev_state);
+                        }
+                        other => {
+                            eprintln!("Unexpected ReadSuccess when in state: {:?}", other);
+                            self.presentation_state = other;
+                        }
                     }
                 } else {
                     eprintln!("Forum DType: {id}");
@@ -632,11 +720,11 @@ impl ForumLogic {
     }
 
     fn update_topic(&mut self, c_id: usize, header: String) {
-        let t_len = self.topics.len();
+        let t_len = self.entries.len();
         for i in t_len..=c_id {
-            self.topics.push(format!("Empty {}", i));
+            self.entries.push(format!("Empty {}", i));
         }
-        self.topics[c_id] = header;
+        self.entries[c_id] = header;
     }
 
     fn process_manifest(&mut self, d_type: DataType, d_vec: Vec<Data>) {
@@ -649,10 +737,10 @@ impl ForumLogic {
             line.chars().take(64).collect()
         };
         desc = desc.trim().to_string();
-        if self.topics.is_empty() {
-            self.topics.push(desc);
+        if self.entries.is_empty() {
+            self.entries.push(desc);
         } else {
-            self.topics[0] = desc;
+            self.entries[0] = desc;
         }
         self.shell.manifest = manifest;
     }
@@ -662,15 +750,15 @@ impl ForumLogic {
         match curr_state {
             PresentationState::MainLobby(pg_opt) => {
                 let pg = if let Some(pg) = pg_opt { pg } else { 0 };
-                let topics = self.read_topics(pg, 10).await;
+                let topics = self.read_posts(pg, 10).await;
                 let _ = self.to_tui_send.send(ToForumView::TopicsPage(pg, topics));
                 self.presentation_state = PresentationState::MainLobby(Some(pg));
             }
-            PresentationState::Topics(c_id, pg_opt) => {
+            PresentationState::Topic(t_id, pg_opt) => {
                 let pg = if let Some(pg) = pg_opt { pg } else { 0 };
-                let topics = self.read_topics(pg, 10).await;
+                let topics = self.read_posts(pg, 10).await;
                 let _ = self.to_tui_send.send(ToForumView::PostsPage(pg, topics));
-                self.presentation_state = PresentationState::Topics(c_id, Some(pg));
+                self.presentation_state = PresentationState::Topic(t_id, Some(pg));
             }
             other => {
                 eprintln!("Not presenting, state is: {other:?}");
@@ -678,14 +766,14 @@ impl ForumLogic {
             }
         }
     }
-    async fn read_topics(&self, page: u16, page_size: u16) -> Vec<(u16, String)> {
+    async fn read_posts(&self, page: u16, page_size: u16) -> Vec<(u16, String)> {
         let first_idx = (page * page_size) as usize;
         let last_idx = ((page + 1) * page_size) as usize;
-        let t_len = self.topics.len();
+        let t_len = self.entries.len();
         let mut res = Vec::with_capacity(page_size as usize);
         for i in first_idx..last_idx {
             if i < t_len {
-                res.push((i as u16, self.topics[i].clone()));
+                res.push((i as u16, self.entries[i].clone()));
             } else {
                 break;
             }
@@ -717,7 +805,7 @@ impl ForumLogic {
                     Box::new(PresentationState::MainLobby(page_opt)),
                 );
             }
-            PresentationState::Topics(c_id, pg_opt) => {
+            PresentationState::Topic(c_id, pg_opt) => {
                 let e_p = EditorParams {
                     initial_text: Some(format!("Adding new post…")),
 
@@ -731,7 +819,7 @@ impl ForumLogic {
                 // self.presentation_state = PresentationState::MainLobby(page_opt);
                 self.presentation_state = PresentationState::Editing(
                     None,
-                    Box::new(PresentationState::Topics(c_id, pg_opt)),
+                    Box::new(PresentationState::Topic(c_id, pg_opt)),
                 );
             }
             PresentationState::Capability(c, v_gid) => {
@@ -897,6 +985,7 @@ impl ForumLogic {
         //
         match curr_state {
             PresentationState::Editing(id, prev_state) => {
+                eprintln!("State Editing: {id:?}");
                 match *prev_state {
                     PresentationState::Capability(cap, mut vec_gid) => {
                         let id = if let Some(i) = id {
@@ -970,18 +1059,28 @@ impl ForumLogic {
                             self.present_topics().await;
                         }
                     }
-                    PresentationState::Topics(c_id, pg_opt) => {
-                        //TODO: request append data
+                    PresentationState::Topic(c_id, pg_opt) => {
                         if let Some(text) = text {
                             let data = Data::new(text.into_bytes()).unwrap();
-                            let _ = self
-                                .to_app_mgr_send
-                                .send(ToAppMgr::AppendData(self.shell.swarm_id, c_id, data))
-                                .await;
+                            if let Some(id) = id {
+                                // TODO: update existing Post
+                                eprintln!("Should update {id:?}");
+                                let _ = self
+                                    .to_app_mgr_send
+                                    .send(ToAppMgr::UpdateData(self.shell.swarm_id, c_id, id, data))
+                                    .await;
+                            } else {
+                                // request append data
+                                let _ = self
+                                    .to_app_mgr_send
+                                    .send(ToAppMgr::AppendData(self.shell.swarm_id, c_id, data))
+                                    .await;
+                            }
                         } else {
-                            eprintln!("Not adding, empty text");
+                            eprintln!("Ignore, empty text");
                         }
-                        self.presentation_state = PresentationState::Topics(c_id, pg_opt);
+
+                        self.presentation_state = PresentationState::Topic(c_id, pg_opt);
                         self.present_topics().await;
                         // present topics
                     }
@@ -992,7 +1091,7 @@ impl ForumLogic {
                 }
             }
             PresentationState::ShowingPost(c_id, _pg_id) => {
-                self.presentation_state = PresentationState::Topics(c_id, None);
+                self.presentation_state = PresentationState::Topic(c_id, None);
                 self.present_topics().await;
             }
             other => {
@@ -1268,9 +1367,9 @@ impl ForumLogic {
                             10,
                         )))
                         .await;
-                    self.presentation_state = PresentationState::Topics(topic_id, None);
+                    self.presentation_state = PresentationState::Topic(topic_id, None);
                     eprintln!("cleaning topics…");
-                    self.topics = vec![];
+                    self.entries = vec![];
                     // TODO: instead of opening Editor
                     // switch to selected Topic Menu
                     // and present Posts
@@ -1293,7 +1392,7 @@ impl ForumLogic {
                 // Here logic ends, and once we receive those pages
                 // other logic handles them.
             }
-            PresentationState::Topics(c_id, page_opt) => {
+            PresentationState::Topic(c_id, page_opt) => {
                 //TODO: map query ID to DID using page_opt
                 // and ask AppManager for selected Data.
                 // Once received open Editor

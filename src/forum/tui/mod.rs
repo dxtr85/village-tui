@@ -435,7 +435,7 @@ impl ButtonsLogic {
                         }
                         1 => {
                             // Test button for UserDefined SyncMessage posting
-                            Some(Action::Edit(1))
+                            Some(Action::Edit(self.selected_entry_button as u16))
                         }
                         2 => {
                             // self.activate_menu(4, tui_mgr);
