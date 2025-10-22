@@ -776,7 +776,7 @@ impl ButtonsLogic {
             }
         }
         if !new_list.is_empty() {
-            eprintln!("Received overflowing entrines page!");
+            eprintln!("Received overflowing entries page!");
         }
     }
 

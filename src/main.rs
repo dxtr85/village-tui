@@ -274,6 +274,7 @@ async fn main() {
                 AppType::Forum => {
                     let f_logic = ForumLogic::new(
                         my_name.founder,
+                        tui_mgr.screen_size(),
                         s_name,
                         to_app_mgr_send.clone(),
                         wrapped_sender.clone(),
