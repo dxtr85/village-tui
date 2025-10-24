@@ -782,8 +782,8 @@ impl CatalogLogic {
                             // but for now we need to implement something simple
                             //
                         }
-                        ToApp::HeapData(_s_id, m_type, _data, _singed_by) => {
-                            eprintln!("Catalog recv HeapData({})", m_type);
+                        ToApp::HeapData(_s_id, app_msg, _singed_by) => {
+                            eprintln!("Catalog recv HeapData({})", app_msg.m_type());
                         }
                         ToApp::CustomNeighborRequest(_s_id, _g_id, req_id, _c_data) => {
                             //TODO

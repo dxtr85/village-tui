@@ -58,6 +58,7 @@ pub enum Action {
 pub enum ToForumView {
     TopicsPage(u16, Vec<(u16, String)>),
     PostsPage(u16, Vec<(u16, String)>),
+    Request(Vec<(u16, String)>),
     RunningPoliciesPage(u16, Vec<(u16, String)>),
     StoredPoliciesPage(u16, Vec<(u16, String)>),
     RunningCapabilitiesPage(u16, Vec<(u16, String)>),
@@ -181,7 +182,7 @@ impl ButtonsLogic {
             MenuConfig::new(
                 [
                     ButtonState::Show("← Forum".to_string()),
-                    ButtonState::Hide,
+                    ButtonState::Show("Requests".to_string()),
                     ButtonState::Hide,
                     ButtonState::Hide,
                     ButtonState::Hide,
@@ -220,7 +221,21 @@ impl ButtonsLogic {
                 ]),
             ),
         );
-
+        configs.insert(
+            MenuType::Requests,
+            MenuConfig::new(
+                [
+                    ButtonState::Show("Approve".to_string()),
+                    ButtonState::Show("Reject".to_string()),
+                    ButtonState::Show("← Settings".to_string()),
+                    ButtonState::Hide,
+                    ButtonState::Hide,
+                    ButtonState::Hide,
+                    ButtonState::Hide,
+                ],
+                EntriesState::QueryLogic(QueryType::AllTopics),
+            ),
+        );
         configs.insert(
             MenuType::RunningPolicies,
             MenuConfig::new(
@@ -462,8 +477,9 @@ impl ButtonsLogic {
                             Some(Action::MainMenu)
                         }
                         1 => {
-                            //hidden
-                            None
+                            // Show Menu for 2-steps Requests
+                            self.activate_menu(MenuType::Requests, tui_mgr);
+                            Some(Action::Edit(0))
                         }
                         2 => {
                             //hidden
@@ -475,6 +491,29 @@ impl ButtonsLogic {
                         }
                         _o => {
                             // this should not happen
+                            None
+                        }
+                    }
+                }
+                MenuType::Requests => {
+                    match self.selected_menu_button {
+                        0 => {
+                            // TODO: Approve
+                            self.activate_menu(MenuType::Settings, tui_mgr);
+                            Some(Action::Edit(0))
+                        }
+                        1 => {
+                            // TODO: Reject
+                            self.activate_menu(MenuType::Main, tui_mgr);
+                            Some(Action::Delete(0))
+                        }
+                        2 => {
+                            // Back to Settings menu
+                            self.activate_menu(MenuType::Settings, tui_mgr);
+                            Some(Action::Settings)
+                        }
+                        _o => {
+                            eprintln!("Menu Button id {_o} not supported in Requests ");
                             None
                         }
                     }
@@ -701,6 +740,9 @@ impl ButtonsLogic {
                         }
                         MenuType::Settings => {
                             // DONE: switch to Settings (dedicated logic)
+                        }
+                        MenuType::Requests => {
+                            // TODO/DONE ?
                         }
                         MenuType::RunningPolicies => {
                             // DONE: switch to Pyramid (dedicated logic)
@@ -1008,6 +1050,7 @@ enum MenuType {
     Main,
     Topic,
     Settings,
+    Requests,
     RunningPolicies,
     RunningCapabilities,
     RunningByteSets,
@@ -1161,6 +1204,10 @@ pub fn serve_forum_tui(
                 ToForumView::PostsPage(_pg_id, topics) => {
                     buttons_logic.activate_menu(MenuType::Topic, &mut tui_mgr);
                     buttons_logic.update_entries(topics, &mut tui_mgr);
+                }
+                ToForumView::Request(v_req) => {
+                    buttons_logic.activate_menu(MenuType::Requests, &mut tui_mgr);
+                    buttons_logic.update_entries(v_req, &mut tui_mgr);
                 }
                 ToForumView::RunningPoliciesPage(_pg_no, plcs) => {
                     if buttons_logic.is_current_config_equal(MenuType::RunningPolicies) {

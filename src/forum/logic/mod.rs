@@ -1,4 +1,5 @@
 use crate::catalog::logic::SwarmShell;
+mod message;
 use crate::common::poledit::decompose;
 use crate::common::poledit::PolAction;
 use crate::common::poledit::ReqTree;
@@ -21,6 +22,7 @@ use dapp_lib::prelude::SwarmName;
 use dapp_lib::Data;
 use dapp_lib::ToApp;
 use dapp_lib::ToAppMgr;
+use message::ForumSyncMessage;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -49,6 +51,7 @@ enum PresentationState {
     Capability(Capabilities, Vec<GnomeId>),
     SelectingOneCapability(Vec<Capabilities>, Box<PresentationState>),
     Editing(Option<u16>, Box<PresentationState>),
+    HeapSorting(Option<(ForumSyncMessage, GnomeId)>, Option<Entry>),
     CreatingByteSet(Vec<u16>, bool, Option<(u8, HashMap<u8, ByteSet>)>),
 }
 
@@ -88,7 +91,7 @@ enum PresentationState {
 // }
 // use crate::common::poledit::PolAction;
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 struct Entry {
     author: GnomeId,
     text: String,
@@ -158,6 +161,7 @@ pub struct ForumLogic {
     entries_count: u16,
     shell: SwarmShell,
     entries: Vec<Entry>,
+    last_heap_msg: Option<(ForumSyncMessage, GnomeId)>,
     presentation_state: PresentationState,
     to_app_mgr_send: ASender<ToAppMgr>,
     _to_user_send: ASender<InternalMsg>,
@@ -189,6 +193,7 @@ impl ForumLogic {
             entries_count: ((screen_size.1 - 3) >> 1) as u16,
             shell,
             entries: vec![],
+            last_heap_msg: None,
             to_app_mgr_send,
             _to_user_send: to_user_send,
             to_user_recv,
@@ -463,11 +468,30 @@ impl ForumLogic {
                     self.present_topics().await;
                 }
             }
-            ToApp::HeapData(s_id, m_type, _data, _signed_by) => {
+            ToApp::HeapData(s_id, app_msg, signed_by) => {
                 if s_id == self.shell.swarm_id {
-                    eprintln!("Forum recv Heap Data {}", m_type);
+                    eprintln!("Forum recv Heap Data {}", app_msg.m_type());
+                    let forum_msg = ForumSyncMessage::parse_app_msg(app_msg).unwrap();
+                    if let Some((prev_msg, prev_sign)) =
+                        std::mem::replace(&mut self.last_heap_msg, None)
+                    {
+                        if prev_msg == forum_msg && signed_by == prev_sign {
+                            eprintln!("Same heap as before…");
+                            self.heap_logic(false).await;
+                        }
+                    } else {
+                        self.last_heap_msg = Some((forum_msg, signed_by));
+                        self.heap_logic(false).await;
+                    }
                 } else {
                     eprintln!("Heap data of {} ignored", s_id);
+                }
+            }
+            ToApp::HeapEmpty(s_id) => {
+                if s_id == self.shell.swarm_id {
+                    eprintln!("Forum recv HeapEmpty");
+                    self.last_heap_msg = None;
+                    self.heap_logic(true).await;
                 }
             }
             _other => {
@@ -569,7 +593,71 @@ impl ForumLogic {
                                     // once finished editing send regular ChangeData msg (for now)
                                 } else {
                                     eprintln!("Can not edit, unknown Page.");
+                                    self.presentation_state =
+                                        PresentationState::Topic(c_id, pg_opt);
                                 }
+                            }
+                            PresentationState::Settings => {
+                                // TODO: Edit in this State means User opened Requests Menu
+                                // So we need to HeepPeek and, then also source page read
+                                // and after that send those two entries to User to decide.
+                                self.heap_logic(false).await;
+                            }
+                            PresentationState::HeapSorting(fsm_opt, entry_opt) => {
+                                if let Some((fsm, signer)) = fsm_opt {
+                                    match fsm {
+                                        ForumSyncMessage::EditPost(t_id, p_id, entry) => {
+                                            if let Some(curr_e) = entry_opt {
+                                                if curr_e.author == signer {
+                                                    let _ = self
+                                                        .to_app_mgr_send
+                                                        .send(ToAppMgr::UpdateData(
+                                                            self.shell.swarm_id,
+                                                            t_id,
+                                                            p_id,
+                                                            entry.into_data().unwrap(),
+                                                        ))
+                                                        .await;
+                                                } else {
+                                                    eprintln!(
+                                                        "Can not update, Author: {} but edited by: {}",
+                                                        curr_e.author, signer
+                                                    );
+                                                }
+                                            } else {
+                                                eprintln!(
+                                                    "Can not update, unable to validate Author",
+                                                );
+                                            }
+                                        }
+                                        ForumSyncMessage::AddTopic(_t_id, entry) => {
+                                            let _ = self
+                                                .to_app_mgr_send
+                                                .send(ToAppMgr::AppendContent(
+                                                    self.shell.swarm_id,
+                                                    DataType::Data(0),
+                                                    entry.into_data().unwrap(),
+                                                ))
+                                                .await;
+                                        }
+                                        ForumSyncMessage::AddPost(t_id, entry) => {
+                                            let _ = self
+                                                .to_app_mgr_send
+                                                .send(ToAppMgr::AppendData(
+                                                    self.shell.swarm_id,
+                                                    t_id,
+                                                    entry.into_data().unwrap(),
+                                                ))
+                                                .await;
+                                        }
+                                    }
+                                }
+                                let _ = self
+                                    .to_app_mgr_send
+                                    .send(ToAppMgr::FromApp(dapp_lib::LibRequest::PopHeap(
+                                        self.shell.swarm_id,
+                                    )))
+                                    .await;
                             }
                             _other => {
                                 eprintln!("Edit not supported in {:?}", _other);
@@ -681,6 +769,64 @@ impl ForumLogic {
         }
         false
     }
+    async fn heap_logic(&mut self, heap_empty: bool) {
+        // Remember to always set self.presentation_state (or rework logic)
+        self.presentation_state = PresentationState::HeapSorting(None, None);
+        if heap_empty {
+            // TODO: send ToPresentation to inform User that heap is empty
+            let _ = self.to_tui_send.send(ToForumView::Request(vec![(
+                0,
+                format!("No Requests pending"),
+            )]));
+            return;
+        }
+        // let last_msg = std::mem::replace(&mut self.last_heap_msg, None);
+        if let Some((app_msg, signed_by)) = &self.last_heap_msg {
+            self.presentation_state =
+                PresentationState::HeapSorting(Some((app_msg.clone(), *signed_by)), None);
+            match app_msg {
+                ForumSyncMessage::AddTopic(_t_id, entry) => {
+                    let _ = self.to_tui_send.send(ToForumView::Request(vec![(
+                        0,
+                        format!("Add Topic: {}", entry.entry_line()),
+                    )]));
+                }
+                ForumSyncMessage::AddPost(t_id, entry) => {
+                    let _ = self.to_tui_send.send(ToForumView::Request(vec![(
+                        0,
+                        format!("{} Add Post: {}", t_id, entry.entry_line()),
+                    )]));
+                }
+                ForumSyncMessage::EditPost(t_id, p_id, entry) => {
+                    //TODO: do not send until we have both entries
+                    let _ = self.to_tui_send.send(ToForumView::Request(vec![
+                        (0, format!("Orig: Pending ({}-{})", t_id, p_id)),
+                        (1, format!("Modif: {}", entry.entry_line())),
+                    ]));
+                    let _ = self
+                        .to_app_mgr_send
+                        .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadPagesRange(
+                            self.shell.swarm_id,
+                            *t_id,
+                            *p_id,
+                            *p_id,
+                        )))
+                        .await;
+                }
+            }
+            // TODO: depending on ForumMsg ask for more Data
+            //       or act immediately by sending ToPresentation
+            return;
+            // }
+        }
+        let _ = self
+            .to_app_mgr_send
+            .send(ToAppMgr::FromApp(dapp_lib::LibRequest::PeekHeap(
+                self.shell.swarm_id,
+            )))
+            .await;
+    }
+
     async fn append_first_page(&mut self, c_id: ContentID, d_type: DataType, data: Data) {
         self.process_content(c_id, d_type, 0, vec![data]).await;
     }
@@ -827,6 +973,45 @@ impl ForumLogic {
                             eprintln!("NewWhat: {new_what:?}");
                             self.presentation_state =
                                 PresentationState::Editing(new_what, prev_state);
+                        }
+                        PresentationState::HeapSorting(opt_fsm_sign, entry_opt) => {
+                            if let Some((forum_msg, _sign)) = opt_fsm_sign {
+                                //TODO
+                                match &forum_msg {
+                                    ForumSyncMessage::EditPost(t_id, p_id, new_entry) => {
+                                        if *t_id == c_id && *p_id == start_page {
+                                            let orig_entry =
+                                                Entry::from_data(d_vec[0].clone()).unwrap();
+                                            let _ =
+                                                self.to_tui_send.send(ToForumView::Request(vec![
+                                                    (0, orig_entry.entry_line()),
+                                                    (1, new_entry.entry_line()),
+                                                ]));
+                                        } else {
+                                            eprintln!("Received wrong data for comparison");
+                                            eprintln!(
+                                                "Expected: {}-{} got: {}-{}",
+                                                t_id, p_id, c_id, start_page
+                                            );
+                                        }
+                                    }
+                                    ForumSyncMessage::AddTopic(_t_id, _entry) => {
+                                        eprintln!("Unexpected Read Success, when adding new topic");
+                                    }
+                                    ForumSyncMessage::AddPost(_t_id, _entry) => {
+                                        eprintln!("Unexpected Read Success, when adding a post");
+                                    }
+                                }
+                                let entry = Entry::from_data(d_vec[0].clone()).unwrap();
+                                self.presentation_state = PresentationState::HeapSorting(
+                                    Some((forum_msg, _sign)),
+                                    Some(entry),
+                                );
+                            } else {
+                                eprintln!("Unexpected Read Success, when HeapSorting empty");
+                                self.presentation_state =
+                                    PresentationState::HeapSorting(None, entry_opt);
+                            }
                         }
                         other => {
                             eprintln!("Unexpected ReadSuccess when in state: {:?}", other);
@@ -1086,6 +1271,14 @@ impl ForumLogic {
                 self.process_edit_result(None).await;
                 yield_now().await;
             }
+            PresentationState::HeapSorting(_fsm_opt, _e_opt) => {
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::FromApp(dapp_lib::LibRequest::PopHeap(
+                        self.shell.swarm_id,
+                    )))
+                    .await;
+            }
             other => {
                 eprintln!("Deleting not supported yet");
                 self.presentation_state = other;
@@ -1151,17 +1344,30 @@ impl ForumLogic {
                     PresentationState::MainLobby(page_opt) => {
                         self.presentation_state = PresentationState::MainLobby(page_opt);
                         if let Some(topic_desc) = text {
-                            //TODO: add new topic to AppData
                             eprintln!("We should add a new topic:\n{topic_desc}");
-                            let data = Entry::new(self.my_id, topic_desc, 0).into_data().unwrap();
-                            let _ = self
-                                .to_app_mgr_send
-                                .send(ToAppMgr::AppendContent(
-                                    self.shell.swarm_id,
-                                    DataType::Data(0),
-                                    data,
-                                ))
-                                .await;
+                            let can_directly_append = false;
+                            let entry = Entry::new(self.my_id, topic_desc, 0);
+                            if can_directly_append {
+                                let data = entry.into_data().unwrap();
+                                let _ = self
+                                    .to_app_mgr_send
+                                    .send(ToAppMgr::AppendContent(
+                                        self.shell.swarm_id,
+                                        DataType::Data(0),
+                                        data,
+                                    ))
+                                    .await;
+                            } else {
+                                // TODO: send custom app sync message
+                                let forum_msg = ForumSyncMessage::AddTopic(0, entry);
+                                let _ = self
+                                    .to_app_mgr_send
+                                    .send(ToAppMgr::AppDefined(
+                                        self.shell.swarm_id,
+                                        forum_msg.into_app_msg().unwrap(),
+                                    ))
+                                    .await;
+                            }
                         }
                     }
                     PresentationState::Settings => {
@@ -1186,20 +1392,54 @@ impl ForumLogic {
                     PresentationState::Topic(c_id, pg_opt) => {
                         if let Some(text) = text {
                             let entry = Entry::new(self.my_id, text, 0);
-                            let data = entry.into_data().unwrap();
                             if let Some(id) = id {
-                                // TODO: update existing Post
+                                // TODO: check if current user can edit given post
                                 eprintln!("Should update {id:?}");
-                                let _ = self
-                                    .to_app_mgr_send
-                                    .send(ToAppMgr::UpdateData(self.shell.swarm_id, c_id, id, data))
-                                    .await;
+                                let can_directly_edit = false;
+                                if can_directly_edit {
+                                    let data = entry.into_data().unwrap();
+                                    let _ = self
+                                        .to_app_mgr_send
+                                        .send(ToAppMgr::UpdateData(
+                                            self.shell.swarm_id,
+                                            c_id,
+                                            id,
+                                            data,
+                                        ))
+                                        .await;
+                                } else {
+                                    // TODO: send custom app sync message
+                                    let forum_msg = ForumSyncMessage::EditPost(c_id, id, entry);
+                                    let _ = self
+                                        .to_app_mgr_send
+                                        .send(ToAppMgr::AppDefined(
+                                            self.shell.swarm_id,
+                                            forum_msg.into_app_msg().unwrap(),
+                                        ))
+                                        .await;
+                                }
                             } else {
                                 // request append data
-                                let _ = self
-                                    .to_app_mgr_send
-                                    .send(ToAppMgr::AppendData(self.shell.swarm_id, c_id, data))
-                                    .await;
+                                // TODO: check if current user can edit given post
+                                eprintln!("Should append a post {id:?}");
+                                let can_directly_append = false;
+                                if can_directly_append {
+                                    let data = entry.into_data().unwrap();
+                                    let _ = self
+                                        .to_app_mgr_send
+                                        .send(ToAppMgr::AppendData(self.shell.swarm_id, c_id, data))
+                                        .await;
+                                } else {
+                                    // TODO: send custom app sync message
+                                    let forum_msg = ForumSyncMessage::AddPost(c_id, entry);
+                                    let _ = self
+                                        .to_app_mgr_send
+                                        .send(ToAppMgr::AppDefined(
+                                            self.shell.swarm_id,
+                                            forum_msg.into_app_msg().unwrap(),
+                                        ))
+                                        .await;
+                                }
                             }
                         } else {
                             eprintln!("Ignore, empty text");
@@ -1712,6 +1952,95 @@ impl ForumLogic {
                     Some(id),
                     Box::new(PresentationState::Capability(*c, v_gid.clone())),
                 ));
+            }
+            PresentationState::HeapSorting(_opt, entry_opt) => {
+                if let Some((f_msg, signer)) = _opt {
+                    match &f_msg {
+                        ForumSyncMessage::EditPost(t_id, p_id, entry) => {
+                            // TODO
+                            if id == 1 {
+                                let e_p = EditorParams {
+                                    initial_text: Some(entry.text.clone()),
+                                    allow_newlines: false,
+                                    chars_limit: None,
+                                    text_limit: None,
+                                    read_only: true,
+                                };
+                                let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
+                                // new_state = Some(PresentationState::Editing(
+                                //     Some(id),
+                                //     Box::new(PresentationState::HeapSorting(
+                                //         Some((f_msg.clone(), *signer)),
+                                //         *entry_opt,
+                                //     )),
+                                // ));
+                            } else if id == 0 {
+                                if let Some(entry) = entry_opt {
+                                    let e_p = EditorParams {
+                                        initial_text: Some(entry.text.clone()),
+                                        allow_newlines: false,
+                                        chars_limit: None,
+                                        text_limit: None,
+                                        read_only: true,
+                                    };
+                                    let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
+                                    // new_state = Some(PresentationState::Editing(
+                                    //     Some(id),
+                                    //     Box::new(PresentationState::HeapSorting(
+                                    //         Some((f_msg.clone(), *signer)),
+                                    //         *entry_opt,
+                                    //     )),
+                                    // ));
+                                } else {
+                                    // new_state = Some(PresentationState::Editing(
+                                    //     Some(id),
+                                    //     Box::new(PresentationState::HeapSorting(
+                                    //         Some((f_msg.clone(), *signer)),
+                                    //         None,
+                                    //     )),
+                                    // ));
+                                }
+                            }
+                        }
+                        ForumSyncMessage::AddTopic(_t_id, entry) => {
+                            if id == 0 {
+                                let e_p = EditorParams {
+                                    initial_text: Some(entry.text.clone()),
+                                    allow_newlines: false,
+                                    chars_limit: None,
+                                    text_limit: None,
+                                    read_only: true,
+                                };
+                                let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
+                            } else {
+                                eprintln!("Only id=0 expected when reviewing add topic, {id}");
+                            }
+                        }
+                        ForumSyncMessage::AddPost(_t_id, entry) => {
+                            if id == 0 {
+                                let e_p = EditorParams {
+                                    initial_text: Some(entry.text.clone()),
+                                    allow_newlines: false,
+                                    chars_limit: None,
+                                    text_limit: None,
+                                    read_only: true,
+                                };
+                                let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
+                            } else {
+                                eprintln!("Only id=0 expected when reviewing add post, {id}");
+                            }
+                        }
+                    }
+                } else {
+                    // Query is used to trigger reading from heap
+                    // new_state = Some(PresentationState::HeapSorting(None));
+                    let _ = self
+                        .to_app_mgr_send
+                        .send(ToAppMgr::FromApp(dapp_lib::LibRequest::PeekHeap(
+                            self.shell.swarm_id,
+                        )))
+                        .await;
+                }
             }
             PresentationState::Editing(_id, _prev_state) => {
                 eprintln!("Got ID when in state Editing");
