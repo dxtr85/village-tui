@@ -18,7 +18,9 @@ use dapp_lib::prelude::GnomeId;
 use dapp_lib::prelude::Manifest;
 use dapp_lib::prelude::Policy;
 use dapp_lib::prelude::Requirement;
+use dapp_lib::prelude::SwarmID;
 use dapp_lib::prelude::SwarmName;
+use dapp_lib::prelude::SyncMessageType;
 use dapp_lib::Data;
 use dapp_lib::ToApp;
 use dapp_lib::ToAppMgr;
@@ -493,6 +495,9 @@ impl ForumLogic {
                     self.last_heap_msg = None;
                     self.heap_logic(true).await;
                 }
+            }
+            ToApp::PolicyNotMet(s_id, sm_type, data) => {
+                self.sync_request_rejected(s_id, sm_type, data).await;
             }
             _other => {
                 eprintln!("InternalMsg::User {:?}", _other);
@@ -1345,29 +1350,29 @@ impl ForumLogic {
                         self.presentation_state = PresentationState::MainLobby(page_opt);
                         if let Some(topic_desc) = text {
                             eprintln!("We should add a new topic:\n{topic_desc}");
-                            let can_directly_append = false;
+                            // let can_directly_append = false;
                             let entry = Entry::new(self.my_id, topic_desc, 0);
-                            if can_directly_append {
-                                let data = entry.into_data().unwrap();
-                                let _ = self
-                                    .to_app_mgr_send
-                                    .send(ToAppMgr::AppendContent(
-                                        self.shell.swarm_id,
-                                        DataType::Data(0),
-                                        data,
-                                    ))
-                                    .await;
-                            } else {
-                                // TODO: send custom app sync message
-                                let forum_msg = ForumSyncMessage::AddTopic(0, entry);
-                                let _ = self
-                                    .to_app_mgr_send
-                                    .send(ToAppMgr::AppDefined(
-                                        self.shell.swarm_id,
-                                        forum_msg.into_app_msg().unwrap(),
-                                    ))
-                                    .await;
-                            }
+                            // if can_directly_append {
+                            let data = entry.into_data().unwrap();
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::AppendContent(
+                                    self.shell.swarm_id,
+                                    DataType::Data(0),
+                                    data,
+                                ))
+                                .await;
+                            // } else {
+                            //     // TODO: send custom app sync message
+                            //     let forum_msg = ForumSyncMessage::AddTopic(0, entry);
+                            //     let _ = self
+                            //         .to_app_mgr_send
+                            //         .send(ToAppMgr::AppDefined(
+                            //             self.shell.swarm_id,
+                            //             forum_msg.into_app_msg().unwrap(),
+                            //         ))
+                            //         .await;
+                            // }
                         }
                     }
                     PresentationState::Settings => {
@@ -1395,51 +1400,56 @@ impl ForumLogic {
                             if let Some(id) = id {
                                 // TODO: check if current user can edit given post
                                 eprintln!("Should update {id:?}");
-                                let can_directly_edit = false;
-                                if can_directly_edit {
-                                    let data = entry.into_data().unwrap();
-                                    let _ = self
-                                        .to_app_mgr_send
-                                        .send(ToAppMgr::UpdateData(
-                                            self.shell.swarm_id,
-                                            c_id,
-                                            id,
-                                            data,
-                                        ))
-                                        .await;
-                                } else {
-                                    // TODO: send custom app sync message
-                                    let forum_msg = ForumSyncMessage::EditPost(c_id, id, entry);
-                                    let _ = self
-                                        .to_app_mgr_send
-                                        .send(ToAppMgr::AppDefined(
-                                            self.shell.swarm_id,
-                                            forum_msg.into_app_msg().unwrap(),
-                                        ))
-                                        .await;
-                                }
+                                // let can_directly_edit = false;
+                                // if can_directly_edit {
+                                let data = entry.into_data().unwrap();
+                                let _ = self
+                                    .to_app_mgr_send
+                                    .send(ToAppMgr::UpdateData(self.shell.swarm_id, c_id, id, data))
+                                    .await;
+                                // } else {
+                                //     // TODO: send custom app sync message
+                                //     let forum_msg = ForumSyncMessage::EditPost(c_id, id, entry);
+                                //     let _ = self
+                                //         .to_app_mgr_send
+                                //         .send(ToAppMgr::AppDefined(
+                                //             self.shell.swarm_id,
+                                //             forum_msg.into_app_msg().unwrap(),
+                                //         ))
+                                //         .await;
+                                // }
                             } else {
                                 // request append data
                                 // TODO: check if current user can edit given post
+                                // TODO: how about if instead of checking if Policy is met for this
+                                // Gnome, we send as if it was met, and see what happens.
+                                // If it actually is met, we are done,
+                                // if it is not we should receive back some PolicyNotMet msg
+                                // with rejected contents.
+                                // These msg bubbles up to Application that has sent in and then
+                                // we decide what to do: either give up, or try TwoStep procedure.
+                                // This simplifies Application logic and does not introduce
+                                // another policy verification logic on application level.
+                                //
                                 eprintln!("Should append a post {id:?}");
-                                let can_directly_append = false;
-                                if can_directly_append {
-                                    let data = entry.into_data().unwrap();
-                                    let _ = self
-                                        .to_app_mgr_send
-                                        .send(ToAppMgr::AppendData(self.shell.swarm_id, c_id, data))
-                                        .await;
-                                } else {
-                                    // TODO: send custom app sync message
-                                    let forum_msg = ForumSyncMessage::AddPost(c_id, entry);
-                                    let _ = self
-                                        .to_app_mgr_send
-                                        .send(ToAppMgr::AppDefined(
-                                            self.shell.swarm_id,
-                                            forum_msg.into_app_msg().unwrap(),
-                                        ))
-                                        .await;
-                                }
+                                // let can_directly_append = false;
+                                // if can_directly_append {
+                                let data = entry.into_data().unwrap();
+                                let _ = self
+                                    .to_app_mgr_send
+                                    .send(ToAppMgr::AppendData(self.shell.swarm_id, c_id, data))
+                                    .await;
+                                // } else {
+                                //     // TODO: send custom app sync message
+                                //     let forum_msg = ForumSyncMessage::AddPost(c_id, entry);
+                                //     let _ = self
+                                //         .to_app_mgr_send
+                                //         .send(ToAppMgr::AppDefined(
+                                //             self.shell.swarm_id,
+                                //             forum_msg.into_app_msg().unwrap(),
+                                //         ))
+                                //         .await;
+                                // }
                             }
                         } else {
                             eprintln!("Ignore, empty text");
@@ -2083,6 +2093,67 @@ impl ForumLogic {
         // Then we need to update/add given Policy.
         // Now we send requests to Gnome in order to update
         //
+    }
+    async fn sync_request_rejected(&self, s_id: SwarmID, sm_type: SyncMessageType, data: Data) {
+        if s_id != self.shell.swarm_id {
+            // Only support our own msgs
+            return;
+        }
+
+        eprintln!("Forum app got rejected: {sm_type:?}");
+        match sm_type {
+            SyncMessageType::AppendContent(d_type) => {
+                if d_type.byte() == 0 {
+                    // try 2step process of adding Topic
+                    let msg = ForumSyncMessage::AddTopic(0, Entry::from_data(data).unwrap())
+                        .into_app_msg()
+                        .unwrap();
+                    let _ = self
+                        .to_app_mgr_send
+                        .send(ToAppMgr::AppDefined(self.shell.swarm_id, msg))
+                        .await;
+                }
+            }
+            SyncMessageType::ChangeContent(_c_id, _d_type, _op) => {
+                //TODO
+            }
+            SyncMessageType::AppendData(c_id) => {
+                // try 2step process of adding Topic
+                let msg = ForumSyncMessage::AddPost(c_id, Entry::from_data(data).unwrap())
+                    .into_app_msg()
+                    .unwrap();
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::AppDefined(self.shell.swarm_id, msg))
+                    .await;
+            }
+            SyncMessageType::AppendShelledDatas(_c_id) => {
+                //TODO
+            }
+            SyncMessageType::RemoveData(_c_id, _d_id) => {
+                //TODO
+            }
+            SyncMessageType::UpdateData(c_id, d_id) => {
+                // try 2step process of adding Topic
+                let msg = ForumSyncMessage::EditPost(c_id, d_id, Entry::from_data(data).unwrap())
+                    .into_app_msg()
+                    .unwrap();
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::AppDefined(self.shell.swarm_id, msg))
+                    .await;
+            }
+            SyncMessageType::InsertData(_c_id, _d_id) => {
+                //TODO
+            }
+            SyncMessageType::ExtendData(_c_id, _d_id) => {
+                //TODO
+            }
+            SyncMessageType::AppDefined(_m_type, _c_id, _d_id) => {
+                //TODO: here if a msg got rejected and we are out of options
+                // we could send User a notification, that his request can not be fullfilled
+            }
+        }
     }
 }
 
