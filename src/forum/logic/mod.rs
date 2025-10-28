@@ -710,10 +710,10 @@ impl ForumLogic {
                         self.run_action(id_opt).await;
                     }
                     Action::NextPage => {
-                        //TODO
+                        self.show_next_page().await;
                     }
                     Action::PreviousPage => {
-                        //TODO
+                        self.show_previous_page().await;
                     }
                     Action::FirstPage => {
                         //TODO
@@ -1105,14 +1105,22 @@ impl ForumLogic {
             std::mem::replace(&mut self.presentation_state, PresentationState::Settings);
         match curr_state {
             PresentationState::MainLobby(pg_opt) => {
-                let pg = if let Some(pg) = pg_opt { pg } else { 0 };
-                let topics = self.read_posts(pg, self.entries_count).await;
+                let mut pg = if let Some(pg) = pg_opt { pg } else { 0 };
+                let mut topics = self.read_posts(pg, self.entries_count).await;
+                if topics.is_empty() {
+                    pg = 0;
+                    topics = self.read_posts(pg, self.entries_count).await;
+                }
                 let _ = self.to_tui_send.send(ToForumView::TopicsPage(pg, topics));
                 self.presentation_state = PresentationState::MainLobby(Some(pg));
             }
             PresentationState::Topic(t_id, pg_opt) => {
-                let pg = if let Some(pg) = pg_opt { pg } else { 0 };
-                let topics = self.read_posts(pg, self.entries_count).await;
+                let mut pg = if let Some(pg) = pg_opt { pg } else { 0 };
+                let mut topics = self.read_posts(pg, self.entries_count).await;
+                if topics.is_empty() {
+                    pg = 0;
+                    topics = self.read_posts(pg, self.entries_count).await;
+                }
                 let _ = self.to_tui_send.send(ToForumView::PostsPage(pg, topics));
                 self.presentation_state = PresentationState::Topic(t_id, Some(pg));
             }
@@ -1336,7 +1344,110 @@ impl ForumLogic {
             }
         }
     }
-
+    async fn show_next_page(&mut self) {
+        eprintln!("show_next_page");
+        let mut new_state = None;
+        match &self.presentation_state {
+            PresentationState::MainLobby(pg_opt) => {
+                eprintln!("show_next_page MainLobby {pg_opt:?}");
+                if let Some(pg) = pg_opt {
+                    // TODO: maybe set new pgid?
+                    let next_pg = pg.saturating_add(1);
+                    new_state = Some(PresentationState::MainLobby(Some(next_pg)));
+                    let new_range_start = next_pg * self.entries_count;
+                    let new_range_end = (pg.saturating_add(2) * self.entries_count) - 1;
+                    eprintln!("Asking for: {}-{}", new_range_start, new_range_end);
+                    let _ = self
+                        .to_app_mgr_send
+                        .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadFirstPages(
+                            self.shell.swarm_id,
+                            Some((new_range_start, new_range_end)),
+                        )))
+                        .await;
+                }
+                //TODO
+            }
+            PresentationState::Topic(t_id, pg_opt) => {
+                eprintln!("show_next_page Topic {pg_opt:?}");
+                if let Some(pg) = pg_opt {
+                    // TODO: maybe set new pgid?
+                    let next_pg = pg.saturating_add(1);
+                    new_state = Some(PresentationState::Topic(*t_id, Some(next_pg)));
+                    let new_range_start = next_pg * self.entries_count;
+                    let new_range_end = (pg.saturating_add(2) * self.entries_count) - 1;
+                    let _ = self
+                        .to_app_mgr_send
+                        .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadPagesRange(
+                            self.shell.swarm_id,
+                            *t_id,
+                            new_range_start,
+                            new_range_end,
+                        )))
+                        .await;
+                }
+                //TODO
+            }
+            _other => {
+                //TODO
+            }
+        }
+        if let Some(state) = new_state {
+            self.presentation_state = state;
+        }
+    }
+    async fn show_previous_page(&mut self) {
+        let mut new_state = None;
+        match &self.presentation_state {
+            PresentationState::MainLobby(pg_opt) => {
+                if let Some(pg) = pg_opt {
+                    if *pg == 0 {
+                        return;
+                    }
+                    // TODO: maybe set new pgid?
+                    let prev_pg = pg.saturating_sub(1);
+                    new_state = Some(PresentationState::MainLobby(Some(prev_pg)));
+                    let new_range_start = prev_pg * self.entries_count;
+                    let new_range_end = (pg * self.entries_count) - 1;
+                    let _ = self
+                        .to_app_mgr_send
+                        .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadFirstPages(
+                            self.shell.swarm_id,
+                            Some((new_range_start, new_range_end)),
+                        )))
+                        .await;
+                }
+                //TODO
+            }
+            PresentationState::Topic(t_id, pg_opt) => {
+                if let Some(pg) = pg_opt {
+                    if *pg == 0 {
+                        return;
+                    }
+                    // TODO: maybe set new pgid?
+                    let prev_pg = pg.saturating_sub(1);
+                    new_state = Some(PresentationState::Topic(*t_id, Some(prev_pg)));
+                    let new_range_start = prev_pg * self.entries_count;
+                    let new_range_end = (pg * self.entries_count) - 1;
+                    let _ = self
+                        .to_app_mgr_send
+                        .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadPagesRange(
+                            self.shell.swarm_id,
+                            *t_id,
+                            new_range_start,
+                            new_range_end,
+                        )))
+                        .await;
+                }
+                //TODO
+            }
+            _other => {
+                //TODO
+            }
+        }
+        if let Some(state) = new_state {
+            self.presentation_state = state;
+        }
+    }
     async fn process_edit_result(&mut self, ed_res: EditorResult) {
         // eprintln!("FLogic got: {:?}", text);
         // DONE: validate received text against
@@ -1831,7 +1942,8 @@ impl ForumLogic {
                     return;
                 }
                 let page = page_opt.unwrap();
-                let topic_id = id + self.entries_count * page;
+                // let topic_id = id + self.entries_count * page;
+                let topic_id = id;
                 if topic_id == 0 {
                     //TODO: open Editor with Manifest desc
                     // in READ only mode
@@ -1885,7 +1997,8 @@ impl ForumLogic {
                 // Once received open Editor
                 // in ReadOnly mode.
                 if let Some(page_nr) = page_opt {
-                    let d_id = page_nr * self.entries_count + id;
+                    // let d_id = page_nr * self.entries_count + id;
+                    let d_id = id;
                     let _ = self
                         .to_app_mgr_send
                         .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadPagesRange(

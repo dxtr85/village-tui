@@ -825,7 +825,8 @@ impl ButtonsLogic {
         }
     }
 
-    fn up(&mut self, tui_mgr: &mut Manager) {
+    fn up(&mut self, tui_mgr: &mut Manager) -> bool {
+        let mut prev_page = false;
         if self.is_menu_active {
             self.is_menu_active = false;
             self.menu_buttons[self.selected_menu_button]
@@ -839,13 +840,15 @@ impl ButtonsLogic {
                 .0
                 .deselect(tui_mgr, false);
 
-            self.select_prev_entry();
+            prev_page = self.select_prev_entry();
             self.entry_buttons[self.selected_entry_button]
                 .0
                 .select(tui_mgr, false);
         }
+        prev_page
     }
-    fn down(&mut self, tui_mgr: &mut Manager) {
+    fn down(&mut self, tui_mgr: &mut Manager) -> bool {
+        let mut next_page = false;
         if self.is_menu_active {
             self.is_menu_active = false;
             self.menu_buttons[self.selected_menu_button]
@@ -859,11 +862,12 @@ impl ButtonsLogic {
                 .0
                 .deselect(tui_mgr, false);
 
-            self.select_next_entry();
+            next_page = self.select_next_entry();
             self.entry_buttons[self.selected_entry_button]
                 .0
                 .select(tui_mgr, false);
         }
+        next_page
     }
     fn left(&mut self, tui_mgr: &mut Manager) {
         if self.is_menu_active {
@@ -926,7 +930,7 @@ impl ButtonsLogic {
             }
         }
     }
-    fn select_next_entry(&mut self) {
+    fn select_next_entry(&mut self) -> bool {
         for i in 1..=self.entry_buttons.len() {
             let next_id = (self.selected_entry_button + i) % self.entry_buttons.len();
             if self.entry_buttons[next_id].1 {
@@ -934,16 +938,27 @@ impl ButtonsLogic {
                 break;
             }
         }
+        self.selected_entry_button == 0
     }
-    fn select_prev_entry(&mut self) {
+    fn select_prev_entry(&mut self) -> bool {
         for i in 1..=self.entry_buttons.len() {
-            let next_id = (self.selected_entry_button + self.entry_buttons.len() - i)
+            let prev_id = (self.selected_entry_button + self.entry_buttons.len() - i)
                 % self.entry_buttons.len();
-            if self.entry_buttons[next_id].1 {
-                self.selected_entry_button = next_id;
+            if self.entry_buttons[prev_id].1 {
+                self.selected_entry_button = prev_id;
                 break;
             }
         }
+        self.selected_entry_button == self.last_visible_button_idx()
+    }
+
+    fn last_visible_button_idx(&self) -> usize {
+        for i in (0..self.entry_buttons.len()).rev() {
+            if self.entry_buttons[i].1 {
+                return i;
+            }
+        }
+        return 0;
     }
     fn activate_menu(&mut self, cfg_idx: MenuType, tui_mgr: &mut Manager) {
         self.is_menu_active = true;
@@ -1186,10 +1201,16 @@ pub fn serve_forum_tui(
                     let _action = buttons_logic.left(&mut tui_mgr);
                 }
                 Key::Up | Key::O => {
-                    let _action = buttons_logic.up(&mut tui_mgr);
+                    if buttons_logic.up(&mut tui_mgr) {
+                        // TODO: open prev page
+                        action = Some(Action::PreviousPage);
+                    }
                 }
                 Key::Down | Key::Comma => {
-                    let _action = buttons_logic.down(&mut tui_mgr);
+                    if buttons_logic.down(&mut tui_mgr) {
+                        // TODO: open next page
+                        action = Some(Action::NextPage);
+                    }
                 }
                 Key::F5 => {
                     let _ = to_app.send(FromForumView::CopyToClipboard(
