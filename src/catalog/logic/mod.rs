@@ -1,5 +1,5 @@
-use crate::catalog::tui::serve_catalog_tui;
 use crate::catalog::tui::{from_catalog_tui_adapter, Notifier};
+use crate::catalog::tui::{serve_catalog_tui, EditorResult};
 // use crate::config::Configuration;
 use animaterm::prelude::*;
 use async_std::channel::Receiver as AReceiver;
@@ -40,6 +40,7 @@ pub enum CreatorContext {
         tags: Vec<u8>,
     },
     Link {
+        app_type: AppType,
         c_id: Option<ContentID>,
         read_only: bool,
         s_name: SwarmName,
@@ -68,28 +69,31 @@ impl CreatorContext {
             Self::Link { description, .. } => *description = new_description,
         }
     }
-    pub fn set_data_type(&mut self, new_type: DataType) {
+    pub fn set_data_type(&mut self, type_byte: u8) {
         match self {
-            Self::Data { d_type, .. } => *d_type = new_type,
+            Self::Data { d_type, .. } => *d_type = DataType::from(type_byte),
             Self::Link {
-                tags,
-                c_id,
-                read_only,
-                s_name: _,
-                target_id: _,
-                description,
-                ti_opt: _,
+                app_type,
+                ..
+                // tags,
+                // c_id,
+                // read_only,
+                // s_name: _,
+                // target_id: _,
+                // description,
+                // ti_opt: _,
             } => {
-                if new_type.is_link() {
-                    return;
-                }
-                *self = Self::Data {
-                    c_id: *c_id,
-                    read_only: *read_only,
-                    d_type: new_type,
-                    description: description.clone(),
-                    tags: tags.clone(),
-                }
+                *app_type = AppType::from(255-type_byte)
+                // if new_type.is_link() {
+                //     return;
+                // }
+                // *self = Self::Data {
+                //     c_id: *c_id,
+                //     read_only: *read_only,
+                //     d_type: new_type,
+                //     description: description.clone(),
+                //     tags: tags.clone(),
+                // }
             }
         }
     }
@@ -117,10 +121,13 @@ impl CreatorContext {
             Self::Link { c_id, .. } => c_id.clone(),
         }
     }
-    pub fn link_target(&self) -> Option<(SwarmName, ContentID, Data, Option<TransformInfo>)> {
+    pub fn link_target(
+        &self,
+    ) -> Option<(AppType, SwarmName, ContentID, Data, Option<TransformInfo>)> {
         match self {
             Self::Data { .. } => None,
             Self::Link {
+                app_type,
                 s_name,
                 target_id,
                 tags,
@@ -134,7 +141,7 @@ impl CreatorContext {
                     d_source.push(*t);
                 }
                 let d = Data::new(d_source).unwrap();
-                Some((s_name.clone(), *target_id, d, ti_opt.clone()))
+                Some((*app_type, s_name.clone(), *target_id, d, ti_opt.clone()))
             }
         }
     }
@@ -724,7 +731,13 @@ impl CatalogLogic {
                             );
                             if s_id == self.active_swarm.swarm_id {
                                 // eprintln!("processing it");
-                                self.process_data(c_id, d_type, start_page, d_vec).await;
+                                if let Some((app_type, s_name)) =
+                                    self.process_data(c_id, d_type, start_page, d_vec).await
+                                {
+                                    let _ = self.to_tui.send(ToCatalogView::Quit);
+                                    return_val = Some((app_type, SwarmID(255), s_name));
+                                    break 'outer;
+                                }
                             } else {
                                 //TODO: if this is content we are waiting for
                                 // we should process it
@@ -1175,7 +1188,7 @@ impl CatalogLogic {
                                     } else {
                                         eprintln!("cid is none");
                                         let mut new_context = c_context.clone();
-                                        new_context.set_data_type(DataType::from(indices[0] as u8));
+                                        new_context.set_data_type(indices[0] as u8);
                                         new_state = TuiState::Creator(new_context);
                                         let read_only = false;
                                         let tag_names = self
@@ -1264,7 +1277,7 @@ impl CatalogLogic {
                             let prev_state = std::mem::replace(&mut self.state, TuiState::Village);
                             match prev_state {
                                 TuiState::AddTag => {
-                                    if let Some(text) = e_result {
+                                    if let EditorResult::Text(text) = e_result {
                                         // let _ =
                                         //     self.from_tui_send.send(FromPresentation::AddTags(vec![
                                         //         Tag::new(text).unwrap(),
@@ -1278,7 +1291,7 @@ impl CatalogLogic {
                                     }
                                 }
                                 TuiState::ChangeTag(tag_id) => {
-                                    if let Some(text) = e_result {
+                                    if let EditorResult::Text(text) = e_result {
                                         if !text.is_empty() {
                                             // eprintln!("We should change Tag {tag_id} to {text}");
                                             let _ = self
@@ -1296,7 +1309,7 @@ impl CatalogLogic {
                                     }
                                 }
                                 TuiState::AddDType => {
-                                    if let Some(text) = e_result {
+                                    if let EditorResult::Text(text) = e_result {
                                         // let _ = self.from_tui_send.send(FromPresentation::AddDataType(
                                         //     Tag::new(text).unwrap(),
                                         // ));
@@ -1311,7 +1324,7 @@ impl CatalogLogic {
                                     }
                                 }
                                 TuiState::AppendData(c_id) => {
-                                    if let Some(text) = e_result {
+                                    if let EditorResult::Text(text) = e_result {
                                         let data = Data::new(text.bytes().collect()).unwrap();
                                         let _ = self
                                             .to_app_mgr_send
@@ -1331,7 +1344,7 @@ impl CatalogLogic {
                                     // prev_descr,
                                     // tag_ids,
                                 ) => {
-                                    if let Some(text) = e_result {
+                                    if let EditorResult::Text(text) = e_result {
                                         eprintln!(
                                             "Got some text after Edit from Creator {}",
                                             c_context.is_read_only()
@@ -1382,7 +1395,7 @@ impl CatalogLogic {
                                     all_headers,
                                     notes,
                                 ) => {
-                                    if let Some(text) = e_result {
+                                    if let EditorResult::Text(text) = e_result {
                                         eprintln!("Got edit result while indexing");
                                         if let Some(d_id) = d_id_opt {
                                             let data = Data::new(text.bytes().collect()).unwrap();
@@ -1413,7 +1426,7 @@ impl CatalogLogic {
                                 }
                                 TuiState::AddSearch => {
                                     eprintln!("Received add Search result");
-                                    if let Some(text) = e_result {
+                                    if let EditorResult::Text(text) = e_result {
                                         eprintln!("Some: {}", text);
                                         //TODO
                                         let _ = self
@@ -1484,13 +1497,26 @@ impl CatalogLogic {
                                                                    // descr.clone(),
                                                                    // tag_ids.clone(),
                                             );
-                                            let _ =
-                                                self.to_tui.send(ToCatalogView::DisplaySelector(
-                                                    true,
-                                                    "Catalog Application's Data Types".to_string(),
-                                                    self.active_swarm.manifest.dtype_names(),
-                                                    vec![c_context.data_type().byte() as usize],
-                                                ));
+                                            if c_context.data_type().is_link() {
+                                                let _ = self.to_tui.send(
+                                                    ToCatalogView::DisplaySelector(
+                                                        true,
+                                                        "Types of Application".to_string(),
+                                                        AppType::list_of_types(),
+                                                        vec![0],
+                                                    ),
+                                                );
+                                            } else {
+                                                let _ = self.to_tui.send(
+                                                    ToCatalogView::DisplaySelector(
+                                                        true,
+                                                        "Catalog Application's Data Types"
+                                                            .to_string(),
+                                                        self.active_swarm.manifest.dtype_names(),
+                                                        vec![c_context.data_type().byte() as usize],
+                                                    ),
+                                                );
+                                            }
                                         }
                                         other => {
                                             eprintln!(
@@ -1617,11 +1643,11 @@ impl CatalogLogic {
                                         let descr = c_context.description();
                                         let mut bytes = Vec::with_capacity(1024);
                                         if c_context.data_type().is_link() {
-                                            let (s_name, target_cid, data, ti_opt) =
+                                            let (app_type, s_name, target_cid, data, ti_opt) =
                                                 c_context.link_target().unwrap();
                                             // eprintln!("We've got to update a link, dunno how");
                                             let content = Content::Link(
-                                                s_name, target_cid, descr, data, ti_opt,
+                                                app_type, s_name, target_cid, descr, data, ti_opt,
                                             );
                                             bytes = content.to_data().unwrap().bytes();
                                             // let s_bytes = s_name.as_bytes();
@@ -1845,11 +1871,12 @@ impl CatalogLogic {
                                             idx
                                         );
                                         //TODO: we need a mapping from idx -> gnome_id
-                                        if let Some((swarm_name, app_type, s_id)) = mapping.get(idx)
+                                        if let Some((swarm_name, app_type_opt, s_id)) =
+                                            mapping.get(idx)
                                         {
                                             eprintln!(
                                                 "{} Activate: {} {:?}",
-                                                s_id, swarm_name, app_type
+                                                s_id, swarm_name, app_type_opt
                                             );
                                             let _ = self
                                                 .to_app_mgr_send
@@ -1857,7 +1884,7 @@ impl CatalogLogic {
                                                     swarm_name.clone(),
                                                 )))
                                                 .await;
-                                            if app_type.is_some_and(|at| at.is_catalog()) {
+                                            if app_type_opt.is_some_and(|at| at.is_catalog()) {
                                                 new_state = Some(TuiState::Village);
                                                 let _ = self.to_tui.send(ToCatalogView::SwapTiles(
                                                     swarm_name.founder,
@@ -1866,7 +1893,7 @@ impl CatalogLogic {
                                                 // TODO: Do not start a new swarm
                                                 // when it is running
 
-                                                eprintln!("Not Catalog: {:?}", app_type);
+                                                eprintln!("Not Catalog: {:?}", app_type_opt);
                                                 // let _ = self
                                                 //     .to_app_mgr_send
                                                 //     .send(ToAppMgr::StartNewSwarm(
@@ -1875,8 +1902,11 @@ impl CatalogLogic {
                                                 //     ))
                                                 //     .await;
                                                 let _ = self.to_tui.send(ToCatalogView::Quit);
-                                                return_val =
-                                                    Some((*app_type, *s_id, swarm_name.clone()));
+                                                return_val = Some((
+                                                    app_type_opt.unwrap(),
+                                                    *s_id,
+                                                    swarm_name.clone(),
+                                                ));
                                                 break 'outer;
                                             }
                                         }
@@ -1944,7 +1974,7 @@ impl CatalogLogic {
                         }
                         FromCatalogView::SwitchToApp(app_type, s_id, s_name) => {
                             eprintln!("logic got SwitchToApp");
-                            return_val = Some((Some(app_type), s_id, s_name.clone()));
+                            return_val = Some((app_type, s_id, s_name.clone()));
                             // TODO: here we need to notify app manager
                             // that user wants to switch to a new swarm
                             // TODO: Do not start a new swarm if already running!
@@ -1980,7 +2010,7 @@ impl CatalogLogic {
             //     .to_user_send
             //     .send(InternalMsg::User(ToApp::ActiveSwarm(s_name.clone(), s_id)))
             //     .await;
-            Some((app_type, s_name, self.to_app, toolset, self.clipboard))
+            Some((Some(app_type), s_name, self.to_app, toolset, self.clipboard))
         } else {
             eprintln!("return_val is none");
             toolset.discard();
@@ -1994,7 +2024,7 @@ impl CatalogLogic {
         d_type: DataType,
         start_page: u16,
         mut d_vec: Vec<Data>,
-    ) {
+    ) -> Option<(AppType, SwarmName)> {
         if c_id == 0 && start_page == 0 {
             // eprintln!(
             //     "Sending Manifest d_vec.len: {} to Presentation",
@@ -2171,8 +2201,14 @@ impl CatalogLogic {
                         let link_res = data_to_link(first_data);
                         if link_res.is_err() {
                             eprintln!("Unable to ReadLink: {}", link_res.err().unwrap());
-                        } else if let Some((s_name, target_c_id, _descr, _data, _ti_opt)) =
-                            link_res.unwrap().link_params()
+                        } else if let Some((
+                            app_type,
+                            s_name,
+                            target_c_id,
+                            _descr,
+                            _data,
+                            _ti_opt,
+                        )) = link_res.unwrap().link_params()
                         {
                             // 3 set target swarm active
                             eprintln!("ReadLinkToFollow");
@@ -2180,9 +2216,14 @@ impl CatalogLogic {
                                 .to_app_mgr_send
                                 .send(ToAppMgr::FromApp(LibRequest::SetActiveApp(s_name.clone())))
                                 .await;
-                            let _ = self.to_tui.send(ToCatalogView::SwapTiles(s_name.founder));
-                            self.state =
-                                TuiState::ReadLinkToFollow(c_id, Some((s_name, target_c_id)));
+                            if app_type == AppType::Catalog {
+                                let _ = self.to_tui.send(ToCatalogView::SwapTiles(s_name.founder));
+                                self.state =
+                                    TuiState::ReadLinkToFollow(c_id, Some((s_name, target_c_id)));
+                            } else {
+                                eprintln!("Other App: {:?}", app_type);
+                                return Some((app_type, s_name));
+                            }
                         } else {
                             eprintln!("Unable to read link params");
                         }
@@ -2195,6 +2236,7 @@ impl CatalogLogic {
                 }
             }
         }
+        None
     }
 
     async fn present_options_for_tag(&mut self, tag_idx: u8, tag_text: String) {
@@ -2306,6 +2348,7 @@ impl CatalogLogic {
         tags: Vec<u8>,
     ) {
         let c_context = CreatorContext::Link {
+            app_type: AppType::Catalog,
             c_id: None,
             read_only: false,
             s_name,

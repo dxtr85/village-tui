@@ -15,11 +15,13 @@ use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 
 use crate::catalog::tui::button::Button;
+use crate::catalog::tui::EditorResult;
 use crate::common::poledit::PolAction;
 use crate::common::poledit::PolicyEditor;
 use crate::common::poledit::ReqTree;
 use crate::Toolset;
 pub struct EditorParams {
+    pub title: String,
     pub initial_text: Option<String>,
     pub allow_newlines: bool,
     pub chars_limit: Option<Vec<char>>,
@@ -52,7 +54,7 @@ pub enum Action {
     // StoredByteSets,        // inform & ask for first page of given type
     PolicyAction(PolAction),
     Selected(Vec<usize>),
-    EditorResult(Option<String>),
+    EditorResult(EditorResult),
     FollowLink(SwarmName, ContentID, u16), //last is page id
 }
 pub enum ToForumView {
@@ -1322,7 +1324,9 @@ pub fn serve_forum_tui(
                     }
                 }
                 ToForumView::OpenEditor(e_p) => {
+                    // let _ = editor.take_text(&mut tui_mgr);
                     editor.show(&mut tui_mgr);
+                    editor.set_title(&mut tui_mgr, &e_p.title);
                     editor.set_limit(e_p.text_limit);
                     editor.allow_newlines(e_p.allow_newlines);
 

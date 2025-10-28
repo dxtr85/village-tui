@@ -32,6 +32,7 @@ mod selector;
 mod tile;
 mod viewer;
 use crate::catalog::logic::Tag;
+pub use crate::catalog::tui::editor::EditorResult;
 use crate::config::Configuration;
 use crate::InternalMsg;
 use crate::Toolset;
@@ -521,7 +522,7 @@ pub enum FromCatalogView {
     TileSelected(TileType),
     CMenuAction(usize),
     SelectedIndices(Vec<usize>),
-    EditResult(Option<String>),
+    EditResult(EditorResult),
     IndexResult(Option<usize>),
     CreatorResult(CreatorResult),
     VisibleStreetsCount(u8),

@@ -1,5 +1,6 @@
 use crate::catalog::logic::SwarmShell;
 mod message;
+use crate::catalog::tui::EditorResult;
 use crate::common::poledit::decompose;
 use crate::common::poledit::PolAction;
 use crate::common::poledit::ReqTree;
@@ -970,19 +971,28 @@ impl ForumLogic {
                             self.presentation_state = curr_state;
                         }
                         PresentationState::ShowingPost(_t_id, _p_id) => {
-                            // } else if self.presentation_state.is_showing_post(&c_id, &start_page) {
-                            let initial_text =
+                            if c_id == _t_id {
+                                if start_page == _p_id || _p_id == u16::MAX {
+                                    let initial_text =
                                 // Some(String::from_utf8(d_vec[0].clone().bytes()).unwrap());
                                 Some(Entry::from_data(d_vec[0].clone()).unwrap().text);
-                            let e_p = EditorParams {
-                                initial_text,
-                                allow_newlines: true,
-                                chars_limit: None,
-                                text_limit: None,
-                                read_only: true,
-                            };
-                            let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
-                            self.presentation_state = curr_state;
+                                    let e_p = EditorParams {
+                                        title: format!("Topic #{_t_id}, Post #{start_page}"),
+                                        initial_text,
+                                        allow_newlines: true,
+                                        chars_limit: None,
+                                        text_limit: None,
+                                        read_only: true,
+                                    };
+                                    let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
+                                    self.presentation_state =
+                                        PresentationState::ShowingPost(_t_id, start_page);
+                                } else {
+                                    eprintln!("Got wrong page to present");
+                                }
+                            } else {
+                                eprintln!("Got wrong Topic to present");
+                            }
                         }
 
                         PresentationState::Editing(what_opt, prev_state) => {
@@ -996,6 +1006,7 @@ impl ForumLogic {
                                     // Some(String::from_utf8(d_vec[0].clone().bytes()).unwrap());
                                     Some(Entry::from_data(d_vec[0].clone()).unwrap().text);
                                 let e_p = EditorParams {
+                                    title: format!("Editing Post #{start_page}"),
                                     initial_text,
                                     allow_newlines: true,
                                     chars_limit: None,
@@ -1135,6 +1146,7 @@ impl ForumLogic {
         match curr_state {
             PresentationState::MainLobby(page_opt) => {
                 let e_p = EditorParams {
+                    title: format!("Adding new Topic"),
                     initial_text: Some(format!("Topic desrciption")),
 
                     allow_newlines: true,
@@ -1152,6 +1164,7 @@ impl ForumLogic {
             }
             PresentationState::Topic(c_id, pg_opt) => {
                 let e_p = EditorParams {
+                    title: format!("Adding new Post"),
                     initial_text: Some(format!("Adding new post…")),
 
                     allow_newlines: true,
@@ -1169,6 +1182,7 @@ impl ForumLogic {
             }
             PresentationState::Capability(c, v_gid) => {
                 let e_p = EditorParams {
+                    title: format!("Adding new Capability"),
                     initial_text: Some(format!("GID-0123456789abcdef")),
 
                     allow_newlines: false,
@@ -1304,7 +1318,8 @@ impl ForumLogic {
                     None,
                     Box::new(PresentationState::Capability(c, v_gid)),
                 );
-                self.process_edit_result(None).await;
+
+                self.process_edit_result(EditorResult::Close).await;
                 yield_now().await;
             }
             PresentationState::HeapSorting(_fsm_opt, _e_opt) => {
@@ -1322,7 +1337,7 @@ impl ForumLogic {
         }
     }
 
-    async fn process_edit_result(&mut self, text: Option<String>) {
+    async fn process_edit_result(&mut self, ed_res: EditorResult) {
         // eprintln!("FLogic got: {:?}", text);
         // DONE: validate received text against
         // what was expected to arrive.
@@ -1346,7 +1361,7 @@ impl ForumLogic {
                         } else {
                             vec_gid.len() as u16
                         };
-                        if let Some(text) = text {
+                        if let EditorResult::Text(text) = ed_res {
                             // eprintln!("Trying to construct GID from {text}");
                             if let Some(g_id) = GnomeId::from_string(text) {
                                 if id as usize >= vec_gid.len() {
@@ -1379,7 +1394,7 @@ impl ForumLogic {
                     }
                     PresentationState::MainLobby(page_opt) => {
                         self.presentation_state = PresentationState::MainLobby(page_opt);
-                        if let Some(topic_desc) = text {
+                        if let EditorResult::Text(topic_desc) = ed_res {
                             eprintln!("We should add a new topic:\n{topic_desc}");
                             // let can_directly_append = false;
                             let entry = Entry::new(self.my_id, topic_desc, 0);
@@ -1407,7 +1422,7 @@ impl ForumLogic {
                         }
                     }
                     PresentationState::Settings => {
-                        if let Some(text) = text {
+                        if let EditorResult::Text(text) = ed_res {
                             //TODO: we have an updated Manifest descr.
                             eprintln!("New descr: {}", text);
                             self.shell.manifest.set_description(text);
@@ -1426,7 +1441,7 @@ impl ForumLogic {
                         }
                     }
                     PresentationState::Topic(c_id, pg_opt) => {
-                        if let Some(text) = text {
+                        if let EditorResult::Text(text) = ed_res {
                             let entry = Entry::new(self.my_id, text, 0);
                             if let Some(id) = id {
                                 // TODO: check if current user can edit given post
@@ -1496,10 +1511,75 @@ impl ForumLogic {
                     }
                 }
             }
-            PresentationState::ShowingPost(c_id, _pg_id) => {
-                self.presentation_state = PresentationState::Topic(c_id, None);
-                self.present_topics().await;
-            }
+            PresentationState::ShowingPost(c_id, _pg_id) => match ed_res {
+                EditorResult::Close => {
+                    self.presentation_state = PresentationState::Topic(c_id, None);
+                    self.present_topics().await;
+                }
+                EditorResult::FirstPage => {
+                    self.presentation_state = PresentationState::ShowingPost(c_id, 0);
+                    let _ = self
+                        .to_app_mgr_send
+                        .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadPagesRange(
+                            self.shell.swarm_id,
+                            c_id,
+                            0,
+                            0,
+                        )))
+                        .await;
+                }
+                EditorResult::PrevPage => {
+                    if _pg_id == 0 {
+                        self.presentation_state = PresentationState::Topic(c_id, None);
+                        self.present_topics().await;
+                        return;
+                    }
+                    let ppage = u16::max(0, _pg_id - 1);
+                    self.presentation_state = PresentationState::ShowingPost(c_id, ppage);
+                    let _ = self
+                        .to_app_mgr_send
+                        .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadPagesRange(
+                            self.shell.swarm_id,
+                            c_id,
+                            ppage,
+                            ppage,
+                        )))
+                        .await;
+                }
+                EditorResult::NextPage => {
+                    if _pg_id == u16::MAX {
+                        self.presentation_state = PresentationState::Topic(c_id, None);
+                        self.present_topics().await;
+                        return;
+                    }
+                    let npage = u16::min(u16::MAX, _pg_id + 1);
+                    self.presentation_state = PresentationState::ShowingPost(c_id, npage);
+                    let _ = self
+                        .to_app_mgr_send
+                        .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadPagesRange(
+                            self.shell.swarm_id,
+                            c_id,
+                            npage,
+                            npage,
+                        )))
+                        .await;
+                }
+                EditorResult::LastPage => {
+                    self.presentation_state = PresentationState::ShowingPost(c_id, u16::MAX);
+                    let _ = self
+                        .to_app_mgr_send
+                        .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadPagesRange(
+                            self.shell.swarm_id,
+                            c_id,
+                            1,
+                            0,
+                        )))
+                        .await;
+                }
+                EditorResult::Text(text) => {
+                    eprintln!("Unexpected text, when showing read-only post: {}", text);
+                }
+            },
             other => {
                 eprintln!("Edit result when in state: {:?}", other);
                 self.presentation_state = other;
@@ -1756,6 +1836,7 @@ impl ForumLogic {
                     //TODO: open Editor with Manifest desc
                     // in READ only mode
                     let e_params = EditorParams {
+                        title: format!("Viewing Forum's description"),
                         initial_text: Some(self.shell.manifest.description.clone()),
                         allow_newlines: true,
                         chars_limit: None,
@@ -1825,6 +1906,7 @@ impl ForumLogic {
                 // description
                 eprintln!("Should edit Manifest Descr.");
                 let e_params = EditorParams {
+                    title: format!("Editing Forum's description"),
                     initial_text: Some(self.shell.manifest.description.clone()),
                     allow_newlines: true,
                     chars_limit: None,
@@ -1981,6 +2063,7 @@ impl ForumLogic {
 
                 let g_id = v_gid[id as usize];
                 let e_p = EditorParams {
+                    title: format!("Adding new Capability"),
                     initial_text: Some(format!("{g_id}")),
 
                     allow_newlines: false,
@@ -2001,6 +2084,7 @@ impl ForumLogic {
                             // TODO
                             if id == 1 {
                                 let e_p = EditorParams {
+                                    title: format!("Reviewing modified Post"),
                                     initial_text: Some(entry.text.clone()),
                                     allow_newlines: false,
                                     chars_limit: None,
@@ -2018,6 +2102,7 @@ impl ForumLogic {
                             } else if id == 0 {
                                 if let Some(entry) = entry_opt {
                                     let e_p = EditorParams {
+                                        title: format!("Viewing original Post"),
                                         initial_text: Some(entry.text.clone()),
                                         allow_newlines: false,
                                         chars_limit: None,
@@ -2046,6 +2131,7 @@ impl ForumLogic {
                         ForumSyncMessage::AddTopic(_t_id, entry) => {
                             if id == 0 {
                                 let e_p = EditorParams {
+                                    title: format!("Reviewing new Topic"),
                                     initial_text: Some(entry.text.clone()),
                                     allow_newlines: false,
                                     chars_limit: None,
@@ -2060,6 +2146,7 @@ impl ForumLogic {
                         ForumSyncMessage::AddPost(_t_id, entry) => {
                             if id == 0 {
                                 let e_p = EditorParams {
+                                    title: format!("Reviewing new Post"),
                                     initial_text: Some(entry.text.clone()),
                                     allow_newlines: false,
                                     chars_limit: None,

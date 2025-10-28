@@ -2,6 +2,15 @@ use crate::catalog::tui::Direction;
 use animaterm::utilities::message_box;
 use animaterm::{glyph, prelude::*};
 
+#[derive(Clone, Debug)]
+pub enum EditorResult {
+    Text(String),
+    Close,
+    FirstPage,
+    PrevPage,
+    NextPage,
+    LastPage,
+}
 pub struct Editor {
     pub g_id: usize,
     display_id: usize,
@@ -348,6 +357,12 @@ impl Editor {
         let mut i = 1;
         let plain = Glyph::plain();
         while let Some(char) = chars.next() {
+            if i > self.max_position.0 - 2 {
+                self.cursor_position.1 = self.cursor_position.1 + 1;
+                self.cursor_position.0 = 1;
+                i = 1
+                // break;
+            }
             // eprintln!(
             //     "Clearing {} {}",
             //     self.cursor_position.0 + i,
@@ -486,7 +501,7 @@ impl Editor {
     // TODO: also put lines into self.lines
     pub fn set_text(&mut self, mgr: &mut Manager, text: &str) {
         let mut lines = text.lines();
-        // let gp = Glyph::plain();
+        let gp = Glyph::plain();
         let mut g = Glyph::plain();
         let mut curr_x_position = 2;
         let mut curr_y_position = 1;
@@ -503,9 +518,9 @@ impl Editor {
                     mgr.set_glyph(self.g_id, g, curr_x_position, curr_y_position);
                     curr_x_position += 1;
                 }
-                // for i in curr_x_position..self.max_position.0 {
-                //     mgr.set_glyph(self.g_id, gp, i, curr_y_position);
-                // }
+                for i in curr_x_position..=self.max_position.0 {
+                    mgr.set_glyph(self.g_id, gp, i, curr_y_position);
+                }
                 curr_y_position += 1;
                 curr_x_position = 2;
             } else {
@@ -519,9 +534,9 @@ impl Editor {
                         curr_y_position += 1;
                     }
                 }
-                // for i in curr_x_position..self.max_position.0 {
-                //     mgr.set_glyph(self.g_id, gp, i, curr_y_position);
-                // }
+                for i in curr_x_position..=self.max_position.0 {
+                    mgr.set_glyph(self.g_id, gp, i, curr_y_position);
+                }
                 // TODO: how do we split those longer lines?
                 eprintln!(
                     "dupa {}> {} (line:{})",
@@ -533,7 +548,14 @@ impl Editor {
                 curr_x_position = 2;
             }
         }
+
+        // for y in curr_y_position..=self.max_position.1 {
+        //     for x in 2..=self.max_position.0 {
+        //         mgr.set_glyph(self.g_id, gp, x, y);
+        //     }
+        // }
     }
+
     pub fn serve(
         &mut self,
         main_display: usize,
@@ -542,7 +564,7 @@ impl Editor {
         allow_newlines: bool,
         byte_limit: Option<u16>,
         mgr: &mut Manager,
-    ) -> Option<String> {
+    ) -> EditorResult {
         mgr.restore_display(self.display_id, true);
         self.set_title(mgr, title);
         self.allow_newlines(allow_newlines);
@@ -560,7 +582,7 @@ impl Editor {
         self.read_only = read_only;
         self.can_edit = can_edit;
     }
-    pub fn run(&mut self, mgr: &mut Manager) -> Option<String> {
+    pub fn run(&mut self, mgr: &mut Manager) -> EditorResult {
         loop {
             if let Some(ch) = mgr.read_char() {
                 // eprintln!("Some ch: {}", ch);
@@ -579,8 +601,8 @@ impl Editor {
                         }
                         Key::Left => self.move_cursor(Direction::Left, mgr),
                         Key::Right => self.move_cursor(Direction::Right, mgr),
-                        Key::Home => self.move_to_line_start(mgr),
-                        Key::End => self.move_to_line_end(mgr),
+                        // Key::Home => self.move_to_line_start(mgr),
+                        // Key::End => self.move_to_line_end(mgr),
                         Key::Delete => {
                             if self.read_only {
                                 continue;
@@ -606,15 +628,31 @@ impl Editor {
                             self.move_cursor(Direction::Right, mgr);
                             self.move_cursor(Direction::Right, mgr);
                         }
+                        Key::PgUp => {
+                            let _ = self.take_text(mgr);
+                            return EditorResult::PrevPage;
+                        }
+                        Key::PgDn => {
+                            let _ = self.take_text(mgr);
+                            return EditorResult::NextPage;
+                        }
+                        Key::Home => {
+                            let _ = self.take_text(mgr);
+                            return EditorResult::FirstPage;
+                        }
+                        Key::End => {
+                            let _ = self.take_text(mgr);
+                            return EditorResult::LastPage;
+                        }
                         other => eprint!("Other: {}", other),
                     }
                 } else if ch == '\t' {
                     let taken = self.take_text(mgr);
                     // mgr.restore_display(main_display, true);
                     if self.read_only {
-                        return None;
+                        return EditorResult::Close;
                     } else {
-                        return Some(taken);
+                        return EditorResult::Text(taken);
                     }
                 } else if ch == '\u{7f}' {
                     if self.read_only {
