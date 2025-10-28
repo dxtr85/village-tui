@@ -372,7 +372,17 @@ impl CatalogLogic {
         // from_presentation_msg_send: Sender<FromCatalogView>,
         // to_presentation_msg_recv: std::sync::mpsc::Receiver<ToCatalogView>,
         // wrapped_sender: ASender<InternalMsg>,
-    ) -> Option<(Option<AppType>, SwarmName, AReceiver<InternalMsg>, Toolset)> {
+        clipboard_opt: Option<(SwarmName, ContentID)>,
+    ) -> Option<(
+        Option<AppType>,
+        SwarmName,
+        AReceiver<InternalMsg>,
+        Toolset,
+        Option<(SwarmName, ContentID)>,
+    )> {
+        if clipboard_opt.is_some() {
+            self.clipboard = clipboard_opt;
+        }
         let (mut tui_mgr, config, e_opt, c_opt, s_opt, i_opt, _pe_opt) = toolset.unfold();
         let mut return_val = None;
         let (cols, rows) = tui_mgr.screen_size();
@@ -1970,7 +1980,7 @@ impl CatalogLogic {
             //     .to_user_send
             //     .send(InternalMsg::User(ToApp::ActiveSwarm(s_name.clone(), s_id)))
             //     .await;
-            Some((app_type, s_name, self.to_app, toolset))
+            Some((app_type, s_name, self.to_app, toolset, self.clipboard))
         } else {
             eprintln!("return_val is none");
             toolset.discard();

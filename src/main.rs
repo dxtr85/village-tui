@@ -229,13 +229,15 @@ async fn main() {
         my_name.clone(),
         wrapped_receiver,
         toolset,
+        None,
     ));
     // TODO: Define a Toolbox struct to store all the tools an app might use.
     // Those are Editor, Notifier, Selector etc.
     // Once an app is done, it returns all the tools it was using back to toolbox.
     // When next app is strating, it borrows existing tools from Toolbox
     loop {
-        if let Some((app_type, s_name, wrapped_receiver, toolset)) = next_app.take() {
+        if let Some((app_type, s_name, wrapped_receiver, toolset, clipboard_opt)) = next_app.take()
+        {
             if app_type.is_none() {
                 eprintln!("Dunno what AppType that is,terminating");
                 // TODO: discover AppType
@@ -269,7 +271,7 @@ async fn main() {
                         get_indexer,
                         get_policy_editor,
                     );
-                    next_app = c_logic.run(dir.clone(), toolset).await;
+                    next_app = c_logic.run(dir.clone(), toolset, clipboard_opt).await;
                 }
                 AppType::Forum => {
                     let f_logic = ForumLogic::new(

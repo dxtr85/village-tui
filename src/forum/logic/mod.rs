@@ -131,13 +131,18 @@ impl Entry {
         bytes.append(&mut self.text.into_bytes());
         Data::new(bytes)
     }
-    pub fn entry_line(&self) -> String {
-        let text = if let Some(line) = self.text.lines().next() {
-            line.trim()
+    pub fn entry_line(&self, size: usize) -> String {
+        let mut text = if let Some(line) = self.text.lines().next() {
+            line.trim().chars().take(size - 21).collect::<String>()
         } else {
-            "No text"
+            "No text".to_string()
         };
-        format!("{:<64} A:{}", text, self.author)
+        let t_len = text.chars().count();
+
+        for _i in t_len..size - 21 {
+            text.push(' ');
+        }
+        format!("{} {}", text, self.author)
     }
 
     pub fn new(author: GnomeId, text: String, hash: u64) -> Self {
@@ -161,6 +166,7 @@ use crate::Toolset;
 pub struct ForumLogic {
     my_id: GnomeId,
     entries_count: u16,
+    entry_max_len: usize,
     shell: SwarmShell,
     entries: Vec<Entry>,
     last_heap_msg: Option<(ForumSyncMessage, GnomeId)>,
@@ -171,6 +177,7 @@ pub struct ForumLogic {
     to_tui_send: Sender<ToForumView>,
     to_tui_recv: Option<Receiver<ToForumView>>,
     from_tui_send: Option<Sender<FromForumView>>,
+    clipboard: Option<(SwarmName, ContentID)>,
 }
 impl ForumLogic {
     pub fn new(
@@ -193,6 +200,7 @@ impl ForumLogic {
             presentation_state: PresentationState::MainLobby(None),
             my_id,
             entries_count: ((screen_size.1 - 3) >> 1) as u16,
+            entry_max_len: usize::max(60, screen_size.0 - 4),
             shell,
             entries: vec![],
             last_heap_msg: None,
@@ -202,6 +210,7 @@ impl ForumLogic {
             to_tui_send,
             to_tui_recv: Some(to_tui_recv),
             from_tui_send: Some(from_tui_send),
+            clipboard: None,
         }
     }
     pub async fn run(
@@ -212,7 +221,13 @@ impl ForumLogic {
         // mut config: Configuration,
         // mut tui_mgr: Manager,
         // ) -> Option<(AppType, AReceiver<InternalMsg>, Configuration, Manager)> {
-    ) -> Option<(Option<AppType>, SwarmName, AReceiver<InternalMsg>, Toolset)> {
+    ) -> Option<(
+        Option<AppType>,
+        SwarmName,
+        AReceiver<InternalMsg>,
+        Toolset,
+        Option<(SwarmName, ContentID)>,
+    )> {
         let from_presentation_msg_send = self.from_tui_send.take().unwrap();
         let to_presentation_msg_recv = self.to_tui_recv.take().unwrap();
         let tui_join = spawn_blocking(move || {
@@ -268,7 +283,13 @@ impl ForumLogic {
                     s_name.clone(),
                 )))
                 .await;
-            Some((Some(switch_app), s_name, self.to_user_recv, toolset))
+            Some((
+                Some(switch_app),
+                s_name,
+                self.to_user_recv,
+                toolset,
+                self.clipboard,
+            ))
         } else {
             let _ = self.to_app_mgr_send.send(ToAppMgr::Quit).await;
             toolset.discard();
@@ -767,6 +788,9 @@ impl ForumLogic {
             FromForumView::Quit => {
                 return true;
             }
+            FromForumView::CopyToClipboard(which_one) => {
+                self.set_clipboard(which_one);
+            }
             FromForumView::SwitchTo(app_type, s_name) => {
                 *switch_to_opt = Some((app_type, s_name));
                 return true;
@@ -793,20 +817,27 @@ impl ForumLogic {
                 ForumSyncMessage::AddTopic(_t_id, entry) => {
                     let _ = self.to_tui_send.send(ToForumView::Request(vec![(
                         0,
-                        format!("Add Topic: {}", entry.entry_line()),
+                        format!("Add Topic: {}", entry.entry_line(self.entry_max_len - 11)),
                     )]));
                 }
                 ForumSyncMessage::AddPost(t_id, entry) => {
                     let _ = self.to_tui_send.send(ToForumView::Request(vec![(
                         0,
-                        format!("{} Add Post: {}", t_id, entry.entry_line()),
+                        format!(
+                            "{} Add Post: {}",
+                            t_id,
+                            entry.entry_line(self.entry_max_len - 15)
+                        ),
                     )]));
                 }
                 ForumSyncMessage::EditPost(t_id, p_id, entry) => {
                     //TODO: do not send until we have both entries
                     let _ = self.to_tui_send.send(ToForumView::Request(vec![
                         (0, format!("Orig: Pending ({}-{})", t_id, p_id)),
-                        (1, format!("Modif: {}", entry.entry_line())),
+                        (
+                            1,
+                            format!("Modif: {}", entry.entry_line(self.entry_max_len - 7)),
+                        ),
                     ]));
                     let _ = self
                         .to_app_mgr_send
@@ -989,8 +1020,8 @@ impl ForumLogic {
                                                 Entry::from_data(d_vec[0].clone()).unwrap();
                                             let _ =
                                                 self.to_tui_send.send(ToForumView::Request(vec![
-                                                    (0, orig_entry.entry_line()),
-                                                    (1, new_entry.entry_line()),
+                                                    (0, orig_entry.entry_line(self.entry_max_len)),
+                                                    (1, new_entry.entry_line(self.entry_max_len)),
                                                 ]));
                                         } else {
                                             eprintln!("Received wrong data for comparison");
@@ -1087,7 +1118,7 @@ impl ForumLogic {
         let mut res = Vec::with_capacity(page_size as usize);
         for i in first_idx..last_idx {
             if i < t_len {
-                res.push((i as u16, self.entries[i].entry_line()));
+                res.push((i as u16, self.entries[i].entry_line(self.entry_max_len)));
             } else {
                 break;
             }
@@ -1964,9 +1995,9 @@ impl ForumLogic {
                 ));
             }
             PresentationState::HeapSorting(_opt, entry_opt) => {
-                if let Some((f_msg, signer)) = _opt {
+                if let Some((f_msg, _signer)) = _opt {
                     match &f_msg {
-                        ForumSyncMessage::EditPost(t_id, p_id, entry) => {
+                        ForumSyncMessage::EditPost(_t_id, _p_id, entry) => {
                             // TODO
                             if id == 1 {
                                 let e_p = EditorParams {
@@ -2152,6 +2183,26 @@ impl ForumLogic {
             SyncMessageType::AppDefined(_m_type, _c_id, _d_id) => {
                 //TODO: here if a msg got rejected and we are out of options
                 // we could send User a notification, that his request can not be fullfilled
+            }
+        }
+    }
+    fn set_clipboard(&mut self, which: u16) {
+        match &self.presentation_state {
+            PresentationState::MainLobby(pg_opt) => {
+                if let Some(pg) = pg_opt {
+                    self.clipboard = Some((
+                        self.shell.swarm_name.clone(),
+                        pg * self.entries_count + which,
+                    ));
+                } else {
+                    self.clipboard = Some((self.shell.swarm_name.clone(), which));
+                }
+            }
+            PresentationState::Topic(t_id, _pg_opt) => {
+                self.clipboard = Some((self.shell.swarm_name.clone(), *t_id));
+            }
+            _other => {
+                self.clipboard = Some((self.shell.swarm_name.clone(), which));
             }
         }
     }

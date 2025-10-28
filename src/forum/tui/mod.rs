@@ -77,6 +77,7 @@ pub enum FromForumView {
     // RunningPolicies,
     // StoredPolicies,
     SwitchTo(AppType, SwarmName),
+    CopyToClipboard(u16),
     Quit,
 }
 // TODO: make an elastic menu mgmt system.
@@ -1187,6 +1188,11 @@ pub fn serve_forum_tui(
                 }
                 Key::Down | Key::Comma => {
                     let _action = buttons_logic.down(&mut tui_mgr);
+                }
+                Key::F5 => {
+                    let _ = to_app.send(FromForumView::CopyToClipboard(
+                        buttons_logic.selected_entry_button as u16,
+                    ));
                 }
                 _other => {
                     //TODO
