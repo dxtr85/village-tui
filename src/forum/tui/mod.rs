@@ -1212,6 +1212,18 @@ pub fn serve_forum_tui(
                         action = Some(Action::NextPage);
                     }
                 }
+                Key::Home => {
+                    action = Some(Action::FirstPage);
+                }
+                Key::PgUp => {
+                    action = Some(Action::PreviousPage);
+                }
+                Key::PgDn => {
+                    action = Some(Action::NextPage);
+                }
+                Key::End => {
+                    action = Some(Action::LastPage);
+                }
                 Key::F5 => {
                     let _ = to_app.send(FromForumView::CopyToClipboard(
                         buttons_logic.selected_entry_button as u16,
