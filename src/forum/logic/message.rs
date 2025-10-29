@@ -11,18 +11,22 @@ pub enum ForumSyncMessage {
 impl ForumSyncMessage {
     pub fn parse_app_msg(app_msg: AppDefinedMsg) -> Option<Self> {
         match app_msg.m_type() {
-            0 => Some(ForumSyncMessage::EditPost(
-                app_msg.c_id(),
-                app_msg.d_id(),
-                Entry::from_data(app_msg.data()).unwrap(),
-            )),
+            0 => {
+                let d_id = app_msg.d_id();
+
+                Some(ForumSyncMessage::EditPost(
+                    app_msg.c_id(),
+                    d_id,
+                    Entry::from_data(app_msg.data(), d_id > 0).unwrap(),
+                ))
+            }
             1 => Some(ForumSyncMessage::AddTopic(
                 app_msg.c_id(),
-                Entry::from_data(app_msg.data()).unwrap(),
+                Entry::from_data(app_msg.data(), false).unwrap(),
             )),
             2 => Some(ForumSyncMessage::AddPost(
                 app_msg.c_id(),
-                Entry::from_data(app_msg.data()).unwrap(),
+                Entry::from_data(app_msg.data(), true).unwrap(),
             )),
             _o => None,
         }

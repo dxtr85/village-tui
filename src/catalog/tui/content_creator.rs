@@ -25,7 +25,7 @@ use std::collections::HashMap;
 // As a result we get a modified Data block addressed at index 0 that we send to Swarm
 // for synchronization
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum CreatorResult {
     SelectDType,
     SelectTags,

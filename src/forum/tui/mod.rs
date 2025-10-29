@@ -15,10 +15,12 @@ use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 
 use crate::catalog::tui::button::Button;
+use crate::catalog::tui::CreatorResult;
 use crate::catalog::tui::EditorResult;
 use crate::common::poledit::PolAction;
 use crate::common::poledit::PolicyEditor;
 use crate::common::poledit::ReqTree;
+use crate::forum::logic::TopicContext;
 use crate::Toolset;
 pub struct EditorParams {
     pub title: String,
@@ -55,6 +57,7 @@ pub enum Action {
     PolicyAction(PolAction),
     Selected(Vec<usize>),
     EditorResult(EditorResult),
+    CreatorResult(CreatorResult),
     FollowLink(SwarmName, ContentID, u16), //last is page id
 }
 pub enum ToForumView {
@@ -72,6 +75,7 @@ pub enum ToForumView {
     ShowByteSet(u8, ByteSet),
     Select(bool, Vec<String>, Vec<usize>), // bool indicates if only one can be selected
     OpenEditor(EditorParams),
+    OpenCreator(TopicContext),
     Finish,
 }
 pub enum FromForumView {
@@ -1111,8 +1115,8 @@ pub fn serve_forum_tui(
     // config: Configuration,
     // ) -> (Manager, Configuration) {
 ) -> Toolset {
-    let (mut tui_mgr, config, e_opt, _c_opt, s_opt, _i_opt, pe_opt) = toolset.unfold();
-    // let mut creator = c_opt.unwrap();
+    let (mut tui_mgr, config, e_opt, c_opt, s_opt, _i_opt, pe_opt) = toolset.unfold();
+    let mut creator = c_opt.unwrap();
     let mut selector = s_opt.unwrap();
 
     // TODO: PEditor should be created once upon
@@ -1371,6 +1375,18 @@ pub fn serve_forum_tui(
                     let e_res = editor.run(&mut tui_mgr);
                     action = Some(Action::EditorResult(e_res));
                     tui_mgr.restore_display(main_display, true);
+                }
+                ToForumView::OpenCreator(t_ctx) => {
+                    eprintln!("Forum should open creator");
+                    let res = creator.show(
+                        main_display,
+                        &mut tui_mgr,
+                        false,
+                        format!("Topic"),
+                        format!(""),
+                        t_ctx.description,
+                    );
+                    action = Some(Action::CreatorResult(res));
                 }
                 ToForumView::Finish => {
                     eprintln!("Forum is finished");

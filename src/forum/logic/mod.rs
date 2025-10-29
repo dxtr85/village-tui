@@ -1,5 +1,6 @@
 use crate::catalog::logic::SwarmShell;
 mod message;
+use crate::catalog::tui::CreatorResult;
 use crate::catalog::tui::EditorResult;
 use crate::common::poledit::decompose;
 use crate::common::poledit::PolAction;
@@ -36,6 +37,21 @@ use std::sync::mpsc::Sender;
 use std::time::Duration;
 
 use dapp_lib::prelude::AppType;
+#[derive(Debug, Clone)]
+pub struct TopicContext {
+    pub t_id: Option<ContentID>,
+    pub description: String,
+    pub tags: Vec<usize>,
+}
+impl TopicContext {
+    pub fn new() -> Self {
+        TopicContext {
+            t_id: None,
+            description: "Topic description".to_string(),
+            tags: vec![],
+        }
+    }
+}
 
 #[derive(Debug)]
 enum PresentationState {
@@ -55,6 +71,7 @@ enum PresentationState {
     Capability(Capabilities, Vec<GnomeId>),
     SelectingOneCapability(Vec<Capabilities>, Box<PresentationState>),
     Editing(Option<u16>, Box<PresentationState>),
+    TopicEditing(TopicContext),
     HeapSorting(Option<(ForumSyncMessage, GnomeId)>, Option<Entry>),
     CreatingByteSet(Vec<u16>, bool, Option<(u8, HashMap<u8, ByteSet>)>),
 }
@@ -98,17 +115,35 @@ enum PresentationState {
 #[derive(Clone, Debug, PartialEq)]
 struct Entry {
     author: GnomeId,
+    tags: Vec<u8>,
     text: String,
     hash: u64,
 }
 impl Entry {
-    pub fn from_data(data: Data) -> Result<Self, ()> {
-        if data.len() < 8 {
+    pub fn from_data(data: Data, is_manifest_or_nonop_post: bool) -> Result<Self, ()> {
+        if data.len() < 9 {
             // eprintln!("")
             return Err(());
         }
         let hash = data.get_hash();
         let mut bytes = data.bytes();
+        // TODO: first go Tags
+        let tags_count = if is_manifest_or_nonop_post {
+            0
+        } else {
+            bytes.remove(0)
+        };
+        let mut tags = vec![];
+        eprintln!("Temporary solution: {tags_count}");
+        for _i in 0..tags_count {
+            tags.push(bytes.remove(0));
+        }
+        // if tags_count == 1 || tags_count == 0 {
+        //     eprintln!("Temporary solution: {tags_count}");
+        //     //temporary solution, I don't want to loose my topics lol
+        //     bytes.remove(0);
+        //     tags.push(bytes.remove(0));
+        // }
         let g_id = u64::from_be_bytes([
             bytes.remove(0),
             bytes.remove(0),
@@ -120,13 +155,17 @@ impl Entry {
             bytes.remove(0),
         ]);
         if let Ok(text) = String::from_utf8(bytes) {
-            Ok(Entry::new(GnomeId(g_id), text, hash))
+            Ok(Entry::new(GnomeId(g_id), tags, text, hash))
         } else {
             Err(())
         }
     }
     pub fn into_data(self) -> Result<Data, Vec<u8>> {
-        let mut bytes = Vec::with_capacity(8 + self.text.len());
+        let mut bytes = Vec::with_capacity(9 + self.tags.len() + self.text.len());
+        bytes.push(self.tags.len() as u8);
+        for tag in self.tags {
+            bytes.push(tag);
+        }
         for b in self.author.bytes() {
             bytes.push(b);
         }
@@ -147,12 +186,18 @@ impl Entry {
         format!("{} {}", text, self.author)
     }
 
-    pub fn new(author: GnomeId, text: String, hash: u64) -> Self {
-        Entry { author, text, hash }
+    pub fn new(author: GnomeId, tags: Vec<u8>, text: String, hash: u64) -> Self {
+        Entry {
+            author,
+            tags,
+            text,
+            hash,
+        }
     }
     pub fn empty() -> Self {
         Entry {
             author: GnomeId::any(),
+            tags: vec![],
             text: format!("Empty"),
             hash: 0,
         }
@@ -379,6 +424,15 @@ impl ForumLogic {
                         self.present_topics().await;
                     } else {
                         eprintln!("But no first page!");
+                        if c_id == 0 {
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadAllPages(
+                                    self.shell.swarm_id,
+                                    0,
+                                )))
+                                .await;
+                        }
                         // TODO: check if we should read given contents
                         // (that is only when we are currently presenting given Topic)
                         match &self.presentation_state {
@@ -747,6 +801,7 @@ impl ForumLogic {
                             .await;
                         let m_head: Entry = Entry::new(
                             self.shell.swarm_name.founder,
+                            vec![],
                             self.shell
                                 .manifest
                                 .description
@@ -769,6 +824,7 @@ impl ForumLogic {
                         self.serve_selected(id_vec).await;
                     }
                     Action::EditorResult(str_o) => self.process_edit_result(str_o).await,
+                    Action::CreatorResult(c_res) => self.process_creator_result(c_res).await,
                     Action::FollowLink(s_name, _c_id, _pg_id) => {
                         // Follow Link
                         if s_name.founder.is_any() {
@@ -910,6 +966,10 @@ impl ForumLogic {
         if d_vec.is_empty() {
             return;
         }
+        eprintln!("Process CID{c_id} len: {}", d_vec[0].len());
+        if d_vec[0].len() < 9 {
+            return;
+        }
         // This check is made elsewhere
         // if c_id == 0 {
         //     return self.process_manifest(d_type, d_vec);
@@ -948,7 +1008,7 @@ impl ForumLogic {
                             self.update_entry(
                                 c_id as usize,
                                 // Entry::new(GnomeId::any(), header.trim().to_string(), 0),
-                                Entry::from_data(first).unwrap(),
+                                Entry::from_data(first, c_id == 0).unwrap(),
                             );
                             // };
                             self.presentation_state = curr_state;
@@ -985,7 +1045,7 @@ impl ForumLogic {
                                 self.update_entry(
                                     id,
                                     // Entry::new(GnomeId::any(), header.trim().to_string(), 0),
-                                    Entry::from_data(first).unwrap(),
+                                    Entry::from_data(first, start_page > 0).unwrap(),
                                 );
                                 // };
                             }
@@ -996,7 +1056,7 @@ impl ForumLogic {
                                 if start_page == _p_id || _p_id == u16::MAX {
                                     let initial_text =
                                 // Some(String::from_utf8(d_vec[0].clone().bytes()).unwrap());
-                                Some(Entry::from_data(d_vec[0].clone()).unwrap().text);
+                                Some(Entry::from_data(d_vec[0].clone(),start_page>0).unwrap().text);
                                     let e_p = EditorParams {
                                         title: format!("Topic #{_t_id}, Post #{start_page}"),
                                         initial_text,
@@ -1025,7 +1085,7 @@ impl ForumLogic {
                                 new_what = Some(start_page);
                                 let initial_text =
                                     // Some(String::from_utf8(d_vec[0].clone().bytes()).unwrap());
-                                    Some(Entry::from_data(d_vec[0].clone()).unwrap().text);
+                                    Some(Entry::from_data(d_vec[0].clone(),start_page>0).unwrap().text);
                                 let e_p = EditorParams {
                                     title: format!("Editing Post #{start_page}"),
                                     initial_text,
@@ -1049,7 +1109,8 @@ impl ForumLogic {
                                     ForumSyncMessage::EditPost(t_id, p_id, new_entry) => {
                                         if *t_id == c_id && *p_id == start_page {
                                             let orig_entry =
-                                                Entry::from_data(d_vec[0].clone()).unwrap();
+                                                Entry::from_data(d_vec[0].clone(), start_page > 0)
+                                                    .unwrap();
                                             let _ =
                                                 self.to_tui_send.send(ToForumView::Request(vec![
                                                     (0, orig_entry.entry_line(self.entry_max_len)),
@@ -1070,7 +1131,8 @@ impl ForumLogic {
                                         eprintln!("Unexpected Read Success, when adding a post");
                                     }
                                 }
-                                let entry = Entry::from_data(d_vec[0].clone()).unwrap();
+                                let entry =
+                                    Entry::from_data(d_vec[0].clone(), start_page > 0).unwrap();
                                 self.presentation_state = PresentationState::HeapSorting(
                                     Some((forum_msg, _sign)),
                                     Some(entry),
@@ -1113,7 +1175,12 @@ impl ForumLogic {
             let line: String = manifest.description.lines().take(1).collect();
             line.chars().take(64).collect()
         };
-        let desc = Entry::new(self.shell.swarm_name.founder, text.trim().to_string(), 0);
+        let desc = Entry::new(
+            self.shell.swarm_name.founder,
+            vec![],
+            text.trim().to_string(),
+            0,
+        );
         if self.entries.is_empty() {
             self.entries.push(desc);
         } else {
@@ -1190,22 +1257,27 @@ impl ForumLogic {
         //
         match curr_state {
             PresentationState::MainLobby(page_opt) => {
-                let e_p = EditorParams {
-                    title: format!("Adding new Topic"),
-                    initial_text: Some(format!("Topic desrciption")),
+                // TODO: instead of opening Editor, open Creator
+                // let e_p = EditorParams {
+                //     title: format!("Adding new Topic"),
+                //     initial_text: Some(format!("Topic desrciption")),
 
-                    allow_newlines: true,
-                    chars_limit: None,
-                    text_limit: Some(800),
-                    read_only: false,
-                };
-                let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
+                //     allow_newlines: true,
+                //     chars_limit: None,
+                //     text_limit: Some(800),
+                //     read_only: false,
+                // };
+                // let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
                 eprintln!("We should add a new topic");
+                let _ = self
+                    .to_tui_send
+                    .send(ToForumView::OpenCreator(TopicContext::new()));
+                self.presentation_state = PresentationState::TopicEditing(TopicContext::new());
                 // self.presentation_state = PresentationState::MainLobby(page_opt);
-                self.presentation_state = PresentationState::Editing(
-                    None,
-                    Box::new(PresentationState::MainLobby(page_opt)),
-                );
+                // self.presentation_state = PresentationState::Editing(
+                //     None,
+                //     Box::new(PresentationState::MainLobby(page_opt)),
+                // );
             }
             PresentationState::Topic(c_id, pg_opt) => {
                 let e_p = EditorParams {
@@ -1648,7 +1720,7 @@ impl ForumLogic {
                         if let EditorResult::Text(topic_desc) = ed_res {
                             eprintln!("We should add a new topic:\n{topic_desc}");
                             // let can_directly_append = false;
-                            let entry = Entry::new(self.my_id, topic_desc, 0);
+                            let entry = Entry::new(self.my_id, vec![], topic_desc, 0);
                             // if can_directly_append {
                             let data = entry.into_data().unwrap();
                             let _ = self
@@ -1694,7 +1766,7 @@ impl ForumLogic {
                             } else if Some(1) == id {
                                 eprintln!("Adding new Category: {text}");
                                 let tag = Tag::new(text).unwrap();
-                                self.shell.manifest.add_data_type(tag);
+                                self.shell.manifest.add_tags(vec![tag]);
                                 let d_vec = self.shell.manifest.to_data();
                                 let _ = self
                                     .to_app_mgr_send
@@ -1712,7 +1784,7 @@ impl ForumLogic {
                     }
                     PresentationState::Topic(c_id, pg_opt) => {
                         if let EditorResult::Text(text) = ed_res {
-                            let entry = Entry::new(self.my_id, text, 0);
+                            let entry = Entry::new(self.my_id, vec![], text, 0);
                             if let Some(id) = id {
                                 // TODO: check if current user can edit given post
                                 eprintln!("Should update {id:?}");
@@ -1850,9 +1922,94 @@ impl ForumLogic {
                     eprintln!("Unexpected text, when showing read-only post: {}", text);
                 }
             },
+            PresentationState::TopicEditing(t_ctx) => {
+                if let EditorResult::Text(description) = ed_res {
+                    let mut new_ctx = t_ctx.clone();
+                    new_ctx.description = description.clone();
+                    self.presentation_state = PresentationState::TopicEditing(TopicContext {
+                        t_id: t_ctx.t_id,
+                        description,
+                        tags: t_ctx.tags,
+                    });
+                    let _ = self.to_tui_send.send(ToForumView::OpenCreator(new_ctx));
+                }
+            }
             other => {
                 eprintln!("Edit result when in state: {:?}", other);
                 self.presentation_state = other;
+            }
+        }
+    }
+    async fn process_creator_result(&mut self, c_res: CreatorResult) {
+        eprintln!("in process_creator_result, {c_res:?}");
+        if let PresentationState::TopicEditing(_tctx) = &self.presentation_state {
+            // self.presentation_state = PresentationState::TopicEditing(_tctx);
+            match c_res {
+                CreatorResult::SelectDType => {
+                    eprintln!("Should select DType (always Topic…)");
+                    // Right now we will ignore thiss call, since we only have Topic DType
+                    let _ = self
+                        .to_tui_send
+                        .send(ToForumView::OpenCreator(_tctx.clone()));
+                }
+                CreatorResult::SelectTags => {
+                    let names = self.shell.manifest.tag_names(None);
+                    // let names = self.shell.manifest.dtype_names();
+                    eprintln!("Should select Tags from: {names:?}");
+                    let _ = self.to_tui_send.send(ToForumView::Select(
+                        false,
+                        names,
+                        _tctx.tags.clone(),
+                    ));
+                }
+                CreatorResult::SelectDescription => {
+                    eprintln!("Should set description");
+                    let e_p = EditorParams {
+                        title: format!("Adding new Topic"),
+                        initial_text: Some(_tctx.description.clone()),
+
+                        allow_newlines: true,
+                        chars_limit: None,
+                        text_limit: Some(800),
+                        read_only: false,
+                    };
+                    let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
+                }
+                CreatorResult::Create => {
+                    eprintln!("Should create new Topic");
+                    let prev_state = std::mem::replace(
+                        &mut self.presentation_state,
+                        PresentationState::MainLobby(None),
+                    );
+                    if let PresentationState::TopicEditing(t_ctx) = prev_state {
+                        let mut bytes = Vec::with_capacity(1024);
+                        bytes.push(t_ctx.tags.len() as u8);
+                        for tag in t_ctx.tags {
+                            bytes.push(tag as u8);
+                        }
+                        for bte in self.my_id.bytes() {
+                            bytes.push(bte);
+                        }
+                        bytes.append(&mut t_ctx.description.into_bytes());
+                        let new_topic = Data::new(bytes).unwrap();
+                        let _ = self
+                            .to_app_mgr_send
+                            .send(ToAppMgr::AppendContent(
+                                self.shell.swarm_id,
+                                DataType::Data(0),
+                                new_topic,
+                            ))
+                            .await;
+                        self.present_topics().await;
+                    } else {
+                        self.presentation_state = prev_state;
+                    }
+                }
+                CreatorResult::Cancel => {
+                    eprintln!("Should cancel");
+                    self.presentation_state = PresentationState::MainLobby(None);
+                    self.present_topics().await;
+                }
             }
         }
     }
@@ -2084,6 +2241,20 @@ impl ForumLogic {
                         // TODO: create new bset (this should not happen)
                     }
                 }
+            }
+            PresentationState::TopicEditing(t_ctx) => {
+                // TODO create new context with selected
+                // let mut tags = Vec::with_capacity(ids.len());
+                // for id in ids {
+                //     tags.push(id as u8);
+                // }
+                let new_ctxt = TopicContext {
+                    t_id: t_ctx.t_id,
+                    description: t_ctx.description,
+                    tags: ids,
+                };
+                self.presentation_state = PresentationState::TopicEditing(new_ctxt.clone());
+                let _ = self.to_tui_send.send(ToForumView::OpenCreator(new_ctxt));
             }
             other => {
                 self.presentation_state = other;
@@ -2454,6 +2625,9 @@ impl ForumLogic {
             PresentationState::ShowingPost(_c, _p) => {
                 eprintln!("Got ID when showing Post");
             }
+            PresentationState::TopicEditing(_tctx) => {
+                //ignore
+            }
         }
         if let Some(n_s) = new_state {
             self.presentation_state = n_s;
@@ -2495,7 +2669,7 @@ impl ForumLogic {
             SyncMessageType::AppendContent(d_type) => {
                 if d_type.byte() == 0 {
                     // try 2step process of adding Topic
-                    let msg = ForumSyncMessage::AddTopic(0, Entry::from_data(data).unwrap())
+                    let msg = ForumSyncMessage::AddTopic(0, Entry::from_data(data, false).unwrap())
                         .into_app_msg()
                         .unwrap();
                     let _ = self
@@ -2509,7 +2683,7 @@ impl ForumLogic {
             }
             SyncMessageType::AppendData(c_id) => {
                 // try 2step process of adding Topic
-                let msg = ForumSyncMessage::AddPost(c_id, Entry::from_data(data).unwrap())
+                let msg = ForumSyncMessage::AddPost(c_id, Entry::from_data(data, true).unwrap())
                     .into_app_msg()
                     .unwrap();
                 let _ = self
@@ -2525,9 +2699,13 @@ impl ForumLogic {
             }
             SyncMessageType::UpdateData(c_id, d_id) => {
                 // try 2step process of adding Topic
-                let msg = ForumSyncMessage::EditPost(c_id, d_id, Entry::from_data(data).unwrap())
-                    .into_app_msg()
-                    .unwrap();
+                let msg = ForumSyncMessage::EditPost(
+                    c_id,
+                    d_id,
+                    Entry::from_data(data, d_id > 0).unwrap(),
+                )
+                .into_app_msg()
+                .unwrap();
                 let _ = self
                     .to_app_mgr_send
                     .send(ToAppMgr::AppDefined(self.shell.swarm_id, msg))
