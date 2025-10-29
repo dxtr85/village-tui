@@ -22,6 +22,7 @@ use dapp_lib::prelude::Requirement;
 use dapp_lib::prelude::SwarmID;
 use dapp_lib::prelude::SwarmName;
 use dapp_lib::prelude::SyncMessageType;
+use dapp_lib::prelude::Tag;
 use dapp_lib::Data;
 use dapp_lib::ToApp;
 use dapp_lib::ToAppMgr;
@@ -592,7 +593,7 @@ impl ForumLogic {
                     Action::AddNew(param) => {
                         self.add_new_action(param).await;
                     }
-                    Action::Edit(_id) => {
+                    Action::Edit(id) => {
                         let curr_state = std::mem::replace(
                             &mut self.presentation_state,
                             PresentationState::Settings,
@@ -601,7 +602,7 @@ impl ForumLogic {
                             PresentationState::Topic(c_id, pg_opt) => {
                                 eprintln!("Action Edit when in Topic");
                                 if let Some(page) = pg_opt {
-                                    let post_id = (page * self.entries_count) + _id;
+                                    let post_id = (page * self.entries_count) + id;
                                     // TODO: read contents of post,
                                     let _ = self
                                         .to_app_mgr_send
@@ -625,10 +626,15 @@ impl ForumLogic {
                                 }
                             }
                             PresentationState::Settings => {
-                                // TODO: Edit in this State means User opened Requests Menu
-                                // So we need to HeepPeek and, then also source page read
-                                // and after that send those two entries to User to decide.
-                                self.heap_logic(false).await;
+                                if id == 0 {
+                                    // TODO: Edit in this State means User opened Requests Menu
+                                    // So we need to HeepPeek and, then also source page read
+                                    // and after that send those two entries to User to decide.
+                                    self.heap_logic(false).await;
+                                } else if id == 1 {
+                                    //TODO:
+                                    self.add_category().await;
+                                }
                             }
                             PresentationState::HeapSorting(fsm_opt, entry_opt) => {
                                 if let Some((fsm, signer)) = fsm_opt {
@@ -862,6 +868,21 @@ impl ForumLogic {
                 self.shell.swarm_id,
             )))
             .await;
+    }
+    async fn add_category(&mut self) {
+        // Remember to always set self.presentation_state (or rework logic)
+        self.presentation_state =
+            PresentationState::Editing(Some(1), Box::new(PresentationState::Settings));
+
+        let e_p = EditorParams {
+            title: format!("Add new Category (oneline, 32 bytes max)"),
+            initial_text: Some(format!("NewCategory")),
+            allow_newlines: false,
+            chars_limit: None,
+            text_limit: Some(32),
+            read_only: false,
+        };
+        let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
     }
 
     async fn append_first_page(&mut self, c_id: ContentID, d_type: DataType, data: Data) {
@@ -1653,21 +1674,40 @@ impl ForumLogic {
                     }
                     PresentationState::Settings => {
                         if let EditorResult::Text(text) = ed_res {
-                            //TODO: we have an updated Manifest descr.
-                            eprintln!("New descr: {}", text);
-                            self.shell.manifest.set_description(text);
-                            let d_vec = self.shell.manifest.to_data();
-                            let _ = self
-                                .to_app_mgr_send
-                                .send(ToAppMgr::ChangeContent(
-                                    self.shell.swarm_id,
-                                    0,
-                                    DataType::Data(0),
-                                    d_vec,
-                                ))
-                                .await;
-                            self.presentation_state = PresentationState::MainLobby(None);
-                            self.present_topics().await;
+                            // We distinguish between what to do by value of id
+                            if None == id {
+                                //TODO: we have an updated Manifest descr.
+                                eprintln!("New descr: {}", text);
+                                self.shell.manifest.set_description(text);
+                                let d_vec = self.shell.manifest.to_data();
+                                let _ = self
+                                    .to_app_mgr_send
+                                    .send(ToAppMgr::ChangeContent(
+                                        self.shell.swarm_id,
+                                        0,
+                                        DataType::Data(0),
+                                        d_vec,
+                                    ))
+                                    .await;
+                                self.presentation_state = PresentationState::MainLobby(None);
+                                self.present_topics().await;
+                            } else if Some(1) == id {
+                                eprintln!("Adding new Category: {text}");
+                                let tag = Tag::new(text).unwrap();
+                                self.shell.manifest.add_data_type(tag);
+                                let d_vec = self.shell.manifest.to_data();
+                                let _ = self
+                                    .to_app_mgr_send
+                                    .send(ToAppMgr::ChangeContent(
+                                        self.shell.swarm_id,
+                                        0,
+                                        DataType::Data(0),
+                                        d_vec,
+                                    ))
+                                    .await;
+                                self.presentation_state = PresentationState::MainLobby(None);
+                                self.present_topics().await;
+                            }
                         }
                     }
                     PresentationState::Topic(c_id, pg_opt) => {

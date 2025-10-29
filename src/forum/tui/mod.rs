@@ -186,7 +186,7 @@ impl ButtonsLogic {
                 [
                     ButtonState::Show("← Forum".to_string()),
                     ButtonState::Show("Requests".to_string()),
-                    ButtonState::Hide,
+                    ButtonState::Show("+Categry".to_string()),
                     ButtonState::Hide,
                     ButtonState::Hide,
                     ButtonState::Hide,
@@ -485,8 +485,8 @@ impl ButtonsLogic {
                             Some(Action::Edit(0))
                         }
                         2 => {
-                            //hidden
-                            None
+                            // Open Editor for a new Category/Tag
+                            Some(Action::Edit(1))
                         }
                         3 => {
                             //hidden
