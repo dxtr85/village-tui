@@ -13,6 +13,7 @@ use async_std::task::spawn;
 use async_std::task::spawn_blocking;
 use async_std::task::yield_now;
 use dapp_lib::prelude::ByteSet;
+use dapp_lib::prelude::CapabiliTree;
 use dapp_lib::prelude::Capabilities;
 use dapp_lib::prelude::ContentID;
 use dapp_lib::prelude::DataType;
@@ -266,6 +267,7 @@ impl ForumLogic {
         founder: GnomeId,
         _config_dir: PathBuf,
         toolset: Toolset,
+        clipboard_opt: Option<(SwarmName, ContentID)>,
         // mut config: Configuration,
         // mut tui_mgr: Manager,
         // ) -> Option<(AppType, AReceiver<InternalMsg>, Configuration, Manager)> {
@@ -276,6 +278,7 @@ impl ForumLogic {
         Toolset,
         Option<(SwarmName, ContentID)>,
     )> {
+        self.clipboard = clipboard_opt;
         let from_presentation_msg_send = self.from_tui_send.take().unwrap();
         let to_presentation_msg_recv = self.to_tui_recv.take().unwrap();
         let tui_join = spawn_blocking(move || {
@@ -632,7 +635,15 @@ impl ForumLogic {
                     }
                     Action::StoredCapabilities => {
                         //TODO:
-                        self.presentation_state = PresentationState::StoredCapabilities(None);
+                        let c_keys = self.shell.manifest.capability_reg.keys();
+                        let mut c_listing = Vec::with_capacity(c_keys.len());
+                        for key in c_keys {
+                            c_listing.push((key.byte() as u16, key.text()));
+                        }
+                        let _ = self
+                            .to_tui_send
+                            .send(ToForumView::StoredCapabilitiesPage(0, c_listing));
+                        self.presentation_state = PresentationState::StoredCapabilities(Some(0));
                     }
                     Action::ByteSets(_is_run) => {
                         //TODO:
@@ -773,6 +784,9 @@ impl ForumLogic {
                     }
                     Action::Run(id_opt) => {
                         self.run_action(id_opt).await;
+                    }
+                    Action::Store(id) => {
+                        self.store_action(id).await;
                     }
                     Action::NextPage => {
                         self.show_next_page().await;
@@ -1303,10 +1317,15 @@ impl ForumLogic {
                 );
             }
             PresentationState::Capability(c, v_gid) => {
+                let initial_text = if let Some((s_name, _id)) = &self.clipboard {
+                    Some(format!("GID-{:016x}", s_name.founder.0))
+                } else {
+                    Some(format!("GID-0123456789abcdef"))
+                };
+
                 let e_p = EditorParams {
                     title: format!("Adding new Capability"),
-                    initial_text: Some(format!("GID-0123456789abcdef")),
-
+                    initial_text,
                     allow_newlines: false,
                     chars_limit: Some("0123456789abcdef".chars().collect()),
                     text_limit: Some(20),
@@ -1349,6 +1368,37 @@ impl ForumLogic {
                 self.presentation_state = PresentationState::SelectingOneCapability(
                     avail_caps,
                     Box::new(PresentationState::RunningCapabilities(old_caps_opt)),
+                );
+                yield_now().await;
+            }
+            PresentationState::StoredCapabilities(_p_opt) => {
+                // let mut old_caps_opt = None;
+                // TODO: Open Selector with a list of Capabilities
+                // that are not yet defined in Manifest
+                // and allow to choose one
+                // TODO: Once Selector returns an item present
+                // this Capability to user allowing him to add GIDs.
+                //
+
+                let (avail_caps, avail_cstrs) = {
+                    let (mut c_list, mut s_list) = Capabilities::mapping();
+                    let mut iter = c_list.iter();
+                    for cap in self.shell.manifest.capability_reg.keys() {
+                        if let Some(pos) = iter.position(|c| c == cap) {
+                            c_list.remove(pos);
+                            s_list.remove(pos);
+                            iter = c_list.iter();
+                        }
+                    }
+                    (c_list, s_list)
+                };
+                let _ = self
+                    .to_tui_send
+                    .send(ToForumView::Select(true, avail_cstrs, vec![]));
+
+                self.presentation_state = PresentationState::SelectingOneCapability(
+                    avail_caps,
+                    Box::new(PresentationState::StoredCapabilities(_p_opt)),
                 );
                 yield_now().await;
             }
@@ -1419,6 +1469,37 @@ impl ForumLogic {
             }
             _other => {
                 eprintln!("Can not run_action ");
+            }
+        }
+        yield_now().await;
+    }
+    async fn store_action(&mut self, _id: usize) {
+        match &self.presentation_state {
+            PresentationState::Capability(cap, gnome_ids) => {
+                let mut c_tree = CapabiliTree::create();
+                for gnome_id in gnome_ids {
+                    eprintln!("adding {} to cap", gnome_id);
+                    c_tree.insert(*gnome_id);
+                }
+                eprintln!(
+                    "After adding ctree size: {}",
+                    c_tree.get_all_members().len()
+                );
+                self.shell.manifest.capability_reg.insert(*cap, c_tree);
+                let m_data = self.shell.manifest.to_data();
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::ChangeContent(
+                        self.shell.swarm_id,
+                        0,
+                        DataType::Data(0),
+                        m_data,
+                    ))
+                    .await;
+                //TODO
+            }
+            _other => {
+                // unsupported
             }
         }
         yield_now().await;
@@ -2136,6 +2217,20 @@ impl ForumLogic {
                         self.presentation_state =
                             PresentationState::RunningCapabilities(Some((c_id, mapping)));
                     }
+                    PresentationState::StoredCapabilities(_p_opt) => {
+                        //TODO
+                        let c_keys = self.shell.manifest.capability_reg.keys();
+                        let mut c_listing = Vec::with_capacity(c_keys.len());
+                        let new_one = caps[id];
+                        c_listing.push((new_one.byte() as u16, new_one.text()));
+                        for key in c_keys {
+                            c_listing.push((key.byte() as u16, key.text()));
+                        }
+                        let _ = self
+                            .to_tui_send
+                            .send(ToForumView::StoredCapabilitiesPage(0, c_listing));
+                        self.presentation_state = PresentationState::StoredCapabilities(Some(0));
+                    }
                     // PresentationState::RunningPolicies(r_pols_opt) => {
                     //     //TODO: move logic from below
                     //     // but this can get tricky, since we can both
@@ -2482,12 +2577,31 @@ impl ForumLogic {
                 // And now we should retrieve that Policy from Manifest,
                 // which should be kept up-to-date.
             }
-            PresentationState::StoredCapabilities(page_opt) => {
-                //TODO: get Capability & show it to user
-                if page_opt.is_none() {
-                    eprintln!("Unable to tell which page is shown (6)");
-                    return;
+            PresentationState::StoredCapabilities(_page_opt) => {
+                let cap = Capabilities::from(id as u8);
+                if let Some(c_tree) = self.shell.manifest.capability_reg.get(&cap) {
+                    let all_members = c_tree.get_all_members();
+                    eprintln!("Members #:{}", all_members.len());
+                    let mut mem_enum = Vec::with_capacity(all_members.len());
+                    for (i, member) in all_members.iter().enumerate() {
+                        mem_enum.push((i as u16, format!("GID-{:016x}", member.0)));
+                    }
+                    let _ = self
+                        .to_tui_send
+                        .send(ToForumView::ShowCapability(cap, mem_enum));
+                    new_state = Some(PresentationState::Capability(cap, all_members));
+                } else {
+                    // We just created a Capability, that does not exist in Manifest yet
+                    let _ = self
+                        .to_tui_send
+                        .send(ToForumView::ShowCapability(cap, vec![]));
+                    new_state = Some(PresentationState::Capability(cap, vec![]));
                 }
+                //TODO: get Capability & show it to user
+                // if page_opt.is_none() {
+                //     eprintln!("Unable to tell which page is shown (6)");
+                //     return;
+                // }
                 // let page = page_opt.unwrap();
                 // similar to StoredPolicies
             }
@@ -2515,10 +2629,15 @@ impl ForumLogic {
                 // new_state = Some(PresentationState::Capability(c.clone(), v_gid.clone()));
 
                 let g_id = v_gid[id as usize];
+                let initial_text = if let Some((s_name, _id)) = &self.clipboard {
+                    Some(format!("GID-{:016x}", s_name.founder.0))
+                } else {
+                    Some(format!("{g_id}"))
+                };
+
                 let e_p = EditorParams {
                     title: format!("Adding new Capability"),
-                    initial_text: Some(format!("{g_id}")),
-
+                    initial_text,
                     allow_newlines: false,
                     chars_limit: Some("0123456789abcdef".chars().collect()),
                     text_limit: Some(20),

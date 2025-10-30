@@ -44,6 +44,7 @@ pub enum Action {
     Filter(String),
     Query(u16),
     Run(Option<usize>),
+    Store(usize),
     // Specific actions
     MainMenu,   // inform of viewing Topics & ask for first page
     Posts(u16), // inform & ask for first page of given type
@@ -309,7 +310,7 @@ impl ButtonsLogic {
                 [
                     ButtonState::Show("←Setings".to_string()),
                     ButtonState::Show("← Forum".to_string()),
-                    ButtonState::Hide,
+                    ButtonState::Show("Add Cap".to_string()),
                     ButtonState::Hide,
                     ButtonState::Hide,
                     ButtonState::Hide,
@@ -651,8 +652,8 @@ impl ButtonsLogic {
                             Some(Action::MainMenu)
                         }
                         2 => {
-                            //hidden
-                            None
+                            // Add new Capability
+                            Some(Action::AddNew(false))
                         }
                         3 => {
                             //hidden
@@ -712,6 +713,7 @@ impl ButtonsLogic {
                                 .2,
                         )),
                         5 => Some(Action::Run(None)),
+                        6 => Some(Action::Store(self.selected_entry_button)),
                         _o => {
                             // this should not happen
                             None
@@ -766,6 +768,7 @@ impl ButtonsLogic {
                         }
                         MenuType::StoredCapabilities => {
                             // TODO: switch to Stored Capability
+                            self.activate_menu(MenuType::Capability, tui_mgr);
                         }
                         MenuType::StoredByteSets => {
                             // TODO: switch to Stored Byte Set
@@ -1331,9 +1334,15 @@ pub fn serve_forum_tui(
                     // 6 - Run
                     // 7 - Store
                     if buttons_logic.is_current_config_equal(MenuType::Capability) {
+                        eprintln!("Updating entries with {} items", v_gids.len());
                         buttons_logic.update_entries(v_gids, &mut tui_mgr);
                         // TODO: present them to user if in right menu
                         // we might be showing stored config by this time…
+                    } else {
+                        eprintln!(
+                            "Can not show Capability in {:?}",
+                            buttons_logic.current_config_id
+                        );
                     }
                     eprintln!("ForumTUI should present cap",);
                 }

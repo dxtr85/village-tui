@@ -296,7 +296,9 @@ async fn main() {
                         get_indexer,
                         get_policy_editor,
                     );
-                    next_app = f_logic.run(my_name.founder, dir.clone(), toolset).await;
+                    next_app = f_logic
+                        .run(my_name.founder, dir.clone(), toolset, clipboard_opt)
+                        .await;
                 }
                 AppType::Other(_x) => {
                     //TODO
