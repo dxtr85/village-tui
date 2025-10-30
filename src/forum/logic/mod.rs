@@ -30,6 +30,7 @@ use dapp_lib::ToAppMgr;
 use message::ForumSyncMessage;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::fmt::Debug;
 use std::path::PathBuf;
 use std::sync::mpsc::channel;
 use std::sync::mpsc::Receiver;
@@ -62,7 +63,7 @@ enum PresentationState {
     RunningPolicies(Option<(u16, HashMap<u16, (Policy, Requirement)>)>),
     RunningCapabilities(Option<(u16, HashMap<u16, (Capabilities, Vec<GnomeId>)>)>),
     ByteSets(bool, Option<(u8, HashMap<u8, ByteSet>)>),
-    StoredPolicies(Option<u16>),
+    StoredPolicies(Option<u16>, HashMap<u8, Policy>),
     StoredCapabilities(Option<u16>),
     // StoredByteSets(Option<u16>),
     SelectingOnePolicy(Vec<Policy>, ReqTree),
@@ -602,13 +603,17 @@ impl ForumLogic {
                             .await;
                     }
                     Action::StoredPolicies => {
-                        self.presentation_state = PresentationState::StoredPolicies(None);
-                        //TODO: Send policies from Manifest
+                        // Send policies from Manifest
+                        let p_keys = self.shell.manifest.policy_reg.keys();
+
                         let pol_page = 0;
-                        let pols = vec![
-                            (11, "Stored Policy One".to_string()),
-                            (22, "Stored Policy Two".to_string()),
-                        ];
+                        let mut pols = Vec::with_capacity(p_keys.len());
+                        let mut p_map = HashMap::with_capacity(p_keys.len());
+                        for (i, key) in p_keys.enumerate() {
+                            pols.push((i as u16, key.text()));
+                            p_map.insert(i as u8, *key);
+                        }
+                        self.presentation_state = PresentationState::StoredPolicies(Some(0), p_map);
                         let _ = self
                             .to_tui_send
                             .send(ToForumView::StoredPoliciesPage(pol_page, pols));
@@ -1256,7 +1261,7 @@ impl ForumLogic {
         // Remember to always update self.presentation_state!
         //
         match curr_state {
-            PresentationState::MainLobby(page_opt) => {
+            PresentationState::MainLobby(_page_opt) => {
                 // TODO: instead of opening Editor, open Creator
                 // let e_p = EditorParams {
                 //     title: format!("Adding new Topic"),
@@ -2271,7 +2276,7 @@ impl ForumLogic {
                     eprintln!("Unable to tell which page is shown (1)");
                     return;
                 }
-                let page = page_opt.unwrap();
+                let _page = page_opt.unwrap();
                 // let topic_id = id + self.entries_count * page;
                 let topic_id = id;
                 if topic_id == 0 {
@@ -2326,7 +2331,7 @@ impl ForumLogic {
                 // and ask AppManager for selected Data.
                 // Once received open Editor
                 // in ReadOnly mode.
-                if let Some(page_nr) = page_opt {
+                if let Some(_page_nr) = page_opt {
                     // let d_id = page_nr * self.entries_count + id;
                     let d_id = id;
                     let _ = self
@@ -2457,14 +2462,19 @@ impl ForumLogic {
                         ));
                     };
                 }
-                // let page = page_opt.unwrap();
-                // similar to RunningPolicies
             }
-            PresentationState::StoredPolicies(page_opt) => {
+            PresentationState::StoredPolicies(_page_opt, pol_map) => {
                 //TODO: get Policy & Requirements & show it to user
-                if page_opt.is_none() {
-                    eprintln!("Unable to tell which page is shown (5)");
-                    return;
+                // if page_opt.is_none() {
+                //     eprintln!("Unable to tell which page is shown (5)");
+                //     return;
+                // }
+                if let Some(pol) = pol_map.get(&(id as u8)) {
+                    if let Some(req) = self.shell.manifest.policy_reg.get(pol) {
+                        let _ = self
+                            .to_tui_send
+                            .send(ToForumView::ShowPolicy(*pol, decompose(req.clone())));
+                    }
                 }
                 // let page = page_opt.unwrap();
                 // Here we should store only a mapping from on_page_id
@@ -2647,8 +2657,19 @@ impl ForumLogic {
             )))
             .await;
     }
-    async fn store_policy(&mut self, _pol: Policy, _req: Requirement) {
+    async fn store_policy(&mut self, pol: Policy, req: Requirement) {
         eprintln!("In store_policy");
+        self.shell.manifest.policy_reg.insert(pol, req);
+        let m_data = self.shell.manifest.to_data();
+        let _ = self
+            .to_app_mgr_send
+            .send(ToAppMgr::ChangeContent(
+                self.shell.swarm_id,
+                0,
+                DataType::Data(0),
+                m_data,
+            ))
+            .await;
         // TODO: update selected policy to new value.
         // we should update Manifest also at Swarm level
         //
