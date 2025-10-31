@@ -325,10 +325,10 @@ impl ButtonsLogic {
                 [
                     ButtonState::Show("←Setings".to_string()),
                     ButtonState::Show("← Forum".to_string()),
-                    ButtonState::Hide,
-                    ButtonState::Hide,
-                    ButtonState::Hide,
-                    ButtonState::Hide,
+                    ButtonState::Show("New 1Bte".to_string()),
+                    ButtonState::Show("New 2Bts".to_string()),
+                    ButtonState::Show("Run".to_string()),
+                    ButtonState::Show("Store".to_string()),
                     ButtonState::Hide,
                 ],
                 EntriesState::QueryLogic(QueryType::StoredByteSet),
@@ -604,8 +604,7 @@ impl ButtonsLogic {
                         }
                         5 => {
                             //Store selected
-                            // Some(Action::Store)
-                            None
+                            Some(Action::Store(self.selected_entry_button))
                         }
                         _o => {
                             // this should not happen
@@ -678,12 +677,20 @@ impl ButtonsLogic {
                             Some(Action::MainMenu)
                         }
                         2 => {
-                            //hidden
-                            None
+                            //New 1 Byte
+                            Some(Action::AddNew(false))
                         }
                         3 => {
-                            //hidden
-                            None
+                            //New 2 Bytes
+                            Some(Action::AddNew(true))
+                        }
+                        4 => {
+                            //Run selected
+                            Some(Action::Run(Some(self.selected_entry_button)))
+                        }
+                        5 => {
+                            //Store selected
+                            Some(Action::Store(self.selected_entry_button))
                         }
                         _o => {
                             // this should not happen

@@ -524,7 +524,13 @@ impl ForumLogic {
                 while !bsets.is_empty() {
                     let (bs_id, bs_list) = bsets.remove(0);
                     if bbsets.len() < self.entries_count as usize {
-                        bbsets.push((bs_id as u16, format!("ByteSet({bs_id})")));
+                        if bs_list.is_none() {
+                            bbsets.push((bs_id as u16, format!("Empty({bs_id})")));
+                        } else if bs_list.is_pair() {
+                            bbsets.push((bs_id as u16, format!("Pairs({bs_id})")));
+                        } else {
+                            bbsets.push((bs_id as u16, format!("Bytes({bs_id})")));
+                        }
                     }
                     mapping.insert(bs_id, bs_list);
                 }
@@ -647,13 +653,40 @@ impl ForumLogic {
                     }
                     Action::ByteSets(_is_run) => {
                         //TODO:
-                        self.presentation_state = PresentationState::RunningCapabilities(None);
-                        let _ = self
-                            .to_app_mgr_send
-                            .send(ToAppMgr::FromApp(dapp_lib::LibRequest::RunningByteSets(
-                                self.shell.swarm_name.clone(),
-                            )))
-                            .await;
+                        if _is_run {
+                            self.presentation_state = PresentationState::ByteSets(_is_run, None);
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::FromApp(dapp_lib::LibRequest::RunningByteSets(
+                                    self.shell.swarm_name.clone(),
+                                )))
+                                .await;
+                        } else {
+                            eprintln!("Stored BS collecting");
+                            let bss = &self.shell.manifest.byteset_reg;
+                            let mut id_str_vec = Vec::with_capacity(bss.len());
+                            let mut hm = HashMap::with_capacity(bss.len());
+                            for id in 0..=255 {
+                                if let Some(bs) = bss.get(&id) {
+                                    let label = if bs.is_none() {
+                                        format!("Empty({})", id)
+                                    } else if bs.is_pair() {
+                                        format!("Pairs({})", id)
+                                    } else {
+                                        format!("Bytes({})", id)
+                                    };
+                                    id_str_vec.push((id as u16, label));
+                                    hm.insert(id, bs.clone());
+                                } else {
+                                    break;
+                                }
+                            }
+                            let _ = self
+                                .to_tui_send
+                                .send(ToForumView::StoredByteSetsPage(0, id_str_vec));
+                            self.presentation_state =
+                                PresentationState::ByteSets(_is_run, Some((0, hm)));
+                        }
                     }
                     // Action::StoredByteSets => {
                     //     //TODO:
@@ -1412,7 +1445,7 @@ impl ForumLogic {
                     let mut sts = Vec::with_capacity(u16::MAX as usize);
                     for i in 0..=u16::MAX {
                         opts.push(i);
-                        sts.push(format!("{i}"));
+                        sts.push(format!("BB{i}"));
                     }
                     (opts, sts)
                 } else {
@@ -1420,7 +1453,7 @@ impl ForumLogic {
                     let mut sts = Vec::with_capacity(256);
                     for i in 0..=255 {
                         opts.push(i);
-                        sts.push(format!("{i}"));
+                        sts.push(format!("B{i}"));
                     }
                     (opts, sts)
                 };
@@ -1497,6 +1530,29 @@ impl ForumLogic {
                     ))
                     .await;
                 //TODO
+            }
+            PresentationState::ByteSets(_running, _pg_map_opt) => {
+                if let Some((_i, bs_map)) = _pg_map_opt {
+                    if let Some(bs) = bs_map.get(&(_id as u8)) {
+                        self.shell
+                            .manifest
+                            .byteset_reg
+                            .insert(_id as u8, bs.clone());
+                        let m_data = self.shell.manifest.to_data();
+                        eprintln!("Sending Store BS request");
+                        let _ = self
+                            .to_app_mgr_send
+                            .send(ToAppMgr::ChangeContent(
+                                self.shell.swarm_id,
+                                0,
+                                DataType::Data(0),
+                                m_data,
+                            ))
+                            .await;
+                    }
+                } else {
+                    eprintln!("Can not store, can not figure what");
+                }
             }
             _other => {
                 // unsupported
@@ -2171,7 +2227,9 @@ impl ForumLogic {
         }
     }
     async fn serve_selected(&mut self, ids: Vec<usize>) {
-        // TODO:
+        // TODO: this can not stay here, since then we do not cover cases
+        // when no element was selected. We should reset presentation_state then
+        // and possibly send something to presentation
         if ids.is_empty() {
             eprintln!("No item was selected!");
             return;
@@ -2531,7 +2589,7 @@ impl ForumLogic {
                             let mut strings = vec![];
                             let mut preselected = vec![];
                             for p in 0..=u16::MAX {
-                                strings.push(format!("Pair{p}"));
+                                strings.push(format!("Pair {p}"));
                                 if bset.contains_pair(&p) {
                                     preselected.push(p as usize);
                                 }
@@ -2541,7 +2599,7 @@ impl ForumLogic {
                             let mut strings = vec![];
                             let mut preselected = vec![];
                             for p in 0..=255 {
-                                strings.push(format!("Byte{p}"));
+                                strings.push(format!("Byte {p}"));
                                 if bset.contains(&p) {
                                     preselected.push(p as usize);
                                 }
