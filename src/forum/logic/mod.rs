@@ -44,6 +44,7 @@ pub struct TopicContext {
     pub t_id: Option<ContentID>,
     pub description: String,
     pub tags: Vec<usize>,
+    pub tag_names: Vec<String>,
 }
 impl TopicContext {
     pub fn new() -> Self {
@@ -51,6 +52,7 @@ impl TopicContext {
             t_id: None,
             description: "Topic description".to_string(),
             tags: vec![],
+            tag_names: vec![],
         }
     }
 }
@@ -2021,6 +2023,32 @@ impl ForumLogic {
                         self.present_topics().await;
                         // present topics
                     }
+                    PresentationState::TopicEditing(t_ctx) => {
+                        // Here we defined a new Tag to be added to Manifest
+                        let mut t_names = t_ctx.tag_names;
+                        if let Some(tag_id) = id {
+                            if let EditorResult::Text(text) = ed_res {
+                                //TODO:
+                                if (tag_id as usize) < t_names.len() {
+                                    eprintln!("Editing Tag({tag_id}): {text}");
+                                    t_names[tag_id as usize] = text;
+                                } else {
+                                    eprintln!("Adding Tag({tag_id}): {text}");
+                                    t_names.push(text);
+                                }
+                            }
+                        } else {
+                            eprintln!("Unexpected value for id: {id:?}");
+                        }
+                        let new_ctx = TopicContext {
+                            t_id: t_ctx.t_id,
+                            description: t_ctx.description,
+                            tags: t_ctx.tags,
+                            tag_names: t_names,
+                        };
+                        self.presentation_state = PresentationState::TopicEditing(new_ctx.clone());
+                        let _ = self.to_tui_send.send(ToForumView::OpenCreator(new_ctx));
+                    }
                     other => {
                         eprintln!("Editing not supported yet");
                         self.presentation_state = other;
@@ -2104,6 +2132,7 @@ impl ForumLogic {
                         t_id: t_ctx.t_id,
                         description,
                         tags: t_ctx.tags,
+                        tag_names: t_ctx.tag_names,
                     });
                     let _ = self.to_tui_send.send(ToForumView::OpenCreator(new_ctx));
                 }
@@ -2127,14 +2156,34 @@ impl ForumLogic {
                         .send(ToForumView::OpenCreator(_tctx.clone()));
                 }
                 CreatorResult::SelectTags => {
-                    let names = self.shell.manifest.tag_names(None);
-                    // let names = self.shell.manifest.dtype_names();
-                    eprintln!("Should select Tags from: {names:?}");
-                    let _ = self.to_tui_send.send(ToForumView::Select(
-                        false,
-                        names,
-                        _tctx.tags.clone(),
-                    ));
+                    let mut names = _tctx.tag_names.clone();
+                    if let Some(t_id) = _tctx.t_id {
+                        if t_id == 0 {
+                            if names.len() < 256 {
+                                names.push(format!("+ Add new…"));
+                            }
+                            eprintln!("All Tags: {names:?}");
+                            let _ = self.to_tui_send.send(ToForumView::Select(
+                                t_id == 0,
+                                names,
+                                vec![],
+                            ));
+                        } else {
+                            eprintln!("Should select Tags from: {names:?}");
+                            let _ = self.to_tui_send.send(ToForumView::Select(
+                                t_id == 0,
+                                names,
+                                _tctx.tags.clone(),
+                            ));
+                        }
+                    } else {
+                        // We are adding a new Topic
+                        let _ = self.to_tui_send.send(ToForumView::Select(
+                            false,
+                            names,
+                            _tctx.tags.clone(),
+                        ));
+                    }
                 }
                 CreatorResult::SelectDescription => {
                     if let Some(t_id) = _tctx.t_id {
@@ -2183,6 +2232,17 @@ impl ForumLogic {
                             //TODO: support Editing Categories
                             let mut manifest = self.shell.manifest.clone();
                             manifest.set_description(_tctx.description.clone());
+                            let mut new_tags = vec![];
+                            for i in manifest.tags.len().._tctx.tag_names.len() {
+                                eprintln!("Adding Tag: {}", _tctx.tag_names[i]);
+                                new_tags.push(Tag::new(_tctx.tag_names[i].clone()).unwrap());
+                            }
+                            if !new_tags.is_empty() {
+                                manifest.add_tags(new_tags);
+                            }
+                            for (id, text) in _tctx.tag_names.iter().enumerate() {
+                                manifest.update_tag(id as u8, Tag::new(text.clone()).unwrap());
+                            }
                             let m_data = manifest.to_data();
                             let _ = self
                                 .to_app_mgr_send
@@ -2507,18 +2567,72 @@ impl ForumLogic {
                 }
             }
             PresentationState::TopicEditing(t_ctx) => {
-                // TODO create new context with selected
-                // let mut tags = Vec::with_capacity(ids.len());
-                // for id in ids {
-                //     tags.push(id as u8);
+                //TODO: If let Some(t_id) && t_id == 0{
+                // if ids[0] == tags.len()      Then we create a new Tag
                 // }
-                let new_ctxt = TopicContext {
-                    t_id: t_ctx.t_id,
-                    description: t_ctx.description,
-                    tags: ids,
+                let mut editing_tag = false;
+                let new_ctxt = if let Some(t_id) = t_ctx.t_id {
+                    if t_id == 0 {
+                        // let t_len = t_ctx.tag_names.len();
+                        // if id == t_len && t_len < 256 {
+                        // TODO: Open Editor and allow new Tag to be created
+                        // TODO: How to distinguish between Description & new Tag?
+                        // Answer: We set self.presentation_state to different value
+                        //
+                        editing_tag = true;
+                        TopicContext {
+                            t_id: t_ctx.t_id,
+                            description: t_ctx.description,
+                            tags: t_ctx.tags,
+                            tag_names: t_ctx.tag_names.clone(),
+                        }
+                        // } else {
+                        //     TopicContext {
+                        //         t_id: t_ctx.t_id,
+                        //         description: t_ctx.description,
+                        //         tags: t_ctx.tags,
+                        //         tag_names: t_ctx.tag_names,
+                        //     }
+                        // }
+                    } else {
+                        TopicContext {
+                            t_id: t_ctx.t_id,
+                            description: t_ctx.description,
+                            tags: ids,
+                            tag_names: t_ctx.tag_names.clone(),
+                        }
+                    }
+                } else {
+                    TopicContext {
+                        t_id: t_ctx.t_id,
+                        description: t_ctx.description,
+                        tags: ids,
+                        tag_names: t_ctx.tag_names.clone(),
+                    }
                 };
-                self.presentation_state = PresentationState::TopicEditing(new_ctxt.clone());
-                let _ = self.to_tui_send.send(ToForumView::OpenCreator(new_ctxt));
+                if editing_tag {
+                    self.presentation_state = PresentationState::Editing(
+                        Some(id as u16),
+                        Box::new(PresentationState::TopicEditing(new_ctxt.clone())),
+                    );
+                    let initial_text = if id < t_ctx.tag_names.len() {
+                        Some(t_ctx.tag_names[id].clone())
+                    } else {
+                        Some(format!("NewCategory"))
+                    };
+                    let e_params = EditorParams {
+                        title: format!("Add new Category (oneline, 32 bytes max)"),
+                        initial_text,
+                        allow_newlines: false,
+                        chars_limit: None,
+                        text_limit: Some(32),
+                        read_only: false,
+                    };
+                    let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_params));
+                } else {
+                    self.presentation_state = PresentationState::TopicEditing(new_ctxt.clone());
+                    let _ = self.to_tui_send.send(ToForumView::OpenCreator(new_ctxt));
+                }
             }
             other => {
                 self.presentation_state = other;
@@ -2552,9 +2666,13 @@ impl ForumLogic {
                     // let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_params));
                     let description = self.shell.manifest.description.clone();
                     let mut tags: Vec<usize> = vec![];
-                    self.shell.manifest.tags.keys().for_each(|t| {
-                        tags.push(*t as usize);
-                    });
+                    let mut tag_names: Vec<String> = vec![];
+                    for i in 0..=255 {
+                        if let Some(tag) = self.shell.manifest.tags.get(&i) {
+                            tags.push(i as usize);
+                            tag_names.push(tag.0.clone());
+                        }
+                    }
 
                     let _ = self
                         .to_tui_send
@@ -2562,11 +2680,13 @@ impl ForumLogic {
                             t_id: Some(0),
                             description: description.clone(),
                             tags: tags.clone(),
+                            tag_names: tag_names.clone(),
                         }));
                     self.presentation_state = PresentationState::TopicEditing(TopicContext {
                         t_id: Some(topic_id),
                         description,
                         tags,
+                        tag_names,
                     });
                 } else {
                     let _ = self
@@ -2633,6 +2753,7 @@ impl ForumLogic {
                             t_id: Some(*c_id),
                             description: description.clone(),
                             tags: tags_usize.clone(),
+                            tag_names: self.shell.manifest.tag_names(None),
                         }));
                         let _ = self
                             .to_tui_send
@@ -2640,6 +2761,7 @@ impl ForumLogic {
                                 t_id: Some(*c_id),
                                 description: description.clone(),
                                 tags: tags_usize,
+                                tag_names: self.shell.manifest.tag_names(None),
                             }));
                     } else {
                         let _ = self
