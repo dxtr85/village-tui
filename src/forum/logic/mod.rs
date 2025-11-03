@@ -1045,6 +1045,7 @@ impl ForumLogic {
                         &mut self.presentation_state,
                         PresentationState::Settings,
                     );
+                    eprintln!("CState: {:?}", curr_state);
                     match curr_state {
                         PresentationState::MainLobby(_pg_opt) => {
                             // if self.presentation_state.is_main_menu() {
@@ -1087,6 +1088,7 @@ impl ForumLogic {
                             // } else if self.presentation_state.is_topic() {
                             // TODO: include start_page
                             for (id, first) in d_vec.into_iter().enumerate() {
+                                eprintln!("Updating entry {} {}", id, first);
                                 // if let Ok(text) = std::str::from_utf8(&first.bytes()) {
                                 //     let first_line = if let Some(line) = text.lines().next() {
                                 //         line.to_string()
@@ -1195,6 +1197,29 @@ impl ForumLogic {
                                     PresentationState::HeapSorting(None, entry_opt);
                             }
                         }
+                        PresentationState::TopicEditing(t_ctx) => {
+                            if t_ctx.t_id.is_some() && start_page == 0 {
+                                let t_id = t_ctx.t_id.unwrap();
+                                let initial_text =
+                                //     if t_id ==0{
+                                //     Manifest::from(d_vec).description;
+                                // }else{
+                                    Some(Entry::from_data(d_vec[0].clone(), t_id==0).unwrap().text);
+                                // }
+                                let text_limit = if t_id == 0 { Some(1000) } else { Some(800) };
+                                let e_p = EditorParams {
+                                    title: format!("Edit Description for CID{}", t_id),
+                                    initial_text,
+
+                                    allow_newlines: true,
+                                    chars_limit: None,
+                                    text_limit,
+                                    read_only: false,
+                                };
+                                let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
+                                self.presentation_state = PresentationState::TopicEditing(t_ctx);
+                            }
+                        }
                         other => {
                             eprintln!("Unexpected ReadSuccess when in state: {:?}", other);
                             self.presentation_state = other;
@@ -1218,8 +1243,15 @@ impl ForumLogic {
         self.entries[c_id] = header;
     }
 
-    fn process_manifest(&mut self, d_type: DataType, d_vec: Vec<Data>) {
+    fn process_manifest(&mut self, d_type: DataType, mut d_vec: Vec<Data>) {
         eprintln!("Mfest DType: {:?}", d_type);
+        if d_vec.len() == 1 {
+            //TODO: only first page has changed, other pagas are same as previous
+            // so we take them from our shell Manifest
+            let mut e_data = self.shell.manifest.to_data();
+            e_data.remove(0);
+            d_vec.append(&mut e_data);
+        }
         let manifest = Manifest::from(d_vec);
         let text = if manifest.description.is_empty() {
             format!("Manifest: no description")
@@ -2105,51 +2137,125 @@ impl ForumLogic {
                     ));
                 }
                 CreatorResult::SelectDescription => {
-                    eprintln!("Should set description");
-                    let e_p = EditorParams {
-                        title: format!("Adding new Topic"),
-                        initial_text: Some(_tctx.description.clone()),
+                    if let Some(t_id) = _tctx.t_id {
+                        if t_id > 0 {
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadPagesRange(
+                                    self.shell.swarm_id,
+                                    t_id,
+                                    0,
+                                    0,
+                                )))
+                                .await;
+                        } else {
+                            eprintln!("Edit Forum's description");
+                            let e_p = EditorParams {
+                                title: format!("Edit Forum's description"),
+                                initial_text: Some(_tctx.description.clone()),
 
-                        allow_newlines: true,
-                        chars_limit: None,
-                        text_limit: Some(800),
-                        read_only: false,
-                    };
-                    let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
+                                allow_newlines: true,
+                                chars_limit: None,
+                                text_limit: Some(1000),
+                                read_only: false,
+                            };
+                            let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
+                        }
+                    } else {
+                        eprintln!("Should set description");
+                        let e_p = EditorParams {
+                            title: format!("Adding new Topic"),
+                            initial_text: Some(_tctx.description.clone()),
+
+                            allow_newlines: true,
+                            chars_limit: None,
+                            text_limit: Some(800),
+                            read_only: false,
+                        };
+                        let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
+                    }
                 }
                 CreatorResult::Create => {
-                    eprintln!("Should create new Topic");
-                    let prev_state = std::mem::replace(
-                        &mut self.presentation_state,
-                        PresentationState::MainLobby(None),
-                    );
-                    if let PresentationState::TopicEditing(t_ctx) = prev_state {
-                        let mut bytes = Vec::with_capacity(1024);
-                        bytes.push(t_ctx.tags.len() as u8);
-                        for tag in t_ctx.tags {
-                            bytes.push(tag as u8);
+                    if _tctx.t_id.is_some() {
+                        let t_id = _tctx.t_id.unwrap();
+                        if t_id == 0 {
+                            eprintln!("Should edit Forum's Manifest",);
+                            //TODO: support Editing Categories
+                            let mut manifest = self.shell.manifest.clone();
+                            manifest.set_description(_tctx.description.clone());
+                            let m_data = manifest.to_data();
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::ChangeContent(
+                                    self.shell.swarm_id,
+                                    0,
+                                    DataType::Data(0),
+                                    m_data,
+                                ))
+                                .await;
+                            self.presentation_state = PresentationState::MainLobby(None);
+                        } else {
+                            eprintln!("Should edit existing Topic {}", t_id);
+                            let mut tags_u8 = Vec::with_capacity(_tctx.tags.len());
+                            for t in &_tctx.tags {
+                                tags_u8.push(*t as u8);
+                            }
+                            let entry: Entry =
+                                Entry::new(self.my_id, tags_u8, _tctx.description.clone(), 0);
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::UpdateData(
+                                    self.shell.swarm_id,
+                                    t_id,
+                                    0,
+                                    entry.into_data().unwrap(),
+                                ))
+                                .await;
+                            self.presentation_state = PresentationState::Topic(t_id, None);
                         }
-                        for bte in self.my_id.bytes() {
-                            bytes.push(bte);
-                        }
-                        bytes.append(&mut t_ctx.description.into_bytes());
-                        let new_topic = Data::new(bytes).unwrap();
-                        let _ = self
-                            .to_app_mgr_send
-                            .send(ToAppMgr::AppendContent(
-                                self.shell.swarm_id,
-                                DataType::Data(0),
-                                new_topic,
-                            ))
-                            .await;
                         self.present_topics().await;
                     } else {
-                        self.presentation_state = prev_state;
+                        eprintln!("Should create new Topic");
+                        let prev_state = std::mem::replace(
+                            &mut self.presentation_state,
+                            PresentationState::MainLobby(None),
+                        );
+                        if let PresentationState::TopicEditing(t_ctx) = prev_state {
+                            let mut bytes = Vec::with_capacity(1024);
+                            bytes.push(t_ctx.tags.len() as u8);
+                            for tag in t_ctx.tags {
+                                bytes.push(tag as u8);
+                            }
+                            for bte in self.my_id.bytes() {
+                                bytes.push(bte);
+                            }
+                            bytes.append(&mut t_ctx.description.into_bytes());
+                            let new_topic = Data::new(bytes).unwrap();
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::AppendContent(
+                                    self.shell.swarm_id,
+                                    DataType::Data(0),
+                                    new_topic,
+                                ))
+                                .await;
+                            self.present_topics().await;
+                        } else {
+                            self.presentation_state = prev_state;
+                        }
                     }
                 }
                 CreatorResult::Cancel => {
                     eprintln!("Should cancel");
-                    self.presentation_state = PresentationState::MainLobby(None);
+                    if let Some(t_id) = _tctx.t_id {
+                        if t_id > 0 {
+                            self.presentation_state = PresentationState::Topic(t_id, None);
+                        } else {
+                            self.presentation_state = PresentationState::MainLobby(None);
+                        }
+                    } else {
+                        self.presentation_state = PresentationState::MainLobby(None);
+                    }
                     self.present_topics().await;
                 }
             }
@@ -2435,15 +2541,33 @@ impl ForumLogic {
                 if topic_id == 0 {
                     //TODO: open Editor with Manifest desc
                     // in READ only mode
-                    let e_params = EditorParams {
-                        title: format!("Viewing Forum's description"),
-                        initial_text: Some(self.shell.manifest.description.clone()),
-                        allow_newlines: true,
-                        chars_limit: None,
-                        text_limit: Some(1000),
-                        read_only: true,
-                    };
-                    let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_params));
+                    // let e_params = EditorParams {
+                    //     title: format!("Viewing Forum's description"),
+                    //     initial_text: Some(self.shell.manifest.description.clone()),
+                    //     allow_newlines: true,
+                    //     chars_limit: None,
+                    //     text_limit: Some(1000),
+                    //     read_only: true,
+                    // };
+                    // let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_params));
+                    let description = self.shell.manifest.description.clone();
+                    let mut tags: Vec<usize> = vec![];
+                    self.shell.manifest.tags.keys().for_each(|t| {
+                        tags.push(*t as usize);
+                    });
+
+                    let _ = self
+                        .to_tui_send
+                        .send(ToForumView::OpenCreator(TopicContext {
+                            t_id: Some(0),
+                            description: description.clone(),
+                            tags: tags.clone(),
+                        }));
+                    self.presentation_state = PresentationState::TopicEditing(TopicContext {
+                        t_id: Some(topic_id),
+                        description,
+                        tags,
+                    });
                 } else {
                     let _ = self
                         .to_app_mgr_send
@@ -2485,18 +2609,51 @@ impl ForumLogic {
                 // Once received open Editor
                 // in ReadOnly mode.
                 if let Some(_page_nr) = page_opt {
+                    eprintln!("Topic {c_id} P#{_page_nr} ID: {id}");
                     // let d_id = page_nr * self.entries_count + id;
                     let d_id = id;
-                    let _ = self
-                        .to_app_mgr_send
-                        .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadPagesRange(
-                            self.shell.swarm_id,
-                            *c_id,
-                            d_id,
-                            d_id,
-                        )))
-                        .await;
-                    new_state = Some(PresentationState::ShowingPost(*c_id, d_id));
+                    if d_id == 0 {
+                        // TODO:
+                        // let _ = self
+                        //     .to_tui_send
+                        //     .send(ToForumView::OpenCreator(TopicContext {
+                        //         t_id: Some(*c_id0),
+                        //         description: description.clone(),
+                        //         tags: tags.clone(),
+                        //     }));
+                        eprintln!("NS TopicEditing");
+
+                        let mut tags_usize = Vec::with_capacity(self.entries[0].tags.len());
+                        for t in self.entries[0].tags.iter() {
+                            tags_usize.push(*t as usize);
+                        }
+
+                        let description = self.entries[0].text.clone();
+                        new_state = Some(PresentationState::TopicEditing(TopicContext {
+                            t_id: Some(*c_id),
+                            description: description.clone(),
+                            tags: tags_usize.clone(),
+                        }));
+                        let _ = self
+                            .to_tui_send
+                            .send(ToForumView::OpenCreator(TopicContext {
+                                t_id: Some(*c_id),
+                                description: description.clone(),
+                                tags: tags_usize,
+                            }));
+                    } else {
+                        let _ = self
+                            .to_app_mgr_send
+                            .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadPagesRange(
+                                self.shell.swarm_id,
+                                *c_id,
+                                d_id,
+                                d_id,
+                            )))
+                            .await;
+                        eprintln!("NS ShowingPost");
+                        new_state = Some(PresentationState::ShowingPost(*c_id, d_id));
+                    }
                 } else {
                     eprintln!("Got a Query in Topics,no page");
                 }

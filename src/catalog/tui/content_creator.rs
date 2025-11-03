@@ -59,8 +59,8 @@ impl Creator {
         let button_dtypes = Button::new((8, 3), 1, (2, 1), "Edytuj", None, mgr);
         let button_descr = Button::new((8, 3), 1, (2, 5), "Edytuj", Some("Pokaż"), mgr);
         let button_tags = Button::new((8, 3), 1, (2, 9), "Edytuj", Some("Pokaż"), mgr);
-        let button_apply = Button::new((8, 3), 1, (2, 20), "Zapisz", None, mgr);
-        let button_cancel = Button::new((8, 3), 1, (2, 24), "Anuluj", Some("Zamknij"), mgr);
+        let button_apply = Button::new((8, 3), 1, (2, 13), "Zapisz", None, mgr);
+        let button_cancel = Button::new((8, 3), 1, (2, 17), "Anuluj", Some("Zamknij"), mgr);
         Creator {
             g_id,
             display_id,
