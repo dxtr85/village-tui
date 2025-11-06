@@ -18,6 +18,7 @@ use dapp_lib::prelude::Capabilities;
 use dapp_lib::prelude::ContentID;
 use dapp_lib::prelude::DataType;
 use dapp_lib::prelude::GnomeId;
+use dapp_lib::prelude::Hit;
 use dapp_lib::prelude::Manifest;
 use dapp_lib::prelude::Policy;
 use dapp_lib::prelude::Requirement;
@@ -78,6 +79,7 @@ enum PresentationState {
     TopicEditing(TopicContext),
     HeapSorting(Option<(ForumSyncMessage, GnomeId)>, Option<Entry>),
     CreatingByteSet(Vec<u16>, bool, Option<(u8, HashMap<u8, ByteSet>)>),
+    Fitlering,
 }
 
 // impl PresentationState {
@@ -133,12 +135,13 @@ impl Entry {
         let mut bytes = data.bytes();
         // TODO: first go Tags
         let tags_count = if is_manifest_or_nonop_post {
+            eprintln!("man or nonop");
             0
         } else {
             bytes.remove(0)
         };
         let mut tags = vec![];
-        eprintln!("Temporary solution: {tags_count}");
+        eprintln!("tags count: {tags_count}");
         for _i in 0..tags_count {
             tags.push(bytes.remove(0));
         }
@@ -158,17 +161,22 @@ impl Entry {
             bytes.remove(0),
             bytes.remove(0),
         ]);
-        if let Ok(text) = String::from_utf8(bytes) {
+        eprintln!("Attempt to create Entry from {:?} bytes", bytes);
+        let str_res = String::from_utf8(bytes);
+        if let Ok(text) = str_res {
             Ok(Entry::new(GnomeId(g_id), tags, text, hash))
         } else {
+            eprintln!("Could not create entry: {}", str_res.err().unwrap());
             Err(())
         }
     }
-    pub fn into_data(self) -> Result<Data, Vec<u8>> {
+    pub fn into_data(self, is_manifest_or_nonop_post: bool) -> Result<Data, Vec<u8>> {
         let mut bytes = Vec::with_capacity(9 + self.tags.len() + self.text.len());
-        bytes.push(self.tags.len() as u8);
-        for tag in self.tags {
-            bytes.push(tag);
+        if !is_manifest_or_nonop_post {
+            bytes.push(self.tags.len() as u8);
+            for tag in self.tags {
+                bytes.push(tag);
+            }
         }
         for b in self.author.bytes() {
             bytes.push(b);
@@ -219,7 +227,13 @@ pub struct ForumLogic {
     entries_count: u16,
     entry_max_len: usize,
     shell: SwarmShell,
-    entries: Vec<Entry>,
+    // we need to store local copy of first pages of every topic in order to
+    // define and apply filtering logic
+    all_topics: Vec<Entry>,
+    category_filter: Option<Vec<u8>>,
+    text_filter: Option<String>,
+    menu_pages: Vec<Vec<u16>>,
+    posts: Vec<Entry>,
     last_heap_msg: Option<(ForumSyncMessage, GnomeId)>,
     presentation_state: PresentationState,
     to_app_mgr_send: ASender<ToAppMgr>,
@@ -253,7 +267,11 @@ impl ForumLogic {
             entries_count: ((screen_size.1 - 3) >> 1) as u16,
             entry_max_len: usize::max(60, screen_size.0 - 4),
             shell,
-            entries: vec![],
+            posts: vec![],
+            all_topics: vec![],
+            menu_pages: vec![vec![]],
+            category_filter: None,
+            text_filter: None,
             last_heap_msg: None,
             to_app_mgr_send,
             _to_user_send: to_user_send,
@@ -363,8 +381,7 @@ impl ForumLogic {
                     let _ = self
                         .to_app_mgr_send
                         .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadFirstPages(
-                            s_id,
-                            Some((0, self.entries_count - 1)),
+                            s_id, None, // Some((0, self.entries_count - 1)),
                         )))
                         .await;
                     let _ = self
@@ -402,7 +419,7 @@ impl ForumLogic {
                     } else {
                         self.process_content(c_id, d_type, start_page, d_vec).await;
                     }
-                    self.present_topics().await;
+                    self.present().await;
                 } else {
                     eprintln!("Received Content from other Swarm");
                 }
@@ -427,7 +444,7 @@ impl ForumLogic {
                             self.process_content(c_id, d_type, 0, vec![first_page])
                                 .await
                         }
-                        self.present_topics().await;
+                        self.present().await;
                     } else {
                         eprintln!("But no first page!");
                         if c_id == 0 {
@@ -546,7 +563,7 @@ impl ForumLogic {
             ToApp::FirstPages(s_id, pg_vec) => {
                 if s_id == self.shell.swarm_id {
                     self.process_first_pages(pg_vec).await;
-                    self.present_topics().await;
+                    self.present().await;
                 } else {
                     eprintln!("FirstPages of other swarm");
                 }
@@ -556,7 +573,7 @@ impl ForumLogic {
                 eprintln!("We need to process new content!");
                 if s_id == self.shell.swarm_id {
                     self.append_first_page(c_id, d_type, data).await;
-                    self.present_topics().await;
+                    self.present().await;
                 }
             }
             ToApp::HeapData(s_id, app_msg, signed_by) => {
@@ -587,6 +604,9 @@ impl ForumLogic {
             }
             ToApp::PolicyNotMet(s_id, sm_type, data) => {
                 self.sync_request_rejected(s_id, sm_type, data).await;
+            }
+            ToApp::SearchResults(query, hits) => {
+                self.process_search_results(query, hits).await;
             }
             _other => {
                 eprintln!("InternalMsg::User {:?}", _other);
@@ -753,7 +773,7 @@ impl ForumLogic {
                                                             self.shell.swarm_id,
                                                             t_id,
                                                             p_id,
-                                                            entry.into_data().unwrap(),
+                                                            entry.into_data(p_id > 0).unwrap(),
                                                         ))
                                                         .await;
                                                 } else {
@@ -774,7 +794,7 @@ impl ForumLogic {
                                                 .send(ToAppMgr::AppendContent(
                                                     self.shell.swarm_id,
                                                     DataType::Data(0),
-                                                    entry.into_data().unwrap(),
+                                                    entry.into_data(false).unwrap(),
                                                 ))
                                                 .await;
                                         }
@@ -784,7 +804,7 @@ impl ForumLogic {
                                                 .send(ToAppMgr::AppendData(
                                                     self.shell.swarm_id,
                                                     t_id,
-                                                    entry.into_data().unwrap(),
+                                                    entry.into_data(true).unwrap(),
                                                 ))
                                                 .await;
                                         }
@@ -824,19 +844,49 @@ impl ForumLogic {
                         self.store_action(id).await;
                     }
                     Action::NextPage => {
+                        eprintln!("Action::NextPage ");
                         self.show_next_page().await;
+                        self.present().await;
                     }
                     Action::PreviousPage => {
                         self.show_previous_page().await;
+                        self.present().await;
                     }
                     Action::FirstPage => {
                         self.show_first_page().await;
+                        self.present().await;
                     }
                     Action::LastPage => {
                         self.show_last_page().await;
+                        self.present().await;
                     }
-                    Action::Filter(_filter) => {
-                        //TODO
+                    Action::Filter(is_cat_filter) => {
+                        // TODO: define local filtering logic for current swarm only
+                        // Once a filter is defined we should gather all first content pages
+                        // and store them locally.
+                        // Then we apply filters on those pages and present only filtered contents
+                        self.presentation_state = PresentationState::Fitlering;
+                        if is_cat_filter {
+                            // open category selector
+                            let _ = self.to_tui_send.send(ToForumView::Select(
+                                true,
+                                self.shell.manifest.tag_names(None),
+                                vec![],
+                            ));
+                            // then ask Datastore for first pages of CIDs with Tags
+                        } else {
+                            // open Editor and pass results to local filtering logic
+
+                            let e_p = EditorParams {
+                                title: format!("Define Search text"),
+                                initial_text: None,
+                                allow_newlines: true,
+                                chars_limit: None,
+                                text_limit: None,
+                                read_only: false,
+                            };
+                            let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
+                        }
                     }
                     Action::Query(qt) => {
                         self.serve_query(qt).await;
@@ -844,29 +894,30 @@ impl ForumLogic {
                     Action::MainMenu => {
                         //TODO
                         eprintln!("Action::MainMenu presenting topics");
-                        self.presentation_state = PresentationState::MainLobby(None);
-                        self.entries = vec![];
-                        let _ = self
-                            .to_app_mgr_send
-                            .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadFirstPages(
-                                self.shell.swarm_id,
-                                Some((1, self.entries_count - 1)),
-                            )))
-                            .await;
-                        let m_head: Entry = Entry::new(
-                            self.shell.swarm_name.founder,
-                            vec![],
-                            self.shell
-                                .manifest
-                                .description
-                                .lines()
-                                .take(1)
-                                // .trimmed()
-                                .collect(),
-                            0,
-                        );
-                        self.update_entry(0, m_head);
-                        self.present_topics().await;
+                        self.presentation_state = PresentationState::MainLobby(Some(0));
+                        self.filter_topics().await;
+                        // self.entries = vec![];
+                        // let _ = self
+                        //     .to_app_mgr_send
+                        //     .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadFirstPages(
+                        //         self.shell.swarm_id,
+                        //         Some((1, self.entries_count - 1)),
+                        //     )))
+                        //     .await;
+                        // let m_head: Entry = Entry::new(
+                        //     self.shell.swarm_name.founder,
+                        //     vec![],
+                        //     self.shell
+                        //         .manifest
+                        //         .description
+                        //         .lines()
+                        //         .take(1)
+                        //         // .trimmed()
+                        //         .collect(),
+                        //     0,
+                        // );
+                        // self.update_topic(0, m_head);
+                        self.present().await;
                     }
                     Action::Posts(_topic_id) => {
                         //TODO
@@ -1015,12 +1066,15 @@ impl ForumLogic {
         c_id: ContentID,
         d_type: DataType,
         start_page: u16,
-        mut d_vec: Vec<Data>,
+        d_vec: Vec<Data>,
     ) {
         if d_vec.is_empty() {
             return;
         }
-        eprintln!("Process CID{c_id} len: {}", d_vec[0].len());
+        eprintln!(
+            "Process CID{c_id} from:{start_page} len: {}",
+            d_vec[0].len()
+        );
         if d_vec[0].len() < 9 {
             return;
         }
@@ -1042,31 +1096,37 @@ impl ForumLogic {
             DataType::Data(id) => {
                 if id == 0 {
                     // regular Topic
-                    // TODO: include start_page
                     let curr_state = std::mem::replace(
                         &mut self.presentation_state,
                         PresentationState::Settings,
                     );
-                    eprintln!("CState: {:?}", curr_state);
+
+                    let mut entry_line_changed = false;
+                    if start_page == 0 {
+                        let first = d_vec[0].clone();
+                        entry_line_changed = self.update_topic(
+                            c_id as usize,
+                            Entry::from_data(first, c_id == 0).unwrap(),
+                        );
+                        if self.category_filter.is_none() && self.text_filter.is_none() {
+                            self.extend_main_pages_until(c_id);
+                        }
+                    }
                     match curr_state {
                         PresentationState::MainLobby(_pg_opt) => {
-                            // if self.presentation_state.is_main_menu() {
-                            //TODO
-                            let first = d_vec.remove(0);
-                            // if let Ok(text) = std::str::from_utf8(&first.bytes()) {
-                            //     let first_line = if let Some(line) = text.lines().next() {
-                            //         line.to_string()
-                            //     } else {
-                            //         "Empty".to_string()
-                            //     };
-                            //     let header: String = first_line.chars().take(64).collect();
-                            self.update_entry(
-                                c_id as usize,
-                                // Entry::new(GnomeId::any(), header.trim().to_string(), 0),
-                                Entry::from_data(first, c_id == 0).unwrap(),
-                            );
-                            // };
                             self.presentation_state = curr_state;
+
+                            if !entry_line_changed {
+                                return;
+                            }
+                            // check if c_id is visible on screen,
+                            if let Some(menu_page) = _pg_opt {
+                                eprintln!("{menu_page} MPS len: {}", self.menu_pages.len());
+                                if self.menu_pages[menu_page as usize].contains(&c_id) {
+                                    // if so redraw it
+                                    self.present().await;
+                                }
+                            }
                         }
                         PresentationState::Topic(_t_id, mut _pg_opt) => {
                             if c_id != _t_id {
@@ -1076,45 +1136,37 @@ impl ForumLogic {
                             }
                             if _pg_opt.is_none() {
                                 eprintln!("Topic page unknown");
+                                // TODO: we need to also include filtering logic into the mix
                                 _pg_opt = Some(start_page / self.entries_count);
                                 // return;
                             }
-                            let pg = _pg_opt.unwrap();
-                            let first_entry_id = pg * self.entries_count;
-                            if start_page != first_entry_id {
-                                eprintln!("Pages mismatch");
-                                self.presentation_state = curr_state;
-                                return;
-                            }
+                            // let pg = _pg_opt.unwrap();
+                            // let first_entry_id = pg * self.entries_count;
+                            // if start_page != first_entry_id {
+                            //     eprintln!("Pages mismatch");
+                            //     self.presentation_state = curr_state;
+                            //     return;
+                            // }
                             self.presentation_state = PresentationState::Topic(_t_id, _pg_opt);
-                            // } else if self.presentation_state.is_topic() {
-                            // TODO: include start_page
+
                             for (id, first) in d_vec.into_iter().enumerate() {
-                                eprintln!("Updating entry {} {}", id, first);
-                                // if let Ok(text) = std::str::from_utf8(&first.bytes()) {
-                                //     let first_line = if let Some(line) = text.lines().next() {
-                                //         line.to_string()
-                                //     } else {
-                                //         "Empty".to_string()
-                                //     };
-                                //     let header: String = first_line.chars().take(64).collect();
-                                self.update_entry(
-                                    id,
-                                    // Entry::new(GnomeId::any(), header.trim().to_string(), 0),
-                                    Entry::from_data(first, start_page > 0).unwrap(),
+                                eprintln!("Updating post {} {}", id, first);
+
+                                self.update_post(
+                                    id + (start_page as usize),
+                                    Entry::from_data(first, (id as u16) + start_page > 0).unwrap(),
                                 );
-                                // };
                             }
                             self.presentation_state = curr_state;
                         }
-                        PresentationState::ShowingPost(_t_id, _p_id) => {
-                            if c_id == _t_id {
-                                if start_page == _p_id || _p_id == u16::MAX {
+                        PresentationState::ShowingPost(t_id, p_id) => {
+                            if c_id == t_id {
+                                if start_page == p_id || p_id == u16::MAX {
                                     let initial_text =
                                 // Some(String::from_utf8(d_vec[0].clone().bytes()).unwrap());
-                                Some(Entry::from_data(d_vec[0].clone(),start_page>0).unwrap().text);
+                                Some(Entry::from_data(d_vec[0].clone(),p_id>0).unwrap().text);
                                     let e_p = EditorParams {
-                                        title: format!("Topic #{_t_id}, Post #{start_page}"),
+                                        title: format!("Topic #{t_id}, Post #{start_page}"),
                                         initial_text,
                                         allow_newlines: true,
                                         chars_limit: None,
@@ -1123,7 +1175,7 @@ impl ForumLogic {
                                     };
                                     let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
                                     self.presentation_state =
-                                        PresentationState::ShowingPost(_t_id, start_page);
+                                        PresentationState::ShowingPost(t_id, start_page);
                                 } else {
                                     eprintln!("Got wrong page to present");
                                 }
@@ -1165,7 +1217,7 @@ impl ForumLogic {
                                     ForumSyncMessage::EditPost(t_id, p_id, new_entry) => {
                                         if *t_id == c_id && *p_id == start_page {
                                             let orig_entry =
-                                                Entry::from_data(d_vec[0].clone(), start_page > 0)
+                                                Entry::from_data(d_vec[0].clone(), *p_id > 0)
                                                     .unwrap();
                                             let _ =
                                                 self.to_tui_send.send(ToForumView::Request(vec![
@@ -1222,13 +1274,18 @@ impl ForumLogic {
                                 self.presentation_state = PresentationState::TopicEditing(t_ctx);
                             }
                         }
+                        PresentationState::Fitlering => {
+                            // TODO: define local filtering logic for current swarm only
+                            eprintln!("TODO: Got some pages when Filtering");
+                            self.presentation_state = PresentationState::Fitlering;
+                        }
                         other => {
                             eprintln!("Unexpected ReadSuccess when in state: {:?}", other);
                             self.presentation_state = other;
                         }
                     }
                 } else {
-                    eprintln!("Forum DType: {id}");
+                    eprintln!("Unsupportetd Forum DType: {id}");
                 }
             }
             DataType::Link => {
@@ -1237,12 +1294,46 @@ impl ForumLogic {
         }
     }
 
-    fn update_entry(&mut self, c_id: usize, header: Entry) {
-        let t_len = self.entries.len();
+    fn update_topic(&mut self, c_id: usize, header: Entry) -> bool {
+        let new_line = header.entry_line(self.entry_max_len);
+        let t_len = self.all_topics.len();
         for _i in t_len..=c_id {
-            self.entries.push(Entry::empty());
+            self.all_topics.push(Entry::empty());
         }
-        self.entries[c_id] = header;
+        let old_line = self.all_topics[c_id].entry_line(self.entry_max_len);
+        self.all_topics[c_id] = header;
+        new_line != old_line
+    }
+
+    fn update_post(&mut self, e_id: usize, header: Entry) {
+        let e_len = self.posts.len();
+        for _i in e_len..=e_id {
+            self.posts.push(Entry::empty());
+        }
+        self.posts[e_id] = header;
+    }
+
+    fn extend_main_pages_until(&mut self, t_id: u16) {
+        let mpl = self.menu_pages.len() as u16;
+        let mut last_page = self.menu_pages.remove(self.menu_pages.len() - 1);
+        let lpl = last_page.len() as u16;
+        // eprintln!("mpl: {}", self.menu_pages.len());
+        let included_topics = lpl + (mpl - 1) * self.entries_count;
+        if t_id < included_topics {
+            self.menu_pages.push(last_page);
+            return;
+        }
+        for nt_id in included_topics..=t_id {
+            if last_page.len() as u16 == self.entries_count {
+                self.menu_pages.push(last_page);
+                last_page = vec![];
+            }
+            last_page.push(nt_id);
+        }
+        if !last_page.is_empty() || self.menu_pages.is_empty() {
+            self.menu_pages.push(last_page);
+        }
+        eprintln!("Extended mpl: {}", self.menu_pages.len());
     }
 
     fn process_manifest(&mut self, d_type: DataType, mut d_vec: Vec<Data>) {
@@ -1267,34 +1358,44 @@ impl ForumLogic {
             text.trim().to_string(),
             0,
         );
-        if self.entries.is_empty() {
-            self.entries.push(desc);
+        if self.posts.is_empty() {
+            self.posts.push(desc);
         } else {
-            self.entries[0] = desc;
+            self.posts[0] = desc;
         }
         self.shell.manifest = manifest;
     }
-    async fn present_topics(&mut self) {
+    async fn present(&mut self) {
         let curr_state =
             std::mem::replace(&mut self.presentation_state, PresentationState::Settings);
         match curr_state {
             PresentationState::MainLobby(pg_opt) => {
+                // TODO: here we need to include effects of filtering logic
                 let mut pg = if let Some(pg) = pg_opt { pg } else { 0 };
                 if pg == u16::MAX {
-                    pg = (self.entries.len() / self.entries_count as usize) as u16;
+                    // pg = (self.entries.len() / self.entries_count as usize) as u16;
+                    pg = (self.menu_pages.len() - 1) as u16;
                 }
-                let mut topics = self.read_posts(pg, self.entries_count).await;
-                if topics.is_empty() {
-                    pg = 0;
-                    topics = self.read_posts(pg, self.entries_count).await;
+                // let mut topics = self.read_posts(pg, self.entries_count).await;
+                let mut topics = Vec::with_capacity(self.entries_count as usize);
+                // if topics.is_empty() {
+                //     pg = 0;
+                //     topics = self.read_posts(pg, self.entries_count).await;
+                // }
+                for id in &self.menu_pages[pg as usize] {
+                    topics.push((
+                        *id,
+                        self.all_topics[*id as usize].entry_line(self.entry_max_len),
+                    ));
                 }
+                // TopicsPage(u16, Vec<(u16, String)>),
                 let _ = self.to_tui_send.send(ToForumView::TopicsPage(pg, topics));
                 self.presentation_state = PresentationState::MainLobby(Some(pg));
             }
             PresentationState::Topic(t_id, pg_opt) => {
                 let mut pg = if let Some(pg) = pg_opt { pg } else { 0 };
                 if pg == u16::MAX {
-                    pg = (self.entries.len() / self.entries_count as usize) as u16;
+                    pg = (self.posts.len() / self.entries_count as usize) as u16;
                 }
                 let mut topics = self.read_posts(pg, self.entries_count).await;
                 if topics.is_empty() {
@@ -1315,7 +1416,7 @@ impl ForumLogic {
         let first_idx;
         let last_idx;
         if page == u16::MAX {
-            let e_len = self.entries.len();
+            let e_len = self.posts.len();
             let remainder = e_len % (self.entries_count as usize);
             first_idx = e_len - remainder - 1;
             last_idx = e_len - 1;
@@ -1323,11 +1424,11 @@ impl ForumLogic {
             first_idx = (page * page_size) as usize;
             last_idx = ((page + 1) * page_size) as usize;
         }
-        let t_len = self.entries.len();
+        let p_len = self.posts.len();
         let mut res = Vec::with_capacity(page_size as usize);
         for i in first_idx..last_idx {
-            if i < t_len {
-                res.push((i as u16, self.entries[i].entry_line(self.entry_max_len)));
+            if i < p_len {
+                res.push((i as u16, self.posts[i].entry_line(self.entry_max_len)));
             } else {
                 break;
             }
@@ -1634,23 +1735,23 @@ impl ForumLogic {
         let mut new_state = None;
         match &self.presentation_state {
             PresentationState::MainLobby(pg_opt) => {
-                eprintln!("show_next_page MainLobby {pg_opt:?}");
+                eprintln!("show_first_page MainLobby {pg_opt:?}");
                 // if let Some(pg) = pg_opt {
                 // TODO: maybe set new pgid?
                 let next_pg = 0;
                 new_state = Some(PresentationState::MainLobby(Some(next_pg)));
-                let new_range_start = 0;
-                let new_range_end = self.entries_count - 1;
-                eprintln!("Asking for: {}-{}", new_range_start, new_range_end);
-                let _ = self
-                    .to_app_mgr_send
-                    .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadFirstPages(
-                        self.shell.swarm_id,
-                        Some((new_range_start, new_range_end)),
-                    )))
-                    .await;
+                // let new_range_start = 0;
+                // let new_range_end = self.entries_count - 1;
+                // eprintln!("Asking for: {}-{}", new_range_start, new_range_end);
+                // let _ = self
+                //     .to_app_mgr_send
+                //     .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadFirstPages(
+                //         self.shell.swarm_id,
+                //         Some((new_range_start, new_range_end)),
+                //     )))
+                //     .await;
                 // }
-                //TODO
+                // self.present().await;
             }
             PresentationState::Topic(t_id, pg_opt) => {
                 eprintln!("show_first_page Topic {pg_opt:?}");
@@ -1670,7 +1771,7 @@ impl ForumLogic {
                     )))
                     .await;
                 // }
-                //TODO
+                // self.present().await;
             }
             _other => {
                 //TODO
@@ -1686,23 +1787,23 @@ impl ForumLogic {
         let mut new_state = None;
         match &self.presentation_state {
             PresentationState::MainLobby(pg_opt) => {
-                eprintln!("show_next_page MainLobby {pg_opt:?}");
+                eprintln!("show_last_page MainLobby {pg_opt:?}");
                 // if let Some(pg) = pg_opt {
                 // TODO: maybe set new pgid?
                 let next_pg = u16::MAX;
                 new_state = Some(PresentationState::MainLobby(Some(next_pg)));
-                let new_range_start = self.entries_count;
-                let new_range_end = 0;
-                eprintln!("Asking for: {}-{}", new_range_start, new_range_end);
-                let _ = self
-                    .to_app_mgr_send
-                    .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadFirstPages(
-                        self.shell.swarm_id,
-                        Some((new_range_start, new_range_end)),
-                    )))
-                    .await;
+                // let new_range_start = self.entries_count;
+                // let new_range_end = 0;
+                // eprintln!("Asking for: {}-{}", new_range_start, new_range_end);
+                // let _ = self
+                //     .to_app_mgr_send
+                //     .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadFirstPages(
+                //         self.shell.swarm_id,
+                //         Some((new_range_start, new_range_end)),
+                //     )))
+                //     .await;
                 // }
-                //TODO
+                // self.present().await;
             }
             PresentationState::Topic(t_id, pg_opt) => {
                 eprintln!("show_last_page Topic {pg_opt:?}");
@@ -1722,7 +1823,7 @@ impl ForumLogic {
                     )))
                     .await;
                 // }
-                //TODO
+                // self.present().await;
             }
             _other => {
                 //TODO
@@ -1737,23 +1838,35 @@ impl ForumLogic {
         let mut new_state = None;
         match &self.presentation_state {
             PresentationState::MainLobby(pg_opt) => {
-                eprintln!("show_next_page MainLobby {pg_opt:?}");
+                eprintln!(
+                    "show_next_page MainLobby {pg_opt:?} mpl:{}",
+                    self.menu_pages.len()
+                );
                 if let Some(pg) = pg_opt {
                     // TODO: maybe set new pgid?
-                    let next_pg = pg.saturating_add(1);
+                    let next_pg = {
+                        let next_val = pg.saturating_add(1);
+                        if self.menu_pages.len() <= next_val as usize {
+                            0
+                        } else {
+                            next_val
+                        }
+                    };
                     new_state = Some(PresentationState::MainLobby(Some(next_pg)));
-                    let new_range_start = next_pg * self.entries_count;
-                    let new_range_end = (pg.saturating_add(2) * self.entries_count) - 1;
-                    eprintln!("Asking for: {}-{}", new_range_start, new_range_end);
-                    let _ = self
-                        .to_app_mgr_send
-                        .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadFirstPages(
-                            self.shell.swarm_id,
-                            Some((new_range_start, new_range_end)),
-                        )))
-                        .await;
+                    // let new_range_start = next_pg * self.entries_count;
+                    // let new_range_end = (pg.saturating_add(2) * self.entries_count) - 1;
+                    // eprintln!("Asking for: {}-{}", new_range_start, new_range_end);
+                    // let _ = self
+                    //     .to_app_mgr_send
+                    //     .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadFirstPages(
+                    //         self.shell.swarm_id,
+                    //         Some((new_range_start, new_range_end)),
+                    //     )))
+                    //     .await;
+                } else {
+                    new_state = Some(PresentationState::MainLobby(Some(0)));
                 }
-                //TODO
+                // self.present().await;
             }
             PresentationState::Topic(t_id, pg_opt) => {
                 eprintln!("show_next_page Topic {pg_opt:?}");
@@ -1773,7 +1886,7 @@ impl ForumLogic {
                         )))
                         .await;
                 }
-                //TODO
+                // self.present().await;
             }
             _other => {
                 //TODO
@@ -1783,6 +1896,7 @@ impl ForumLogic {
             self.presentation_state = state;
         }
     }
+
     async fn show_previous_page(&mut self) {
         let mut new_state = None;
         match &self.presentation_state {
@@ -1804,7 +1918,7 @@ impl ForumLogic {
                         )))
                         .await;
                 }
-                //TODO
+                // self.present().await;
             }
             PresentationState::Topic(t_id, pg_opt) => {
                 if let Some(pg) = pg_opt {
@@ -1826,7 +1940,7 @@ impl ForumLogic {
                         )))
                         .await;
                 }
-                //TODO
+                // self.present().await;
             }
             _other => {
                 //TODO
@@ -1898,7 +2012,7 @@ impl ForumLogic {
                             // let can_directly_append = false;
                             let entry = Entry::new(self.my_id, vec![], topic_desc, 0);
                             // if can_directly_append {
-                            let data = entry.into_data().unwrap();
+                            let data = entry.into_data(false).unwrap();
                             let _ = self
                                 .to_app_mgr_send
                                 .send(ToAppMgr::AppendContent(
@@ -1938,7 +2052,7 @@ impl ForumLogic {
                                     ))
                                     .await;
                                 self.presentation_state = PresentationState::MainLobby(None);
-                                self.present_topics().await;
+                                self.present().await;
                             } else if Some(1) == id {
                                 eprintln!("Adding new Category: {text}");
                                 let tag = Tag::new(text).unwrap();
@@ -1954,7 +2068,7 @@ impl ForumLogic {
                                     ))
                                     .await;
                                 self.presentation_state = PresentationState::MainLobby(None);
-                                self.present_topics().await;
+                                self.present().await;
                             }
                         }
                     }
@@ -1966,7 +2080,7 @@ impl ForumLogic {
                                 eprintln!("Should update {id:?}");
                                 // let can_directly_edit = false;
                                 // if can_directly_edit {
-                                let data = entry.into_data().unwrap();
+                                let data = entry.into_data(id > 0).unwrap();
                                 let _ = self
                                     .to_app_mgr_send
                                     .send(ToAppMgr::UpdateData(self.shell.swarm_id, c_id, id, data))
@@ -1998,7 +2112,7 @@ impl ForumLogic {
                                 eprintln!("Should append a post {id:?}");
                                 // let can_directly_append = false;
                                 // if can_directly_append {
-                                let data = entry.into_data().unwrap();
+                                let data = entry.into_data(true).unwrap();
                                 let _ = self
                                     .to_app_mgr_send
                                     .send(ToAppMgr::AppendData(self.shell.swarm_id, c_id, data))
@@ -2020,7 +2134,7 @@ impl ForumLogic {
                         }
 
                         self.presentation_state = PresentationState::Topic(c_id, pg_opt);
-                        self.present_topics().await;
+                        self.present().await;
                         // present topics
                     }
                     PresentationState::TopicEditing(t_ctx) => {
@@ -2058,7 +2172,7 @@ impl ForumLogic {
             PresentationState::ShowingPost(c_id, _pg_id) => match ed_res {
                 EditorResult::Close => {
                     self.presentation_state = PresentationState::Topic(c_id, None);
-                    self.present_topics().await;
+                    self.present().await;
                 }
                 EditorResult::FirstPage => {
                     self.presentation_state = PresentationState::ShowingPost(c_id, 0);
@@ -2075,7 +2189,7 @@ impl ForumLogic {
                 EditorResult::PrevPage => {
                     if _pg_id == 0 {
                         self.presentation_state = PresentationState::Topic(c_id, None);
-                        self.present_topics().await;
+                        self.present().await;
                         return;
                     }
                     let ppage = u16::max(0, _pg_id - 1);
@@ -2093,7 +2207,7 @@ impl ForumLogic {
                 EditorResult::NextPage => {
                     if _pg_id == u16::MAX {
                         self.presentation_state = PresentationState::Topic(c_id, None);
-                        self.present_topics().await;
+                        self.present().await;
                         return;
                     }
                     let npage = u16::min(u16::MAX, _pg_id + 1);
@@ -2136,6 +2250,37 @@ impl ForumLogic {
                     });
                     let _ = self.to_tui_send.send(ToForumView::OpenCreator(new_ctx));
                 }
+            }
+            PresentationState::Fitlering => {
+                // TODO: define local filtering logic for current swarm only
+                if let EditorResult::Text(text) = ed_res {
+                    // let _ = self
+                    //     .to_app_mgr_send
+                    //     .send(ToAppMgr::FromApp(dapp_lib::LibRequest::Search(
+                    //         text.clone(),
+                    //     )))
+                    //     .await;
+                    let trimmed = text.trim();
+                    if trimmed.is_empty() {
+                        self.text_filter = None;
+                    } else {
+                        self.text_filter = Some(trimmed.to_string());
+                    }
+                    // TODO: define local logic for filtering topics
+                    // send a request to get search results from elsewhere
+                    // when search engine had time to process query
+                    // let _ = self
+                    //     .to_app_mgr_send
+                    //     .send(ToAppMgr::FromApp(dapp_lib::LibRequest::GetSearchResults(
+                    //         text,
+                    //     )))
+                    //     .await;
+                } else {
+                    self.text_filter = None;
+                }
+                self.presentation_state = PresentationState::MainLobby(Some(0));
+                self.filter_topics().await;
+                self.present().await;
             }
             other => {
                 eprintln!("Edit result when in state: {:?}", other);
@@ -2268,12 +2413,12 @@ impl ForumLogic {
                                     self.shell.swarm_id,
                                     t_id,
                                     0,
-                                    entry.into_data().unwrap(),
+                                    entry.into_data(false).unwrap(),
                                 ))
                                 .await;
                             self.presentation_state = PresentationState::Topic(t_id, None);
                         }
-                        self.present_topics().await;
+                        self.present().await;
                     } else {
                         eprintln!("Should create new Topic");
                         let prev_state = std::mem::replace(
@@ -2299,7 +2444,7 @@ impl ForumLogic {
                                     new_topic,
                                 ))
                                 .await;
-                            self.present_topics().await;
+                            self.present().await;
                         } else {
                             self.presentation_state = prev_state;
                         }
@@ -2316,7 +2461,7 @@ impl ForumLogic {
                     } else {
                         self.presentation_state = PresentationState::MainLobby(None);
                     }
-                    self.present_topics().await;
+                    self.present().await;
                 }
             }
         }
@@ -2396,11 +2541,6 @@ impl ForumLogic {
         // TODO: this can not stay here, since then we do not cover cases
         // when no element was selected. We should reset presentation_state then
         // and possibly send something to presentation
-        if ids.is_empty() {
-            eprintln!("No item was selected!");
-            return;
-        }
-        let id = ids[0];
         eprintln!("Selected ids: {:?}", ids);
         let curr_state = std::mem::replace(
             &mut self.presentation_state,
@@ -2408,6 +2548,11 @@ impl ForumLogic {
         );
         match curr_state {
             PresentationState::SelectingOneCapability(caps, prev_state) => {
+                if ids.is_empty() {
+                    eprintln!("No item was selected!");
+                    return;
+                }
+                let id = ids[0];
                 //TODO: this should be the only served arm
                 match *prev_state {
                     PresentationState::RunningCapabilities(r_caps_opt) => {
@@ -2468,12 +2613,22 @@ impl ForumLogic {
                 }
             }
             PresentationState::SelectingOnePolicy(p_vec, r_tree) => {
+                if ids.is_empty() {
+                    eprintln!("No item was selected!");
+                    return;
+                }
+                let id = ids[0];
                 let p = p_vec[id];
                 // let r_tree = decompose(req.clone());
                 self.presentation_state = PresentationState::Pyramid(p.clone(), r_tree.clone());
                 let _ = self.to_tui_send.send(ToForumView::ShowPolicy(p, r_tree));
             }
             PresentationState::SelectingOneRequirement(req_vec, pol, mut r_tree) => {
+                if ids.is_empty() {
+                    eprintln!("No item was selected!");
+                    return;
+                }
+                let id = ids[0];
                 eprintln!("should put req at: {:?}", r_tree.mark_location());
                 let r = req_vec[id].clone();
                 if r_tree.replace_mark(r) {
@@ -2485,6 +2640,11 @@ impl ForumLogic {
                 }
             }
             PresentationState::CreatingByteSet(opts, is_run, exist_opt) => {
+                if ids.is_empty() {
+                    eprintln!("No item was selected!");
+                    return;
+                }
+                // let id = ids[0];
                 let bset = if opts.len() == 256 {
                     let mut hset = HashSet::with_capacity(ids.len());
                     for id in ids {
@@ -2541,6 +2701,11 @@ impl ForumLogic {
                 // User can now hit "Run" or "Store" button for selected BSet
             }
             PresentationState::ByteSets(is_run, mapping_opt) => {
+                if ids.is_empty() {
+                    eprintln!("No item was selected!");
+                    return;
+                }
+                // let id = ids[0];
                 eprintln!("Got Selected while in ByteSets");
                 if let Some((id, mut hm)) = mapping_opt {
                     if let Some(bset) = hm.get_mut(&id) {
@@ -2567,6 +2732,11 @@ impl ForumLogic {
                 }
             }
             PresentationState::TopicEditing(t_ctx) => {
+                if ids.is_empty() {
+                    eprintln!("No item was selected!");
+                    return;
+                }
+                let id = ids[0];
                 //TODO: If let Some(t_id) && t_id == 0{
                 // if ids[0] == tags.len()      Then we create a new Tag
                 // }
@@ -2634,6 +2804,24 @@ impl ForumLogic {
                     let _ = self.to_tui_send.send(ToForumView::OpenCreator(new_ctxt));
                 }
             }
+            PresentationState::Fitlering => {
+                let mut t_ids = Vec::with_capacity(ids.len());
+                for id in ids {
+                    t_ids.push(id as u8);
+                }
+                self.presentation_state = PresentationState::MainLobby(None);
+                self.category_filter = if t_ids.is_empty() { None } else { Some(t_ids) };
+
+                // let _ = self
+                //     .to_app_mgr_send
+                //     .send(ToAppMgr::FromApp(dapp_lib::LibRequest::ReadFirstPages(
+                //         self.shell.swarm_id,
+                //         Some((1, u16::MAX)),
+                //     )))
+                //     .await;
+                self.filter_topics().await;
+                self.present().await;
+            }
             other => {
                 self.presentation_state = other;
             }
@@ -2700,7 +2888,7 @@ impl ForumLogic {
                         .await;
                     self.presentation_state = PresentationState::Topic(topic_id, None);
                     eprintln!("cleaning topics…");
-                    self.entries = vec![];
+                    self.posts = vec![];
                     // TODO: instead of opening Editor
                     // switch to selected Topic Menu
                     // and present Posts
@@ -2743,12 +2931,12 @@ impl ForumLogic {
                         //     }));
                         eprintln!("NS TopicEditing");
 
-                        let mut tags_usize = Vec::with_capacity(self.entries[0].tags.len());
-                        for t in self.entries[0].tags.iter() {
+                        let mut tags_usize = Vec::with_capacity(self.posts[0].tags.len());
+                        for t in self.posts[0].tags.iter() {
                             tags_usize.push(*t as usize);
                         }
 
-                        let description = self.entries[0].text.clone();
+                        let description = self.posts[0].text.clone();
                         new_state = Some(PresentationState::TopicEditing(TopicContext {
                             t_id: Some(*c_id),
                             description: description.clone(),
@@ -3094,6 +3282,9 @@ impl ForumLogic {
             PresentationState::TopicEditing(_tctx) => {
                 //ignore
             }
+            PresentationState::Fitlering => {
+                eprintln!("Querying not supported while defining Filtering conditions");
+            }
         }
         if let Some(n_s) = new_state {
             self.presentation_state = n_s;
@@ -3199,6 +3390,76 @@ impl ForumLogic {
                 // we could send User a notification, that his request can not be fullfilled
             }
         }
+    }
+
+    async fn process_search_results(&mut self, query: String, hits: Vec<Hit>) {
+        //TODO
+        eprintln!(
+            "in process_search_results {} have {} hits",
+            query,
+            hits.len()
+        );
+    }
+
+    async fn filter_topics(&mut self) {
+        // TODO: filtering logic should allow for fast switching between MainMenu pages.
+        // For that to work we need some sort of helper structure that will contain
+        // all topic pages after filtering is done.
+        // Each page should contain indices of topic to include.
+        // Above logic should only apply for MainMenu not for Topic menu type.
+        // If no filters are defined, we should present all topics.
+        // If both category_filter & text_filter are defined we should filter all topics twice:
+        // first by category_filter, second by text filter.
+        // If any filter changes we should restart filtering from scratch.
+        //
+        // First we filter by category, if cat_fltr is defined.
+        // We take every topic & check if it has any category that is included in cat_fltr.
+        let all_topics: Vec<u16> = (0..self.all_topics.len() as u16).collect();
+        let first_result = if let Some(categories) = &self.category_filter {
+            let mut filtered_by_cat = vec![];
+            for t_id in all_topics {
+                for t in &self.all_topics[t_id as usize].tags {
+                    if categories.contains(&t) {
+                        filtered_by_cat.push(t_id);
+                        break;
+                    }
+                }
+            }
+            filtered_by_cat
+        } else {
+            all_topics
+        };
+        //
+        // Second we take those topics and run text filter, if defined.
+        // Here we take the header of a topic and check if it contains a specific text.
+        // If so we include such topic in results.
+        //
+        let final_result = if let Some(text_f) = &self.text_filter {
+            let mut filtered_by_text = vec![];
+            for t_id in first_result {
+                if self.all_topics[t_id as usize].text.contains(text_f) {
+                    filtered_by_text.push(t_id);
+                }
+            }
+            filtered_by_text
+        } else {
+            first_result
+        };
+        // Last step is to take resulting topics and build out main_pages from them.
+
+        self.menu_pages = vec![];
+        let mut curr_page = Vec::with_capacity(self.entries_count as usize);
+        for t_id in final_result {
+            curr_page.push(t_id);
+            if curr_page.len() == self.entries_count as usize {
+                self.menu_pages.push(curr_page);
+                curr_page = Vec::with_capacity(self.entries_count as usize);
+            }
+        }
+        if !curr_page.is_empty() || self.menu_pages.is_empty() {
+            self.menu_pages.push(curr_page);
+        }
+        // eprintln!("in filter_topics");
     }
     fn set_clipboard(&mut self, which: u16) {
         match &self.presentation_state {

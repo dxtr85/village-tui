@@ -35,13 +35,13 @@ impl ForumSyncMessage {
     pub fn into_app_msg(self) -> Result<AppDefinedMsg, (u8, ContentID, u16, Data)> {
         match self {
             Self::EditPost(c_id, d_id, entry) => {
-                AppDefinedMsg::new(0, c_id, d_id, entry.into_data().unwrap())
+                AppDefinedMsg::new(0, c_id, d_id, entry.into_data(d_id > 0).unwrap())
             }
             Self::AddTopic(c_id, entry) => {
-                AppDefinedMsg::new(1, c_id, 0, entry.into_data().unwrap())
+                AppDefinedMsg::new(1, c_id, 0, entry.into_data(false).unwrap())
             }
             Self::AddPost(c_id, entry) => {
-                AppDefinedMsg::new(2, c_id, 0, entry.into_data().unwrap())
+                AppDefinedMsg::new(2, c_id, 0, entry.into_data(true).unwrap())
             }
         }
     }

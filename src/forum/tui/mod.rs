@@ -41,7 +41,7 @@ pub enum Action {
     PreviousPage,
     FirstPage,
     LastPage,
-    Filter(String),
+    Filter(bool), // if true => CatFlter, false => text filter
     Query(u16),
     Run(Option<usize>),
     Store(usize),
@@ -398,7 +398,8 @@ impl ButtonsLogic {
                             // Filter Topics to only include
                             // Topics marked with at least
                             // one of selected Catagories.
-                            None
+                            eprintln!("Returinig Action::Filter(true)");
+                            Some(Action::Filter(true))
                         }
                         1 => {
                             //TODO: Filter
@@ -407,7 +408,8 @@ impl ButtonsLogic {
                             // Filter Topics to only include
                             // those containing at least one
                             // word from user-defined Filter
-                            None
+                            eprintln!("Returinig Action::Filter(false)");
+                            Some(Action::Filter(false))
                         }
                         2 => {
                             //TODO: Add new topic
@@ -1144,7 +1146,8 @@ pub fn serve_forum_tui(
     let frame = vec![Glyph::blue(); cols * rows];
     // Forum
     let mut buttons_logic = ButtonsLogic::new(&mut tui_mgr);
-    let mut action = buttons_logic.activate(&mut tui_mgr);
+    // let mut action = buttons_logic.activate(&mut tui_mgr);
+    let mut action = None;
     // let mut active_button = 0;
     // let mut entry_buttons = Vec::with_capacity((rows - 4) >> 1);
     // let mut active_entry = 0;
@@ -1369,12 +1372,12 @@ pub fn serve_forum_tui(
                     // a given list & reply back to logic.
                     eprintln!("Selected: {:?}", selected);
                     tui_mgr.restore_display(main_display, true);
-                    if !selected.is_empty() {
-                        action = Some(Action::Selected(selected));
-                    } else {
-                        //TODO:
-                        eprintln!("Failed to select one!");
-                    }
+                    action = Some(Action::Selected(selected));
+                    // if !selected.is_empty() {
+                    // } else {
+                    //     //TODO:
+                    //     eprintln!("Failed to select one!");
+                    // }
                 }
                 ToForumView::OpenEditor(e_p) => {
                     // let _ = editor.take_text(&mut tui_mgr);
