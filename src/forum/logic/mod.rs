@@ -48,12 +48,12 @@ pub struct TopicContext {
     pub tag_names: Vec<String>,
 }
 impl TopicContext {
-    pub fn new() -> Self {
+    pub fn new(tag_names: Vec<String>) -> Self {
         TopicContext {
             t_id: None,
             description: "Topic description".to_string(),
             tags: vec![],
-            tag_names: vec![],
+            tag_names,
         }
     }
 }
@@ -1364,6 +1364,13 @@ impl ForumLogic {
             self.posts[0] = desc;
         }
         self.shell.manifest = manifest;
+        let entry = Entry::new(
+            self.shell.swarm_name.founder,
+            vec![],
+            self.shell.manifest.description.clone(),
+            0,
+        );
+        self.update_topic(0, entry);
     }
     async fn present(&mut self) {
         let curr_state =
@@ -1456,10 +1463,14 @@ impl ForumLogic {
                 // };
                 // let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
                 eprintln!("We should add a new topic");
+                let tag_names = self.shell.manifest.tag_names(None);
                 let _ = self
                     .to_tui_send
-                    .send(ToForumView::OpenCreator(TopicContext::new()));
-                self.presentation_state = PresentationState::TopicEditing(TopicContext::new());
+                    .send(ToForumView::OpenCreator(TopicContext::new(
+                        tag_names.clone(),
+                    )));
+                self.presentation_state =
+                    PresentationState::TopicEditing(TopicContext::new(tag_names));
                 // self.presentation_state = PresentationState::MainLobby(page_opt);
                 // self.presentation_state = PresentationState::Editing(
                 //     None,
@@ -2949,7 +2960,10 @@ impl ForumLogic {
                                 t_id: Some(*c_id),
                                 description: description.clone(),
                                 tags: tags_usize,
-                                tag_names: self.shell.manifest.tag_names(None),
+                                tag_names: self
+                                    .shell
+                                    .manifest
+                                    .tag_names(Some(self.posts[0].tags.clone())),
                             }));
                     } else {
                         let _ = self

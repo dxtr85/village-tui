@@ -159,7 +159,7 @@ impl ButtonsLogic {
             MenuType::Main,
             MenuConfig::new(
                 [
-                    ButtonState::Show("CatFlter".to_string()),
+                    ButtonState::Show("Category".to_string()),
                     ButtonState::Show("Filter".to_string()),
                     ButtonState::Show("+ Topic".to_string()),
                     ButtonState::Show("Options".to_string()),
@@ -1397,12 +1397,17 @@ pub fn serve_forum_tui(
                 }
                 ToForumView::OpenCreator(t_ctx) => {
                     eprintln!("Forum should open creator");
+                    let mut tags_str = String::new();
+                    for t_id in t_ctx.tags {
+                        tags_str.push_str(&t_ctx.tag_names[t_id]);
+                        tags_str.push(' ');
+                    }
                     let res = creator.show(
                         main_display,
                         &mut tui_mgr,
                         false,
                         format!("Topic"),
-                        format!(""),
+                        tags_str,
                         t_ctx.description,
                     );
                     action = Some(Action::CreatorResult(res));
