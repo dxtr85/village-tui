@@ -1398,7 +1398,13 @@ pub fn serve_forum_tui(
                 ToForumView::OpenCreator(t_ctx) => {
                     eprintln!("Forum should open creator");
                     let mut tags_str = String::new();
+                    let tags_len = t_ctx.tag_names.len();
                     for t_id in t_ctx.tags {
+                        if t_id >= tags_len {
+                            eprintln!("Tags: {:?} but idx: {t_id}", t_ctx.tag_names);
+                            break;
+                        }
+                        // TODO: got a panic below here once, tag_names index too big
                         tags_str.push_str(&t_ctx.tag_names[t_id]);
                         tags_str.push(' ');
                     }
