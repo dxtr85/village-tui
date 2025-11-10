@@ -215,6 +215,9 @@ impl SwarmShell {
         // eprintln!("update_tag_to_cid {}: {:?}", c_id, tags);
         let mut existing_tags = vec![];
         for (t, cb) in self.tag_to_cid.iter() {
+            if t.is_empty() {
+                continue;
+            }
             for (_d, c, _s) in cb {
                 if *c == c_id {
                     existing_tags.push(t.clone());
