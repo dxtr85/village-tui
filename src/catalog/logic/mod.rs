@@ -215,9 +215,6 @@ impl SwarmShell {
         // eprintln!("update_tag_to_cid {}: {:?}", c_id, tags);
         let mut existing_tags = vec![];
         for (t, cb) in self.tag_to_cid.iter() {
-            if t.is_empty() {
-                continue;
-            }
             for (_d, c, _s) in cb {
                 if *c == c_id {
                     existing_tags.push(t.clone());
@@ -225,6 +222,7 @@ impl SwarmShell {
                 }
             }
         }
+        let existing_empty = existing_tags.len() == 1 && existing_tags[0].is_empty();
         // eprintln!("existing: {:?}", existing_tags);
 
         let mut newly_added = vec![];
@@ -241,7 +239,11 @@ impl SwarmShell {
                 self.tag_to_cid.insert(Tag::empty(), set);
                 newly_added.push(Tag::empty());
             }
-            return (newly_added, existing_tags);
+            if existing_empty {
+                return (newly_added, vec![]);
+            } else {
+                return (newly_added, existing_tags);
+            }
         }
         for new_tag in &tags {
             // eprintln!("processing {:?}", new_tag);
