@@ -46,6 +46,7 @@ pub use tile::TileType;
 // use viewer::Viewer;
 
 pub struct VillageLayout {
+    g_id: usize,
     my_name: SwarmName,
     tiles_in_row: u8,
     visible_rows: u8,
@@ -57,7 +58,7 @@ pub struct VillageLayout {
 }
 
 impl VillageLayout {
-    pub fn new((x_size, y_size): (usize, usize)) -> Self {
+    pub fn new(g_id: usize, (x_size, y_size): (usize, usize)) -> Self {
         let tiles_in_row: u8 = (x_size / 12) as u8;
         let visible_rows: u8 = (y_size / 8) as u8 + 1;
         VillageLayout {
@@ -65,6 +66,7 @@ impl VillageLayout {
                 founder: GnomeId::any(),
                 name: format!("/"),
             },
+            g_id,
             tiles_in_row,
             visible_rows,
             home_tile: (2, 1),
@@ -172,12 +174,12 @@ impl VillageLayout {
             let mut ci = 0;
             for c in str_name.0.chars() {
                 g.set_char(c);
-                mgr.set_glyph(0, g, 32 + ci, (14 * i as usize) + 7);
+                mgr.set_glyph(self.g_id, g, 32 + ci, (14 * i as usize) + 7);
                 ci += 1;
             }
             g.set_char(' ');
             for cii in ci..32 {
-                mgr.set_glyph(0, g, 32 + cii, (14 * i as usize) + 7);
+                mgr.set_glyph(self.g_id, g, 32 + cii, (14 * i as usize) + 7);
             }
             let restricted_rows = if 1 + (2 * i) < self.visible_rows {
                 vec![2 * i, 1 + (2 * i)]
@@ -557,6 +559,7 @@ pub fn instantiate_tui_mgr() -> Manager {
 /// This function is for sending requests to application and displaying user interface.
 pub fn serve_catalog_tui(
     main_display: usize,
+    g_id: usize,
     my_id: GnomeId,
     mut mgr: Manager,
     // message_pipes: MessagePipes,
@@ -572,7 +575,7 @@ pub fn serve_catalog_tui(
     // let to_app = message_pipes.sender();
     // let to_tui_recv = message_pipes.reveiver();
     let s_size = mgr.screen_size();
-    let mut village = VillageLayout::new(s_size);
+    let mut village = VillageLayout::new(g_id, s_size);
     let mut neighboring_villages = HashMap::new();
     let visible_streets = village.initialize(my_id, &mut mgr, config.clone());
     // let mut street_to_rows = HashMap::new();

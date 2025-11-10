@@ -429,6 +429,7 @@ impl CatalogLogic {
         let tui_join = spawn_blocking(move || {
             serve_catalog_tui(
                 self.display_id,
+                res.unwrap(),
                 self.my_name.founder,
                 tui_mgr,
                 from_tui_send,
