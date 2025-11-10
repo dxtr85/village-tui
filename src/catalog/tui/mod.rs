@@ -762,10 +762,11 @@ pub fn serve_catalog_tui(
                     let t_headers = village.get_tile_headers();
                     let tile_locations = t_headers
                         .iter()
-                        .filter(|(_loc, ttype)| matches!(ttype, TileType::Content(_d_type, _c_id)));
-                    eprintln!("tlocs: {:?}", tile_locations);
+                        // .filter(|(_loc, ttype)| matches!(ttype, TileType::Content(_d_type, _c_id)));
+                        .filter(|(_loc, ttype)| ttype.is_content(c_id));
+                    // eprintln!("tlocs: {:?}", tile_locations);
                     for (loc, _t) in tile_locations {
-                        eprintln!("tlocs: {:?}", _t);
+                        // eprintln!("tloc: {:?}", _t);
                         for (tag, rows) in &village.street_to_rows {
                             eprintln!("tag: {:?}, rows: {:?}", tag, rows);
                             if rows.contains(&loc.0) {

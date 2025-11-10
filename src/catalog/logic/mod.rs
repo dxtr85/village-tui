@@ -212,7 +212,18 @@ impl SwarmShell {
         tags: Vec<Tag>,
         header: String,
     ) -> (Vec<Tag>, Vec<Tag>) {
-        eprintln!("update_tag_to_cid {}: {:?}", c_id, tags);
+        // eprintln!("update_tag_to_cid {}: {:?}", c_id, tags);
+        let mut existing_tags = vec![];
+        for (t, cb) in self.tag_to_cid.iter() {
+            for (_d, c, _s) in cb {
+                if *c == c_id {
+                    existing_tags.push(t.clone());
+                    break;
+                }
+            }
+        }
+        // eprintln!("existing: {:?}", existing_tags);
+
         let mut newly_added = vec![];
         let mut removed = vec![];
         let to_add = (d_type, c_id, header.clone());
@@ -227,37 +238,41 @@ impl SwarmShell {
                 self.tag_to_cid.insert(Tag::empty(), set);
                 newly_added.push(Tag::empty());
             }
-            return (newly_added, removed);
+            return (newly_added, existing_tags);
         }
         for new_tag in &tags {
-            eprintln!("processing {:?}", new_tag);
+            // eprintln!("processing {:?}", new_tag);
             if let Some(cids) = self.tag_to_cid.get_mut(new_tag) {
-                eprintln!("found");
+                // eprintln!("found");
                 //todo
                 if cids.contains(&to_add) {
-                    eprintln!("contains");
+                    // eprintln!("contains");
                     // Do nothing
                 } else {
-                    eprintln!("inserting");
+                    // eprintln!("inserting");
                     let _ = cids.insert(to_add.clone());
                     newly_added.push(new_tag.clone());
                 }
             } else {
                 let mut hsadd = HashSet::new();
                 hsadd.insert(to_add.clone());
-                eprintln!("hash set: {:?}", hsadd);
-                let res = self.tag_to_cid.insert(new_tag.clone(), hsadd);
-                eprintln!("not found,insert result: {:?}", res);
+                // eprintln!("hash set: {:?}", hsadd);
+                let _res = self.tag_to_cid.insert(new_tag.clone(), hsadd);
+                // eprintln!("not found,insert result: {:?}", _res);
                 newly_added.push(new_tag.clone());
             }
         }
         // eprintln!("before tag_to_cid: {:?}", self.tag_to_cid);
         for (e_tag, cids) in self.tag_to_cid.iter_mut() {
-            if cids.contains(&to_add) {
+            // eprintln!("test if remove: {e_tag:?} from: {existing_tags:?}");
+            if existing_tags.contains(&e_tag) {
+                // eprintln!("ex cont");
                 if tags.contains(e_tag) {
+                    // eprintln!("tags cont");
                     // Do nothing all is fine
                 } else {
-                    let _ = cids.remove(&to_add);
+                    cids.retain(|(_d, c, _s)| *c != c_id);
+                    // eprintln!("YES");
                     removed.push(e_tag.clone());
                 }
                 // } else {
