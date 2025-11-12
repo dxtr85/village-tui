@@ -616,7 +616,7 @@ pub fn serve_catalog_tui(
             " Nowa Notatka".to_string(),
             " Usuń Notatkę".to_string(),
             " Kopiuj Odnośnik".to_string(),
-            " Nie".to_string(),
+            " Edytuj Link".to_string(),
             " Było".to_string(),
             " Będzie".to_string(),
             " Bardzo".to_string(),
