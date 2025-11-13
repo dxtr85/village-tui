@@ -123,7 +123,13 @@ impl CreatorContext {
     }
     pub fn link_target(
         &self,
-    ) -> Option<(AppType, SwarmName, ContentID, Data, Option<TransformInfo>)> {
+    ) -> Option<(
+        AppType,
+        SwarmName,
+        ContentID,
+        Vec<u8>,
+        Option<TransformInfo>,
+    )> {
         match self {
             Self::Data { .. } => None,
             Self::Link {
@@ -134,14 +140,21 @@ impl CreatorContext {
                 ti_opt,
                 ..
             } => {
-                let t_len = tags.len() as u8;
-                let mut d_source = Vec::with_capacity(t_len as usize + 1);
-                d_source.push(t_len);
-                for t in tags {
-                    d_source.push(*t);
-                }
-                let d = Data::new(d_source).unwrap();
-                Some((*app_type, s_name.clone(), *target_id, d, ti_opt.clone()))
+                // let t_len = tags.len() as u8;
+                // let mut d_source = Vec::with_capacity(t_len as usize + 1);
+                // d_source.push(t_len);
+                // for t in tags {
+                //     d_source.push(*t);
+                // }
+                // let d = Data::new(d_source).unwrap();
+                Some((
+                    *app_type,
+                    s_name.clone(),
+                    *target_id,
+                    tags.clone(),
+                    // d,
+                    ti_opt.clone(),
+                ))
             }
         }
     }
@@ -600,11 +613,14 @@ impl CatalogLogic {
                             self.state = TuiState::ShowActiveSwarms(map_vec);
                             self.show_active_swarms(name_vec);
                         }
+                        // TODO: move this logic into AppData
                         ToApp::GetCIDsForTags(s_id, n_id, tags, all_first_pages) => {
                             eprintln!("App received request for tags: {:?}", tags);
                             for (c_id, data) in all_first_pages {
                                 let mut tags_iter = data.ref_bytes().iter();
+                                // TODO: Does it work for current Link byte structure?
                                 let tags_count = tags_iter.next().unwrap();
+                                eprintln!("App GetCIDsForTags CID-{c_id}: Tags #{tags_count}");
                                 if *tags_count == 0 {
                                     continue;
                                 }
@@ -931,10 +947,29 @@ impl CatalogLogic {
                                     }
                                 }
                                 Direction::Left => {
-                                    //TODO
+                                    //TODO: going left and right we cycle between three possible
+                                    // screen layouts:
+                                    //
+                                    // Neighbors       Main Street       Full Contents
+                                    //
+                                    // So going out from Main Street to the left brings up Neighbors
+                                    // layout. Going left from Neighbors brings up Full Contents,
+                                    // and left from Full Contents brings us back to Main Street.
+                                    // Neighbors layout contains only Neigbhor tiles or empty Fields.
+                                    // Full Contents has only Content, Application or empty Field tiles.
+                                    //
+                                    // By going up or down we stay on the same layout, but we change
+                                    // which "page" of tiles is being displayed.
+                                    //
+                                    // TODO: we need two more TuiState values: NeighborSt(u16) and
+                                    // Street(Tag,u16). Those should hold values indicating current page
+                                    // (and street name in case of Street).
+                                    //
+                                    // TODO: We need to extend logic to hold a
                                 }
                                 Direction::Right => {
-                                    //TODO
+                                    //TODO: similar to going to the left, but now we cycle in other
+                                    // direction.
                                 }
                             }
                         }
@@ -1670,11 +1705,11 @@ impl CatalogLogic {
                                         let descr = c_context.description();
                                         let mut bytes = Vec::with_capacity(1024);
                                         if c_context.data_type().is_link() {
-                                            let (app_type, s_name, target_cid, data, ti_opt) =
+                                            let (app_type, s_name, target_cid, tags, ti_opt) =
                                                 c_context.link_target().unwrap();
                                             // eprintln!("We've got to update a link, dunno how");
                                             let content = Content::Link(
-                                                app_type, s_name, target_cid, descr, data, ti_opt,
+                                                app_type, s_name, target_cid, tags, descr, ti_opt,
                                             );
                                             bytes = content.to_data().unwrap().bytes();
                                             // let s_bytes = s_name.as_bytes();
@@ -2269,14 +2304,15 @@ impl CatalogLogic {
                                     a_type,
                                     s_name,
                                     target_id,
+                                    tags,
                                     description,
-                                    data,
+                                    // data,
                                     ti_opt,
                                 )) = link.link_params()
                                 {
                                     // eprintln!("have link params");
-                                    let (tags, _hdr) =
-                                        read_tags_and_header(DataType::Data(0), data);
+                                    // let (tags, _hdr) =
+                                    //     read_tags_and_header(DataType::Data(0), data);
                                     new_state = Some(TuiState::Creator(CreatorContext::Link {
                                         app_type: a_type,
                                         c_id: Some(c_id),

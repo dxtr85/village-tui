@@ -664,12 +664,12 @@ pub fn serve_catalog_tui(
                 }
                 Key::Left | Key::H | Key::CtrlB => {
                     if village.select_next(Direction::Left, &mut mgr) {
-                        //TODO: we went out of screen
+                        let _ = to_app.send(FromCatalogView::CursorOutOfScreen(Direction::Left));
                     }
                 }
                 Key::Right | Key::L | Key::CtrlF => {
                     if village.select_next(Direction::Right, &mut mgr) {
-                        //TODO
+                        let _ = to_app.send(FromCatalogView::CursorOutOfScreen(Direction::Right));
                     }
                 }
                 Key::Up | Key::K | Key::CtrlP => {
