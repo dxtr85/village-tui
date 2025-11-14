@@ -1460,7 +1460,22 @@ impl CatalogLogic {
                                     if let EditorResult::Text(text) = e_result {
                                         eprintln!("Got edit result while indexing");
                                         if let Some(d_id) = d_id_opt {
-                                            let data = Data::new(text.bytes().collect()).unwrap();
+                                            // let mut bytes = Vec::with_capacity(1024);
+                                            // if d_id == 0 {
+                                            //     bytes.push(tag_ids.len() as u8);
+                                            //     for tid in tag_ids {
+                                            //         bytes.push(tid);
+                                            //     }
+                                            //     let blen = (text.len() as u16).to_be_bytes();
+                                            //     bytes.push(blen[0]);
+                                            //     bytes.push(blen[1]);
+                                            // }
+                                            // bytes.append(&mut text.bytes().collect());
+                                            let data = if d_id == 0 {
+                                                Data::new_first(tag_ids, text, None).unwrap()
+                                            } else {
+                                                Data::new(text.into_bytes()).unwrap()
+                                            };
                                             let _ = self
                                                 .to_app_mgr_send
                                                 .send(ToAppMgr::UpdateData(
@@ -1732,10 +1747,16 @@ impl CatalogLogic {
                                             for tag in tag_indices {
                                                 bytes.push(tag as u8);
                                             }
+                                            let blen = (descr.text().len() as u16).to_be_bytes();
+                                            bytes.push(blen[0]);
+                                            bytes.push(blen[1]);
                                             for byte in descr.text().bytes() {
                                                 bytes.push(byte as u8);
                                             }
                                         }
+                                        // TODO: we want to use Data::new_first here,
+                                        // but with Links it is more complicated
+                                        // and requires some additional logic
                                         let data_res = Data::new(bytes);
                                         if let Ok(data) = data_res {
                                             if let Some(c_id) = c_context.content_id() {
@@ -3025,19 +3046,20 @@ impl CatalogLogic {
                     .await;
                 // let _ = self.to_app_mgr_send.send(ToAppMgr::ListNeighbors).await;
             }
-            Key::C => {
-                let mut data_vec = vec![Data::new(vec![70, 91]).unwrap(); 129];
-                data_vec[0] = Data::new(vec![0, 70, 91]).unwrap();
-                let _ = self
-                    .to_app_mgr_send
-                    .send(ToAppMgr::ChangeContent(
-                        self.active_swarm.swarm_id,
-                        1,
-                        DataType::from(0),
-                        data_vec,
-                    ))
-                    .await;
-            }
+            // Key::C => {
+            // TODO: rework this to support TagLen|Tags|DescrLen|Desc DID=0 structure
+            //     let mut data_vec = vec![Data::new(vec![70, 91]).unwrap(); 129];
+            //     data_vec[0] = Data::new(vec![0, 70, 91]).unwrap();
+            //     let _ = self
+            //         .to_app_mgr_send
+            //         .send(ToAppMgr::ChangeContent(
+            //             self.active_swarm.swarm_id,
+            //             1,
+            //             DataType::from(0),
+            //             data_vec,
+            //         ))
+            //         .await;
+            // }
             Key::S => {
                 let _ = self
                     .to_app_mgr_send

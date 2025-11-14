@@ -134,12 +134,13 @@ impl Entry {
         let hash = data.get_hash();
         let mut bytes = data.bytes();
         // TODO: first go Tags
-        let tags_count = if is_manifest_or_nonop_post {
-            eprintln!("man or nonop");
-            0
-        } else {
-            bytes.remove(0)
-        };
+        let tags_count =
+        //     if is_manifest_or_nonop_post {
+        //     eprintln!("man or nonop");
+        //     0
+        // } else {
+            bytes.remove(0);
+        // };
         let mut tags = vec![];
         eprintln!("tags count: {tags_count}");
         for _i in 0..tags_count {
@@ -151,6 +152,15 @@ impl Entry {
         //     bytes.remove(0);
         //     tags.push(bytes.remove(0));
         // }
+        let tlen0 = bytes.remove(0);
+        let tlen1 = bytes.remove(0);
+        let tlen = u16::from_be_bytes([tlen0, tlen1]);
+        let mut sbytes = Vec::with_capacity(tlen as usize);
+        for _i in 0..tlen {
+            sbytes.push(bytes.remove(0));
+        }
+        eprintln!("Attempt to create Entry from {:?} bytes", bytes);
+        let str_res = String::from_utf8(sbytes);
         let g_id = u64::from_be_bytes([
             bytes.remove(0),
             bytes.remove(0),
@@ -161,8 +171,6 @@ impl Entry {
             bytes.remove(0),
             bytes.remove(0),
         ]);
-        eprintln!("Attempt to create Entry from {:?} bytes", bytes);
-        let str_res = String::from_utf8(bytes);
         if let Ok(text) = str_res {
             Ok(Entry::new(GnomeId(g_id), tags, text, hash))
         } else {
@@ -170,19 +178,29 @@ impl Entry {
             Err(())
         }
     }
-    pub fn into_data(self, is_manifest_or_nonop_post: bool) -> Result<Data, Vec<u8>> {
-        let mut bytes = Vec::with_capacity(9 + self.tags.len() + self.text.len());
-        if !is_manifest_or_nonop_post {
-            bytes.push(self.tags.len() as u8);
-            for tag in self.tags {
-                bytes.push(tag);
-            }
-        }
-        for b in self.author.bytes() {
-            bytes.push(b);
-        }
-        bytes.append(&mut self.text.into_bytes());
-        Data::new(bytes)
+    pub fn into_data(self) -> Result<Data, Vec<u8>> {
+        // TODO: make every post follow Tag#|Tags|DescrLen|Descr|Author format
+        // this way it will be easy for Search engine to search through every Post
+        // let mut bytes = Vec::with_capacity(11 + self.tags.len() + self.text.len());
+        // bytes.push(self.tags.len() as u8);
+        // for tag in self.tags {
+        //     bytes.push(tag);
+        // }
+        // // if !is_manifest_or_nonop_post {
+        // // }
+        // let tlen = (self.text.len() as u16).to_be_bytes();
+        // bytes.push(tlen[0]);
+        // bytes.push(tlen[1]);
+        // bytes.append(&mut self.text.into_bytes());
+        // for b in self.author.bytes() {
+        //     bytes.push(b);
+        // }
+        // eprintln!("Entry into_data: {:?}", bytes);
+        Data::new_first(
+            self.tags,
+            self.text,
+            Some(self.author.bytes().try_into().unwrap()),
+        )
     }
     pub fn entry_line(&self, size: usize) -> String {
         let mut text = if let Some(line) = self.text.lines().next() {
@@ -784,7 +802,8 @@ impl ForumLogic {
                                                             self.shell.swarm_id,
                                                             t_id,
                                                             p_id,
-                                                            entry.into_data(p_id > 0).unwrap(),
+                                                            // entry.into_data(p_id > 0).unwrap(),
+                                                            entry.into_data().unwrap(),
                                                         ))
                                                         .await;
                                                 } else {
@@ -805,7 +824,8 @@ impl ForumLogic {
                                                 .send(ToAppMgr::AppendContent(
                                                     self.shell.swarm_id,
                                                     DataType::Data(0),
-                                                    entry.into_data(false).unwrap(),
+                                                    // entry.into_data(false).unwrap(),
+                                                    entry.into_data().unwrap(),
                                                 ))
                                                 .await;
                                         }
@@ -815,7 +835,8 @@ impl ForumLogic {
                                                 .send(ToAppMgr::AppendData(
                                                     self.shell.swarm_id,
                                                     t_id,
-                                                    entry.into_data(true).unwrap(),
+                                                    // entry.into_data(true).unwrap(),
+                                                    entry.into_data().unwrap(),
                                                 ))
                                                 .await;
                                         }
@@ -1214,7 +1235,7 @@ impl ForumLogic {
                                     initial_text,
                                     allow_newlines: true,
                                     chars_limit: None,
-                                    text_limit: Some(1000),
+                                    text_limit: Some(1013),
                                     read_only: false,
                                 };
                                 let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
@@ -1275,7 +1296,11 @@ impl ForumLogic {
                                 // }else{
                                     Some(Entry::from_data(d_vec[0].clone(), t_id==0).unwrap().text);
                                 // }
-                                let text_limit = if t_id == 0 { Some(1000) } else { Some(800) };
+                                let text_limit = if t_id == 0 {
+                                    Some(1013)
+                                } else {
+                                    Some(1013 - 256)
+                                };
                                 let e_p = EditorParams {
                                     title: format!("Edit Description for CID{}", t_id),
                                     initial_text,
@@ -1501,7 +1526,7 @@ impl ForumLogic {
 
                     allow_newlines: true,
                     chars_limit: None,
-                    text_limit: Some(1016),
+                    text_limit: Some(1013),
                     read_only: false,
                 };
                 let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
@@ -2073,7 +2098,8 @@ impl ForumLogic {
                             // let can_directly_append = false;
                             let entry = Entry::new(self.my_id, vec![], topic_desc, 0);
                             // if can_directly_append {
-                            let data = entry.into_data(false).unwrap();
+                            // let data = entry.into_data(false).unwrap();
+                            let data = entry.into_data().unwrap();
                             let _ = self
                                 .to_app_mgr_send
                                 .send(ToAppMgr::AppendContent(
@@ -2141,7 +2167,8 @@ impl ForumLogic {
                                 eprintln!("Should update {id:?}");
                                 // let can_directly_edit = false;
                                 // if can_directly_edit {
-                                let data = entry.into_data(id > 0).unwrap();
+                                // let data = entry.into_data(id > 0).unwrap();
+                                let data = entry.into_data().unwrap();
                                 let _ = self
                                     .to_app_mgr_send
                                     .send(ToAppMgr::UpdateData(self.shell.swarm_id, c_id, id, data))
@@ -2173,7 +2200,8 @@ impl ForumLogic {
                                 eprintln!("Should append a post {id:?}");
                                 // let can_directly_append = false;
                                 // if can_directly_append {
-                                let data = entry.into_data(true).unwrap();
+                                // let data = entry.into_data(true).unwrap();
+                                let data = entry.into_data().unwrap();
                                 let _ = self
                                     .to_app_mgr_send
                                     .send(ToAppMgr::AppendData(self.shell.swarm_id, c_id, data))
@@ -2411,7 +2439,7 @@ impl ForumLogic {
 
                                 allow_newlines: true,
                                 chars_limit: None,
-                                text_limit: Some(1000),
+                                text_limit: Some(1013),
                                 read_only: false,
                             };
                             let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
@@ -2424,7 +2452,7 @@ impl ForumLogic {
 
                             allow_newlines: true,
                             chars_limit: None,
-                            text_limit: Some(800),
+                            text_limit: Some(1013 - 256),
                             read_only: false,
                         };
                         let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_p));
@@ -2474,7 +2502,8 @@ impl ForumLogic {
                                     self.shell.swarm_id,
                                     t_id,
                                     0,
-                                    entry.into_data(false).unwrap(),
+                                    // entry.into_data(false).unwrap(),
+                                    entry.into_data().unwrap(),
                                 ))
                                 .await;
                             self.presentation_state = PresentationState::Topic(t_id, Some(0));
@@ -2487,16 +2516,26 @@ impl ForumLogic {
                             PresentationState::MainLobby(Some(0)),
                         );
                         if let PresentationState::TopicEditing(t_ctx) = prev_state {
-                            let mut bytes = Vec::with_capacity(1024);
-                            bytes.push(t_ctx.tags.len() as u8);
+                            // let mut bytes = Vec::with_capacity(1024);
+                            // bytes.push(t_ctx.tags.len() as u8);
+                            let mut tags = Vec::with_capacity(t_ctx.tags.len());
                             for tag in t_ctx.tags {
-                                bytes.push(tag as u8);
+                                tags.push(tag as u8);
                             }
-                            for bte in self.my_id.bytes() {
-                                bytes.push(bte);
-                            }
-                            bytes.append(&mut t_ctx.description.into_bytes());
-                            let new_topic = Data::new(bytes).unwrap();
+                            // let dlen = (t_ctx.description.len() as u16).to_be_bytes();
+                            // bytes.push(dlen[0]);
+                            // bytes.push(dlen[1]);
+                            // bytes.append(&mut t_ctx.description.into_bytes());
+                            // for bte in self.my_id.bytes() {
+                            //     bytes.push(bte);
+                            // }
+                            // let new_topic = Data::new(bytes).unwrap();
+                            let new_topic = Data::new_first(
+                                tags,
+                                t_ctx.description,
+                                Some(self.my_id.bytes().try_into().unwrap()),
+                            )
+                            .unwrap();
                             let _ = self
                                 .to_app_mgr_send
                                 .send(ToAppMgr::AppendContent(
@@ -3042,7 +3081,7 @@ impl ForumLogic {
                     initial_text: Some(self.shell.manifest.description.clone()),
                     allow_newlines: true,
                     chars_limit: None,
-                    text_limit: Some(1000),
+                    text_limit: Some(1013),
                     read_only: false,
                 };
                 let _ = self.to_tui_send.send(ToForumView::OpenEditor(e_params));
