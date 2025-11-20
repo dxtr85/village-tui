@@ -28,6 +28,12 @@ impl TileType {
             _other => false,
         }
     }
+    pub fn is_neighbor(&self) -> bool {
+        match self {
+            Self::Neighbor(_id) => true,
+            _other => false,
+        }
+    }
     pub fn is_field(&self) -> bool {
         match self {
             Self::Field => true,

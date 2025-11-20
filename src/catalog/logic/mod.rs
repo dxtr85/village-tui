@@ -161,7 +161,9 @@ impl CreatorContext {
 }
 #[derive(Debug, Clone)]
 enum TuiState {
-    Village,
+    MainSt,
+    NeighborSt(u16, Vec<GnomeId>),
+    Street(Tag, u16),
     AddTag,
     ChangeTag(u8),
     PresentTags,
@@ -190,6 +192,15 @@ enum TuiState {
         Vec<String>,
     ),
     ShowActiveSwarms(Vec<(SwarmName, Option<AppType>, SwarmID)>),
+}
+
+impl TuiState {
+    pub fn is_showing_street(&self) -> bool {
+        matches!(self, TuiState::MainSt) || matches!(self, TuiState::Street(_a, _b))
+    }
+    pub fn is_showing_neighbors_only(&self) -> bool {
+        matches!(self, TuiState::NeighborSt(_pg, _v))
+    }
 }
 
 pub struct SwarmShell {
@@ -306,11 +317,13 @@ impl SwarmShell {
         (newly_added, removed)
     }
 
-    pub fn get_cids_for_tag(&self, tag: Tag) -> HashSet<(DataType, ContentID, String)> {
+    pub fn get_cids_for_tag(&self, tag: Tag) -> Vec<(DataType, ContentID, String)> {
         if let Some(contents) = self.tag_to_cid.get(&tag) {
-            contents.clone()
+            // let mut res = Vec::with_capacity(contents.len());
+            let res = contents.clone().into_iter().collect();
+            res
         } else {
-            HashSet::new()
+            vec![]
         }
     }
     pub fn clear_tag_to_cid(&mut self) {
@@ -337,6 +350,7 @@ pub struct CatalogLogic {
     pending_notifications: HashMap<SwarmID, Vec<ToApp>>, //TODO: clear pending
     // when given SwarmID was disconnected
     visible_streets: (usize, Vec<Tag>), // (how many streets visible at once, visible street names),
+    tiles_on_screen: usize,
     home_swarm_enforced: bool,
     buffered_from_tui: Vec<FromCatalogView>,
     clipboard: Option<(SwarmName, ContentID)>,
@@ -377,7 +391,7 @@ impl CatalogLogic {
             my_name,
             display_id,
             pub_ips: vec![],
-            state: TuiState::Village,
+            state: TuiState::MainSt,
             active_swarm: SwarmShell::new(
                 SwarmID(0),
                 SwarmName {
@@ -395,6 +409,7 @@ impl CatalogLogic {
             to_app: to_user_recv,
             pending_notifications: HashMap::new(),
             visible_streets: (0, vec![]),
+            tiles_on_screen: 20, // just a number it should get updated from presentation msg
             home_swarm_enforced: false,
             buffered_from_tui: vec![],
             notification_sender,
@@ -534,7 +549,7 @@ impl CatalogLogic {
                                 .to_app_mgr_send
                                 .send(ToAppMgr::FromApp(LibRequest::ReadFirstPages(s_id, None)))
                                 .await;
-                            let prev_state = std::mem::replace(&mut self.state, TuiState::Village);
+                            let prev_state = std::mem::replace(&mut self.state, TuiState::MainSt);
                             if let TuiState::ReadLinkToFollow(
                                 _c_id,
                                 Some((target_name, target_cid)),
@@ -584,7 +599,18 @@ impl CatalogLogic {
                                     let _ = self.to_user_send.send(InternalMsg::User(note)).await;
                                 }
                             }
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::FromApp(LibRequest::ReadAllPages(s_id, 0)))
+                                .await;
+                            eprintln!("Requested manifest for {s_id}");
                             let _ = self.to_app_mgr_send.send(ToAppMgr::ListNeighbors).await;
+                            eprintln!("Requested Neighbors for {s_id}");
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::FromApp(LibRequest::ReadFirstPages(s_id, None)))
+                                .await;
+                            eprintln!("Requested all first pages for {s_id}");
                         }
                         ToApp::MyPublicIPs(ip_list) => {
                             //TODO: push this to my swarm's Manifest after syncing
@@ -601,7 +627,7 @@ impl CatalogLogic {
                             if mapping.is_empty() {
                                 //TODO: display a notification
                                 // that there are no synced swarms available
-                                self.state = TuiState::Village;
+                                self.state = TuiState::MainSt;
                                 continue;
                             }
                             let mut map_vec = Vec::with_capacity(mapping.len());
@@ -652,26 +678,59 @@ impl CatalogLogic {
                                 continue;
                             }
                             if s_id == self.active_swarm.swarm_id {
-                                if self.my_name == self.active_swarm.swarm_name {
-                                    eprintln!("App got neighbors: {:?}", neighbors);
-                                    if !neighbors.is_empty() {
-                                        // eprintln!("{} Sending Neighbors0: {:?}", s_id, neighbors);
-                                        let _ =
-                                            self.to_tui.send(ToCatalogView::Neighbors(neighbors));
-                                    }
-                                } else {
-                                    //TODO: here we need to insert our id as a Neighbor, and remove Swarm's founder from Neighbor list
-                                    let mut new_neighbors = vec![self.my_name.founder];
-                                    for n in neighbors {
-                                        if n == self.active_swarm.swarm_name.founder {
-                                            eprintln!("Removing {} from neighbors list", n);
-                                            continue;
+                                let mut new_neighbors =
+                                    if self.my_name == self.active_swarm.swarm_name {
+                                        eprintln!("App got neighbors: {:?}", neighbors);
+                                        // if !neighbors.is_empty() {
+                                        //     // eprintln!("{} Sending Neighbors0: {:?}", s_id, neighbors);
+                                        //     let _ =
+                                        //         self.to_tui.send(ToCatalogView::Neighbors(neighbors));
+                                        // }
+                                        neighbors
+                                    } else {
+                                        //DONE: here we need to insert our id as a Neighbor, and remove Swarm's founder from Neighbor list
+                                        let mut new_neighbors = vec![self.my_name.founder];
+                                        for n in neighbors {
+                                            if n == self.active_swarm.swarm_name.founder {
+                                                eprintln!("Removing {} from neighbors list", n);
+                                                continue;
+                                            }
+                                            new_neighbors.push(n);
                                         }
-                                        new_neighbors.push(n);
-                                    }
-                                    eprintln!("Presenting Neighbors: {:?}", new_neighbors);
-                                    let _ =
-                                        self.to_tui.send(ToCatalogView::Neighbors(new_neighbors));
+
+                                        // self.tiles_on_screen
+                                        // self.visible_streets
+                                        // If we
+                                        // self.state = TuiState::NeighborSt(())
+                                        // if self.state.is_showing_neighbors_only(){
+                                        // TODO: state should hold all neighbors,
+                                        // and only send a chunk of them to presentation.
+                                        // Once we leave screen boundaries from top or bottom,
+                                        // we send another chunk.
+                                        // }
+                                        // let _ =
+                                        //     self.to_tui.send(ToCatalogView::Neighbors(new_neighbors));
+                                        new_neighbors
+                                    };
+                                // TODO: if we are presenting neighbors only, then we should store
+                                // new_neighbors in that state and send only first chunk to present
+                                // else we send all new_neigbhors
+                                // let how_many = 40;
+                                // eprintln!("Appending {how_many} fake Neighbors for testing",);
+                                // for i in 0..how_many {
+                                //     new_neighbors.push(GnomeId(i));
+                                // }
+
+                                if self.state.is_showing_neighbors_only() {
+                                    self.state = TuiState::NeighborSt(0, new_neighbors.clone());
+                                    new_neighbors.truncate(self.tiles_on_screen - 1);
+                                    let _ = self
+                                        .to_tui
+                                        .send(ToCatalogView::Neighbors(new_neighbors, true));
+                                } else {
+                                    let _ = self
+                                        .to_tui
+                                        .send(ToCatalogView::Neighbors(new_neighbors, false));
                                 }
                             } else {
                                 eprintln!(
@@ -862,10 +921,11 @@ impl CatalogLogic {
                         }
                     },
                     InternalMsg::Catalog(from_tui) => match from_tui {
-                        FromCatalogView::VisibleStreetsCount(v_streets) => {
+                        FromCatalogView::VisibleStreetsCountAndMaxTiles(v_streets, tiles_max) => {
                             //TODO: store this in order to know what information to send
                             eprintln!("OK we see {} streets at once", v_streets);
                             self.visible_streets.0 = v_streets as usize;
+                            self.tiles_on_screen = tiles_max;
                         }
                         FromCatalogView::TileSelected(tile) => {
                             match tile {
@@ -904,72 +964,252 @@ impl CatalogLogic {
                                 }
                             }
                         }
-                        FromCatalogView::CursorOutOfScreen(direction) => {
+                        FromCatalogView::CursorOutOfScreen(direction, (row, col)) => {
                             match direction {
                                 Direction::Up => {
-                                    //TODO
-                                    eprintln!("We should draw new streets on screen UP");
-                                    if self.active_swarm.tag_ring.len() > 1 {
-                                        let prev_names = self.active_swarm.tag_ring.remove(0);
-                                        self.active_swarm.tag_ring.push(prev_names);
-                                        let street_names = self.active_swarm.tag_ring[0].clone();
-                                        self.visible_streets.1 = street_names.clone();
-                                        eprintln!("Sending StreetNames: {:?}", street_names);
-                                        let mut streets_with_contents = vec![];
-                                        for street in street_names {
-                                            let contents =
-                                                self.active_swarm.get_cids_for_tag(street.clone());
-                                            streets_with_contents.push((street, contents));
+                                    let mut new_state = None;
+                                    let curr_state = self.state.clone();
+                                    // std::mem::replace(&mut self.state, TuiState::MainSt);
+                                    match curr_state {
+                                        TuiState::MainSt => {
+                                            eprintln!("We should draw new streets on screen UP");
+                                            if self.active_swarm.tag_ring.len() > 1 {
+                                                let prev_names =
+                                                    self.active_swarm.tag_ring.remove(0);
+                                                self.active_swarm.tag_ring.push(prev_names);
+                                                let street_names =
+                                                    self.active_swarm.tag_ring[0].clone();
+                                                self.visible_streets.1 = street_names.clone();
+                                                eprintln!(
+                                                    "Sending StreetNames: {:?}",
+                                                    street_names
+                                                );
+                                                let mut streets_with_contents = vec![];
+                                                for street in street_names {
+                                                    let contents = self
+                                                        .active_swarm
+                                                        .get_cids_for_tag(street.clone());
+                                                    streets_with_contents.push((street, contents));
+                                                }
+                                                let _ =
+                                                    self.to_tui.send(ToCatalogView::StreetNames(
+                                                        streets_with_contents,
+                                                        false,
+                                                    ));
+                                            }
                                         }
-                                        let _ = self.to_tui.send(ToCatalogView::StreetNames(
-                                            streets_with_contents,
-                                        ));
+                                        TuiState::NeighborSt(pg_id, _nvec) => {
+                                            //TODO
+                                            new_state =
+                                                self.present_neighbors(pg_id.wrapping_sub(1)).await;
+                                            eprintln!("NeighborSt #{}", pg_id.wrapping_sub(1));
+                                        }
+                                        TuiState::Street(name, pg_id) => {
+                                            //TODO
+                                            eprintln!(
+                                                "UP {name:?} St. #{}, MAX:{}",
+                                                pg_id.wrapping_sub(1),
+                                                u16::MAX
+                                            );
+                                            new_state = self
+                                                .present_street(name, pg_id.wrapping_sub(1))
+                                                .await;
+                                        }
+                                        other => {
+                                            eprintln!(
+                                                "Got out of screen when in state: {:?}",
+                                                other
+                                            );
+                                            new_state = Some(other);
+                                        }
+                                    }
+                                    if let Some(state) = new_state {
+                                        eprintln!("UP New state: {state:?}");
+                                        self.state = state;
                                     }
                                 }
                                 Direction::Down => {
-                                    //TODO
-                                    eprintln!("We should draw new streets on screen DOWN");
-                                    if self.active_swarm.tag_ring.len() > 1 {
-                                        let street_names =
-                                            self.active_swarm.tag_ring.pop().unwrap();
-                                        self.active_swarm.tag_ring.insert(0, street_names.clone());
-                                        self.visible_streets.1 = street_names.clone();
-                                        eprintln!("Sending StreetNames: {:?}", street_names);
-                                        let mut streets_with_contents = vec![];
-                                        for street in street_names {
-                                            let contents =
-                                                self.active_swarm.get_cids_for_tag(street.clone());
-                                            streets_with_contents.push((street, contents));
+                                    let mut new_state = None;
+                                    let curr_state = self.state.clone();
+                                    // std::mem::replace(&mut self.state, TuiState::MainSt);
+                                    match curr_state {
+                                        TuiState::MainSt => {
+                                            eprintln!("We should draw new streets on screen DOWN");
+                                            if self.active_swarm.tag_ring.len() > 1 {
+                                                let street_names =
+                                                    self.active_swarm.tag_ring.pop().unwrap();
+                                                self.active_swarm
+                                                    .tag_ring
+                                                    .insert(0, street_names.clone());
+                                                self.visible_streets.1 = street_names.clone();
+                                                eprintln!(
+                                                    "Sending StreetNames: {:?}",
+                                                    street_names
+                                                );
+                                                let mut streets_with_contents = vec![];
+                                                for street in street_names {
+                                                    let contents = self
+                                                        .active_swarm
+                                                        .get_cids_for_tag(street.clone());
+                                                    streets_with_contents.push((street, contents));
+                                                }
+                                                let _ =
+                                                    self.to_tui.send(ToCatalogView::StreetNames(
+                                                        streets_with_contents,
+                                                        false,
+                                                    ));
+                                            }
                                         }
-                                        let _ = self.to_tui.send(ToCatalogView::StreetNames(
-                                            streets_with_contents,
-                                        ));
+                                        TuiState::NeighborSt(pg_id, _nvec) => {
+                                            //TODO
+                                            // new_state = Some(TuiState::NeighborSt(
+                                            //     pg_id.wrapping_add(1),
+                                            //     nvec,
+                                            // ));
+                                            new_state =
+                                                self.present_neighbors(pg_id.wrapping_add(1)).await;
+                                            eprintln!("NeighborSt #{}", pg_id.wrapping_add(1));
+                                        }
+                                        TuiState::Street(name, pg_id) => {
+                                            //TODO
+                                            eprintln!("{name:?} St. #{}", pg_id.wrapping_add(1));
+                                            new_state = self
+                                                .present_street(name, pg_id.wrapping_add(1))
+                                                .await;
+                                        }
+                                        other => {
+                                            eprintln!(
+                                                "Got out of screen when in state: {:?}",
+                                                other
+                                            );
+                                            new_state = Some(other);
+                                        }
+                                    }
+                                    if let Some(state) = new_state {
+                                        eprintln!("DOWN New state: {state:?}");
+                                        self.state = state;
                                     }
                                 }
                                 Direction::Left => {
                                     //TODO: going left and right we cycle between three possible
                                     // screen layouts:
                                     //
-                                    // Neighbors       Main Street       Full Contents
+                                    // Neighbors       Main Street       Street
                                     //
                                     // So going out from Main Street to the left brings up Neighbors
-                                    // layout. Going left from Neighbors brings up Full Contents,
-                                    // and left from Full Contents brings us back to Main Street.
+                                    // layout. Going left from Neighbors brings up Street,
+                                    // and left from Street brings us back to Main Street.
                                     // Neighbors layout contains only Neigbhor tiles or empty Fields.
-                                    // Full Contents has only Content, Application or empty Field tiles.
+                                    // Street has only Content, Application or empty Field tiles.
                                     //
                                     // By going up or down we stay on the same layout, but we change
                                     // which "page" of tiles is being displayed.
                                     //
-                                    // TODO: we need two more TuiState values: NeighborSt(u16) and
+                                    // DONE: We need two more TuiState values: NeighborSt(u16) and
                                     // Street(Tag,u16). Those should hold values indicating current page
                                     // (and street name in case of Street).
                                     //
-                                    // TODO: We need to extend logic to hold a
+                                    // TODO: We need to extend logic to hold a mapping of street name to
+                                    // CID.
+
+                                    let new_state;
+                                    let curr_state = self.state.clone();
+                                    // std::mem::replace(&mut self.state, TuiState::MainSt);
+                                    match curr_state {
+                                        TuiState::MainSt => {
+                                            // new_state = Some(TuiState::NeighborSt(0, vec![]));
+                                            new_state = self.present_neighbors(0).await;
+                                        }
+
+                                        TuiState::NeighborSt(_pg_id, _nvec) => {
+                                            let mut street_names =
+                                                if self.active_swarm.tag_ring.is_empty() {
+                                                    vec![]
+                                                } else {
+                                                    self.active_swarm.tag_ring[0].clone()
+                                                };
+                                            eprintln!("Street names: {street_names:?}");
+                                            let idx = (row >> 1) as usize;
+                                            let s_len = street_names.len();
+                                            let st_name = if idx < s_len {
+                                                street_names.remove(idx)
+                                            } else if !street_names.is_empty() {
+                                                street_names.remove(s_len - 1)
+                                            } else {
+                                                Tag::empty()
+                                            };
+                                            let pg_no: u16 =
+                                                if row % 2 == 0 { 0 } else { u16::MAX };
+                                            new_state = self.present_street(st_name, pg_no).await;
+                                        }
+                                        TuiState::Street(_name, _pg_id) => {
+                                            //TODO
+                                            new_state = Some(TuiState::MainSt);
+                                            self.present_main_street().await;
+                                        }
+                                        other => {
+                                            eprintln!(
+                                                "Got out of screen when in state: {:?}",
+                                                other
+                                            );
+                                            new_state = Some(other);
+                                        }
+                                    }
+                                    if let Some(state) = new_state {
+                                        eprintln!("LEFT New state: {state:?}");
+                                        self.state = state;
+                                    }
                                 }
                                 Direction::Right => {
                                     //TODO: similar to going to the left, but now we cycle in other
                                     // direction.
+                                    eprintln!("R:{row}, C:{col}");
+                                    let new_state;
+                                    let curr_state = self.state.clone();
+                                    // std::mem::replace(&mut self.state, TuiState::MainSt);
+                                    match curr_state {
+                                        TuiState::MainSt => {
+                                            let mut street_names =
+                                                if self.active_swarm.tag_ring.is_empty() {
+                                                    vec![]
+                                                } else {
+                                                    self.active_swarm.tag_ring[0].clone()
+                                                };
+                                            eprintln!("Street names: {street_names:?}");
+                                            let idx = (row >> 1) as usize;
+                                            let s_len = street_names.len();
+                                            let st_name = if idx < s_len {
+                                                street_names.remove(idx)
+                                            } else if !street_names.is_empty() {
+                                                street_names.remove(s_len - 1)
+                                            } else {
+                                                Tag::empty()
+                                            };
+                                            let pg_no: u16 =
+                                                if row % 2 == 0 { 0 } else { u16::MAX };
+                                            new_state = self.present_street(st_name, pg_no).await;
+                                        }
+
+                                        TuiState::NeighborSt(_pg_id, _nvec) => {
+                                            new_state = Some(TuiState::MainSt);
+                                            self.present_main_street().await;
+                                        }
+                                        TuiState::Street(_name, _pg_id) => {
+                                            // new_state = Some(TuiState::NeighborSt(0, vec![]));
+                                            new_state = self.present_neighbors(0).await;
+                                        }
+                                        other => {
+                                            eprintln!(
+                                                "Got out of screen when in state: {:?}",
+                                                other
+                                            );
+                                            new_state = Some(other);
+                                        }
+                                    }
+                                    if let Some(state) = new_state {
+                                        eprintln!("RIGHT New state: {state:?}");
+                                        self.state = state;
+                                    }
                                 }
                             }
                         }
@@ -1155,7 +1395,7 @@ impl CatalogLogic {
                                 "FromPresentation::SelectedIndices({:?}), {:?}",
                                 indices, self.state
                             );
-                            let mut new_state = TuiState::Village;
+                            let mut new_state = TuiState::MainSt;
                             match &self.state {
                                 TuiState::CreatorSelectTags(creator_context) => {
                                     if !creator_context.is_read_only() {
@@ -1335,8 +1575,8 @@ impl CatalogLogic {
                         }
 
                         FromCatalogView::EditResult(e_result) => {
-                            let mut new_state = TuiState::Village;
-                            let prev_state = std::mem::replace(&mut self.state, TuiState::Village);
+                            let mut new_state = TuiState::MainSt;
+                            let prev_state = std::mem::replace(&mut self.state, TuiState::MainSt);
                             match prev_state {
                                 TuiState::AddTag => {
                                     if let EditorResult::Text(text) = e_result {
@@ -1519,7 +1759,7 @@ impl CatalogLogic {
                             self.state = new_state;
                         }
                         FromCatalogView::CMenuAction(action) => {
-                            let prev_state = std::mem::replace(&mut self.state, TuiState::Village);
+                            let prev_state = std::mem::replace(&mut self.state, TuiState::MainSt);
                             eprintln!("CMenuAction on: {prev_state:?}");
                             match prev_state {
                                 TuiState::ContextMenuOn(ttype) => match ttype {
@@ -1689,7 +1929,7 @@ impl CatalogLogic {
                                     self.state = new_state;
                                 }
                                 CreatorResult::Cancel => {
-                                    self.state = TuiState::Village;
+                                    self.state = TuiState::MainSt;
                                     // TODO send request to presentation to show village
                                     eprintln!("Cancel ");
                                 }
@@ -1795,7 +2035,7 @@ impl CatalogLogic {
                                             self.state
                                         );
                                     }
-                                    self.state = TuiState::Village;
+                                    self.state = TuiState::MainSt;
                                 }
                             }
                         }
@@ -1849,7 +2089,7 @@ impl CatalogLogic {
                                             eprintln!("Unable to remove Page #0");
                                         }
                                     }
-                                    new_state = Some(TuiState::Village);
+                                    new_state = Some(TuiState::MainSt);
                                 }
                                 TuiState::Indexing(
                                     c_id,
@@ -1943,7 +2183,7 @@ impl CatalogLogic {
                                             }
                                         }
                                     } else {
-                                        self.state = TuiState::Village;
+                                        self.state = TuiState::MainSt;
                                         eprintln!("Going back to Village");
                                     }
                                 }
@@ -1968,7 +2208,7 @@ impl CatalogLogic {
                                                 )))
                                                 .await;
                                             if app_type_opt.is_some_and(|at| at.is_catalog()) {
-                                                new_state = Some(TuiState::Village);
+                                                new_state = Some(TuiState::MainSt);
                                                 let _ = self.to_tui.send(ToCatalogView::SwapTiles(
                                                     swarm_name.founder,
                                                 ));
@@ -1995,7 +2235,7 @@ impl CatalogLogic {
                                         }
                                     } else {
                                         eprintln!("Going back to Village");
-                                        self.state = TuiState::Village;
+                                        self.state = TuiState::MainSt;
                                     }
                                 }
                                 TuiState::ListSearches(s_list) => {
@@ -2173,7 +2413,7 @@ impl CatalogLogic {
                 }
                 let _ = self
                     .to_tui
-                    .send(ToCatalogView::StreetNames(streets_with_contents));
+                    .send(ToCatalogView::StreetNames(streets_with_contents, false));
             }
             if let Some(pending_notifications) = self
                 .pending_notifications
@@ -2885,7 +3125,7 @@ impl CatalogLogic {
     async fn query_content_for_indexer(&mut self, c_id: ContentID) {
         eprintln!("In query_content_for_indexer");
         //TODO: first we need to retrieve Pages in order to have something to present
-        if matches!(self.state, TuiState::Village) {
+        if self.state.is_showing_street() {
             self.state = TuiState::ReadRequestForIndexer(c_id);
             let _ = self
                 .to_app_mgr_send
@@ -3087,6 +3327,167 @@ impl CatalogLogic {
             _ => eprintln!(),
         }
         false
+    }
+
+    async fn present_main_street(&self) {
+        let mut st_names = Vec::with_capacity(self.visible_streets.0);
+        let current_streets = if self.active_swarm.tag_ring.is_empty() {
+            &vec![]
+        } else {
+            &self.active_swarm.tag_ring[0]
+        };
+        for i in 0..self.visible_streets.0 {
+            if let Some(street) = current_streets.get(i) {
+                if let Some(cs) = self.active_swarm.tag_to_cid.get(street) {
+                    // TODO: make sure we only send a number of elements that will be displayed
+                    st_names.push((street.clone(), cs.clone().into_iter().collect()));
+                }
+            }
+        }
+        let _ = self.to_tui.send(ToCatalogView::SwapTiles(
+            self.active_swarm.swarm_name.founder,
+        ));
+        let _ = self
+            .to_tui
+            .send(ToCatalogView::StreetNames(st_names, false));
+        let _ = self.to_app_mgr_send.send(ToAppMgr::ListNeighbors).await;
+    }
+    async fn present_neighbors(&self, mut pg_id: u16) -> Option<TuiState> {
+        eprint!("present_neighbors {pg_id} ");
+        let curr_state = self.state.clone();
+        if !curr_state.is_showing_neighbors_only() {
+            eprintln!("curr state: {curr_state:?}");
+            let _ = self.to_tui.send(ToCatalogView::SwapTiles(
+                self.active_swarm.swarm_name.founder,
+            ));
+            let _ = self.to_app_mgr_send.send(ToAppMgr::ListNeighbors).await;
+            let _ = self.to_tui.send(ToCatalogView::StreetNames(
+                vec![(Tag::new("Neighbors".to_string()).unwrap(), vec![])],
+                true,
+            ));
+            return Some(TuiState::NeighborSt(0, vec![]));
+        }
+        if let TuiState::NeighborSt(_page, nvec) = curr_state {
+            //TODO
+            let should_ask_for_neigh_list = nvec.is_empty();
+            if should_ask_for_neigh_list {
+                eprintln!("asking for nlist");
+                let _ = self.to_tui.send(ToCatalogView::SwapTiles(
+                    self.active_swarm.swarm_name.founder,
+                ));
+                let _ = self.to_app_mgr_send.send(ToAppMgr::ListNeighbors).await;
+                let _ = self.to_tui.send(ToCatalogView::StreetNames(
+                    vec![(Tag::new("Neighbors".to_string()).unwrap(), vec![])],
+                    true,
+                ));
+                return Some(TuiState::NeighborSt(0, vec![]));
+            }
+            eprintln!("applying nlogic");
+            let max_pg_no = (nvec.len() / (self.tiles_on_screen - 1)) as u16;
+            if pg_id == u16::MAX {
+                pg_id = max_pg_no;
+            } else if pg_id > max_pg_no {
+                pg_id = 0;
+            }
+            let _ = self.to_tui.send(ToCatalogView::SwapTiles(
+                self.active_swarm.swarm_name.founder,
+            ));
+            let mut nvec_clone = nvec.clone();
+            nvec_clone.drain(0..(pg_id as usize * (self.tiles_on_screen - 1)));
+            nvec_clone.truncate(self.tiles_on_screen - 1);
+            let _ = self.to_tui.send(ToCatalogView::SwapTiles(
+                // self.active_swarm.swarm_name.founder,
+                GnomeId::any(),
+            ));
+            let _ = self.to_tui.send(ToCatalogView::Neighbors(nvec_clone, true));
+            Some(TuiState::NeighborSt(pg_id, nvec))
+        } else {
+            eprintln!("curr state is different!");
+            None
+        }
+    }
+    async fn present_street(&mut self, st_name: Tag, mut pg_no: u16) -> Option<TuiState> {
+        // DONE: we need extend this logic to be able to traverse Street pages
+        let mut return_opt = Some(TuiState::Street(st_name.clone(), pg_no));
+        self.visible_streets.1 = vec![st_name.clone()];
+        eprintln!("St sel: {st_name:?}");
+        let _ = self.to_tui.send(ToCatalogView::SwapTiles(
+            self.active_swarm.swarm_name.founder,
+        ));
+        if let Some(cs) = self.active_swarm.tag_to_cid.get(&st_name) {
+            // TODO: We need to sort cs into chunks of size equal to available tiles on screen
+            // and only send one of those chunks to presentation.
+
+            let mut csv: Vec<(DataType, ContentID, String)> = cs.clone().into_iter().collect();
+
+            csv.sort_by_key(|(_d, cid, _s)| *cid);
+            let csv_len = csv.len();
+            eprintln!("csv_len: {csv_len}");
+            let last_page = pg_no == u16::MAX;
+            eprintln!("last: {last_page}, pg_no: {pg_no}");
+            let max_page_no = (csv_len / (self.tiles_on_screen - 1)) as u16;
+            if last_page {
+                pg_no = max_page_no;
+                eprintln!(
+                    "{csv_len}/{}={} set to max: {max_page_no}",
+                    self.tiles_on_screen - 1,
+                    csv_len / (self.tiles_on_screen - 1)
+                );
+                return_opt = Some(TuiState::Street(st_name.clone(), pg_no));
+            } else if pg_no > max_page_no {
+                pg_no = 0;
+                return_opt = Some(TuiState::Street(st_name.clone(), pg_no));
+            }
+            // let num_to_drain = if last_page {
+            //     eprintln!("if");
+            //     // DONE: we need to drain all but self.tiles_on_screen - 1,
+            //     //       no_to_truncate is 0.
+            //     let num_to_drain = csv_len.saturating_sub(self.tiles_on_screen - 1);
+            //     // DONE: we need to send back actual pg_no to caller
+            //     return_opt = Some(TuiState::Street(st_name.clone(), max_page_no as u16));
+            //     num_to_drain
+            // } else {
+            // eprintln!("else");
+            // DONE: we should also cover case where the page num is too large,
+            //  and set pg_no to 0
+            // if pg_no > max_page_no as u16 {
+            //     pg_no = 0;
+            //     return_opt = Some(TuiState::Street(st_name.clone(), 0));
+            // }
+            eprintln!("1: {pg_no}");
+            let num_to_drain = (pg_no as usize) * (self.tiles_on_screen - 1);
+            // eprintln!("2");
+            // let num_to_truncate =
+            //     csv_len.saturating_sub(num_to_drain + self.tiles_on_screen + 1);
+            eprintln!("3");
+            // num_to_drain
+            // };
+            eprint!("to drain: {num_to_drain}");
+            // eprint!("to truncate: {num_to_truncate}");
+            csv.drain(0..num_to_drain);
+            csv.truncate(self.tiles_on_screen - 1);
+            eprintln!("csv new len: {}", csv.len());
+            // if pg_no.is_none() {
+            // if row % 2 == 0 {
+            //     csv.truncate(self.tiles_on_screen - 1);
+            // } else if csv.len() > self.tiles_on_screen - 1 {
+            //     csv.drain(0..csv.len() - self.tiles_on_screen - 1);
+            // };
+            let _ = self.to_tui.send(ToCatalogView::StreetNames(
+                vec![(st_name.clone(), csv)],
+                true,
+            ));
+            // } else {
+            //     let pg_no = pg_no.unwrap();
+            //     // TODO
+            // }
+        } else {
+            let _ = self.to_tui.send(ToCatalogView::StreetNames(
+                vec![(st_name.clone(), vec![])],
+                true,
+            ));
+        }
+        return_opt
     }
 }
 // fn read_tags_and_header(d_type: DataType, data: Data) -> (Vec<u8>, String) {

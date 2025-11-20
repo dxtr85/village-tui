@@ -114,17 +114,21 @@ impl VillageLayout {
         self.visible_rows >> 1
     }
     pub fn reset_tiles(&mut self, owner_id: GnomeId, keep_neighbors: bool, mgr: &mut Manager) {
+        eprintln!("reset_tiles, keep_neighbors: {keep_neighbors}");
         let visible_streets = self.visible_rows >> 1;
         let mut str_names = Vec::with_capacity(visible_streets as usize);
         for _i in 0..visible_streets {
-            str_names.push((Tag::empty(), HashSet::new()));
+            str_names.push((Tag::empty(), Vec::new()));
         }
-        self.set_street_names(str_names, mgr);
+        self.set_street_names(str_names, true, mgr);
         if keep_neighbors {
-            for c in 2..self.tiles_in_row {
+            for c in 0..self.tiles_in_row {
                 for r in 0..self.visible_rows {
                     if let Some(tile) = self.tiles.get_mut(&(r, c)) {
-                        if tile.tile_type.is_field() {
+                        if tile.tile_type.is_field()
+                            || tile.tile_type.is_home()
+                            || tile.tile_type.is_neighbor()
+                        {
                             continue;
                         }
                         tile.set_to_field(mgr);
@@ -159,7 +163,8 @@ impl VillageLayout {
     }
     fn set_street_names(
         &mut self,
-        str_names: Vec<(Tag, HashSet<(DataType, ContentID, String)>)>,
+        str_names: Vec<(Tag, Vec<(DataType, ContentID, String)>)>,
+        fill_screen: bool,
         mgr: &mut Manager,
     ) {
         eprintln!("set_street_names, resetting street_to_rows");
@@ -181,7 +186,13 @@ impl VillageLayout {
             for cii in ci..32 {
                 mgr.set_glyph(self.g_id, g, 32 + cii, (14 * i as usize) + 7);
             }
-            let restricted_rows = if 1 + (2 * i) < self.visible_rows {
+            let restricted_rows = if fill_screen {
+                let mut a_vec = Vec::with_capacity(self.visible_rows as usize);
+                for i in 0..self.visible_rows {
+                    a_vec.push(i);
+                }
+                a_vec
+            } else if 1 + (2 * i) < self.visible_rows {
                 vec![2 * i, 1 + (2 * i)]
             } else {
                 vec![2 * i]
@@ -191,7 +202,7 @@ impl VillageLayout {
             // for (d_type, c_id) in contents{
             //TODO: display contents
             // let pos = self.next_field_tile(&restricted_rows);
-            self.add_contents_to_rows(contents, restricted_rows, mgr);
+            self.add_contents_to_rows(contents, restricted_rows, fill_screen, mgr);
             // }
             // } else {
             //     g.set_char(' ');
@@ -260,12 +271,20 @@ impl VillageLayout {
             .tile_type
             .clone()
     }
-    pub fn add_new_neighbor(&mut self, n_id: GnomeId, mgr: &mut Manager) -> (u8, u8) {
+    pub fn add_new_neighbor(
+        &mut self,
+        n_id: GnomeId,
+        any_tile: bool,
+        mgr: &mut Manager,
+    ) -> (u8, u8) {
         if let Some(tile_location) = self.neighbors.get(&n_id) {
             eprintln!("Have this neighbor already under {:?}", tile_location);
             *tile_location
         } else {
-            let tile_id = self.next_neighbor_field_tile();
+            let tile_id = self.next_neighbor_field_tile(any_tile);
+            if tile_id.0 == 255 && tile_id.1 == 255 {
+                return tile_id;
+            }
             self.neighbors.insert(n_id, tile_id);
             if let Some(tile) = self.tiles.get_mut(&tile_id) {
                 tile.set_to_neighbor(n_id, false, mgr);
@@ -298,7 +317,7 @@ impl VillageLayout {
             eprintln!("Tag: {:?}", tag);
             if let Some(restricted_rows) = self.street_to_rows.get(&tag) {
                 eprintln!("rest rows: {:?}", restricted_rows);
-                let tile_id = self.next_field_tile(restricted_rows);
+                let tile_id = self.next_field_tile(restricted_rows, false);
                 eprintln!("Next id: {:?}", tile_id);
                 if let Some(tile) = self.tiles.get_mut(&tile_id) {
                     tile.set_to_content(Some(description.clone()), d_type, c_id, false, mgr);
@@ -313,9 +332,9 @@ impl VillageLayout {
     }
     pub fn add_contents_to_rows(
         &mut self,
-        contents: HashSet<(DataType, ContentID, String)>,
+        contents: Vec<(DataType, ContentID, String)>,
         restricted_rows: Vec<u8>,
-        // d_type: DataType,
+        fill_screen: bool,
         // c_id: ContentID,
         // tags: Vec<Tag>,
         // street_to_rows: &HashMap<Tag, Vec<u8>>,
@@ -329,7 +348,7 @@ impl VillageLayout {
         // if let Some(restricted_rows) = self.street_to_rows.get(&tag) {
         eprintln!("rest rows: {:?}", restricted_rows);
         for (d_type, c_id, header) in contents {
-            let tile_id = self.next_field_tile(&restricted_rows);
+            let tile_id = self.next_field_tile(&restricted_rows, fill_screen);
             eprintln!("Next id: {:?}", tile_id);
             if let Some(tile) = self.tiles.get_mut(&tile_id) {
                 tile.set_to_content(Some(header), d_type, c_id, false, mgr);
@@ -375,25 +394,35 @@ impl VillageLayout {
             .filter(|t| tags.contains(t))
             .collect()
     }
-    fn next_neighbor_field_tile(&self) -> (u8, u8) {
-        for y in 0..self.visible_rows {
-            if let Some(tile) = self.tiles.get(&(0, y)) {
-                if matches!(tile.tile_type, TileType::Field) {
-                    // return (0, y);
-                    return (y, 0);
-                }
-            } else if let Some(tile) = self.tiles.get(&(1, y)) {
-                if matches!(tile.tile_type, TileType::Field) {
-                    // return (1, y);
-                    return (y, 1);
+    fn next_neighbor_field_tile(&self, any_tile: bool) -> (u8, u8) {
+        // let x_end = if any_tile { self.tiles_in_row } else { 2 };
+        let col_end = if any_tile { self.tiles_in_row } else { 2 };
+        eprintln!("any: {any_tile}");
+        eprintln!("Row range: 0 - {}", self.visible_rows);
+        eprintln!("Columns range: 0 - {}", col_end);
+        for col in 0..col_end {
+            // for y in 0..self.visible_rows {
+            for row in 0..self.visible_rows {
+                // if let Some(tile) = self.tiles.get(&(x, y)) {
+                if let Some(tile) = self.tiles.get(&(row, col)) {
+                    if matches!(tile.tile_type, TileType::Field) {
+                        // return (0, y);
+                        return (row, col);
+                    }
+                    // } else if let Some(tile) = self.tiles.get(&(1, y)) {
+                    //     if matches!(tile.tile_type, TileType::Field) {
+                    //         // return (1, y);
+                    //         return (y, 1);
+                    //     }
                 }
             }
         }
         (255, 255)
     }
 
-    fn next_field_tile(&self, restricted_rows: &Vec<u8>) -> (u8, u8) {
-        for x in 2..self.tiles_in_row {
+    fn next_field_tile(&self, restricted_rows: &Vec<u8>, fill_screen: bool) -> (u8, u8) {
+        let start_idx = if fill_screen { 0 } else { 2 };
+        for x in start_idx..self.tiles_in_row {
             for y in restricted_rows {
                 if let Some(tile) = self.tiles.get(&(*y, x)) {
                     if matches!(tile.tile_type, TileType::Field) {
@@ -478,7 +507,7 @@ pub enum Direction {
 }
 
 pub enum ToCatalogView {
-    Neighbors(Vec<GnomeId>),
+    Neighbors(Vec<GnomeId>, bool), //bool indicates if we should use every tile to present
     NeighborLeft(GnomeId),
     AppendContent(ContentID, DataType, Vec<Tag>, String),
     HideContent(ContentID, Vec<Tag>),
@@ -501,7 +530,7 @@ pub enum ToCatalogView {
     ),
     DisplayIndexer(Vec<String>),
     SwapTiles(GnomeId),
-    StreetNames(Vec<(Tag, HashSet<(DataType, ContentID, String)>)>),
+    StreetNames(Vec<(Tag, Vec<(DataType, ContentID, String)>)>, bool), // bool if true fill entire screen
     SetNotification(usize, Vec<Glyph>),
     MoveNotification(usize, (isize, isize)),
     Quit,
@@ -527,8 +556,8 @@ pub enum FromCatalogView {
     EditResult(EditorResult),
     IndexResult(Option<usize>),
     CreatorResult(CreatorResult),
-    VisibleStreetsCount(u8),
-    CursorOutOfScreen(Direction),
+    VisibleStreetsCountAndMaxTiles(u8, usize),
+    CursorOutOfScreen(Direction, (u8, u8)),
 }
 
 pub fn instantiate_tui_mgr() -> Manager {
@@ -578,8 +607,12 @@ pub fn serve_catalog_tui(
     let mut village = VillageLayout::new(g_id, s_size);
     let mut neighboring_villages = HashMap::new();
     let visible_streets = village.initialize(my_id, &mut mgr, config.clone());
+    let tiles_max = (village.tiles_in_row as usize) * (village.visible_rows as usize);
     // let mut street_to_rows = HashMap::new();
-    let _ = to_app.send(FromCatalogView::VisibleStreetsCount(visible_streets));
+    let _ = to_app.send(FromCatalogView::VisibleStreetsCountAndMaxTiles(
+        visible_streets,
+        tiles_max,
+    ));
 
     // let mut tiles_mapping = HashMap::<(u8, u8), TileType>::new();
     // eprintln!("Serving TUI Manager scr size: {}x{}", s_size.0, s_size.1);
@@ -664,22 +697,34 @@ pub fn serve_catalog_tui(
                 }
                 Key::Left | Key::H | Key::CtrlB => {
                     if village.select_next(Direction::Left, &mut mgr) {
-                        let _ = to_app.send(FromCatalogView::CursorOutOfScreen(Direction::Left));
+                        let _ = to_app.send(FromCatalogView::CursorOutOfScreen(
+                            Direction::Left,
+                            village.selected_tile,
+                        ));
                     }
                 }
                 Key::Right | Key::L | Key::CtrlF => {
                     if village.select_next(Direction::Right, &mut mgr) {
-                        let _ = to_app.send(FromCatalogView::CursorOutOfScreen(Direction::Right));
+                        let _ = to_app.send(FromCatalogView::CursorOutOfScreen(
+                            Direction::Right,
+                            village.selected_tile,
+                        ));
                     }
                 }
                 Key::Up | Key::K | Key::CtrlP => {
                     if village.select_next(Direction::Up, &mut mgr) {
-                        let _ = to_app.send(FromCatalogView::CursorOutOfScreen(Direction::Up));
+                        let _ = to_app.send(FromCatalogView::CursorOutOfScreen(
+                            Direction::Up,
+                            village.selected_tile,
+                        ));
                     }
                 }
                 Key::Down | Key::J | Key::CtrlN => {
                     if village.select_next(Direction::Down, &mut mgr) {
-                        let _ = to_app.send(FromCatalogView::CursorOutOfScreen(Direction::Down));
+                        let _ = to_app.send(FromCatalogView::CursorOutOfScreen(
+                            Direction::Down,
+                            village.selected_tile,
+                        ));
                     }
                 }
                 Key::AltCtrlH => {
@@ -733,18 +778,22 @@ pub fn serve_catalog_tui(
         }
         if let Ok(to_tui) = to_tui_recv.try_recv() {
             match to_tui {
-                ToCatalogView::StreetNames(str_names) => {
-                    village.reset_tiles(village.my_name.founder, true, &mut mgr);
-                    village.set_street_names(str_names, &mut mgr);
+                ToCatalogView::StreetNames(str_names, fill_screen) => {
+                    village.reset_tiles(village.my_name.founder, !fill_screen, &mut mgr);
+                    village.set_street_names(str_names, fill_screen, &mut mgr);
                 }
                 ToCatalogView::DisplayCMenu(set_id) => {
                     let action = c_menu.show(&mut mgr, set_id, village.cm_position());
                     let _ = to_app.send(FromCatalogView::CMenuAction(action));
                 }
-                ToCatalogView::Neighbors(neighbors) => {
+                ToCatalogView::Neighbors(neighbors, use_any_tile) => {
                     //TODO: first make sure neighbor is not placed on screen
+                    eprintln!(
+                        "curr villge ns: {:?}, use any: {use_any_tile}",
+                        village.neighbors.keys()
+                    );
                     for neighbor in neighbors.into_iter() {
-                        let _tile_id = village.add_new_neighbor(neighbor, &mut mgr);
+                        let _tile_id = village.add_new_neighbor(neighbor, use_any_tile, &mut mgr);
                         eprintln!("Showing Neighbor {}: {:?}", neighbor, _tile_id);
                     }
                 }
@@ -972,11 +1021,13 @@ fn swap_tiles(
                         }
                     }
                     TileType::Neighbor(n_id) => {
+                        eprintln!("TileNeigh: {n_id}");
                         if let Some(tile) = village.tiles.get_mut(&slot) {
                             // We should get updated Neighbor list from internal mechanism
                             // tile.set_to_field(mgr);
                             village.neighbors.insert(n_id, slot);
                             tile.set_to_neighbor(n_id, false, mgr);
+                            eprintln!("Set to neigh{n_id}");
                         }
                     }
                     TileType::Field => {
