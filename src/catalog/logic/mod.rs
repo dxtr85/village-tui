@@ -969,16 +969,13 @@ impl CatalogLogic {
                                 Direction::Up => {
                                     let mut new_state = None;
                                     let curr_state = self.state.clone();
-                                    // std::mem::replace(&mut self.state, TuiState::MainSt);
                                     match curr_state {
                                         TuiState::MainSt => {
                                             eprintln!("We should draw new streets on screen UP");
                                             if self.active_swarm.tag_ring.len() > 1 {
-                                                let prev_names =
-                                                    self.active_swarm.tag_ring.remove(0);
-                                                self.active_swarm.tag_ring.push(prev_names);
                                                 let street_names =
-                                                    self.active_swarm.tag_ring[0].clone();
+                                                    self.street_names_with_content(true);
+                                                // DONE: present a no-tag street only if it has contents
                                                 self.visible_streets.1 = street_names.clone();
                                                 eprintln!(
                                                     "Sending StreetNames: {:?}",
@@ -1031,16 +1028,13 @@ impl CatalogLogic {
                                 Direction::Down => {
                                     let mut new_state = None;
                                     let curr_state = self.state.clone();
-                                    // std::mem::replace(&mut self.state, TuiState::MainSt);
                                     match curr_state {
                                         TuiState::MainSt => {
                                             eprintln!("We should draw new streets on screen DOWN");
                                             if self.active_swarm.tag_ring.len() > 1 {
                                                 let street_names =
-                                                    self.active_swarm.tag_ring.pop().unwrap();
-                                                self.active_swarm
-                                                    .tag_ring
-                                                    .insert(0, street_names.clone());
+                                                    self.street_names_with_content(false);
+
                                                 self.visible_streets.1 = street_names.clone();
                                                 eprintln!(
                                                     "Sending StreetNames: {:?}",
@@ -1288,6 +1282,21 @@ impl CatalogLogic {
                         }
                         FromCatalogView::ChangeTag(tag_id, tag) => {
                             eprintln!("Received FromPresentation::ChangeTag({tag_id},{tag:?})",);
+                            // DONE: we need to read existing text for a Tag that is being changed,
+                            // and update it within active_starm.tag_to_cid.
+                            // Preferably we should clone it so in case update fails, we have
+                            // previous data in place
+                            let mut t_names =
+                                self.active_swarm.manifest.tag_names(Some(vec![tag_id]));
+                            if !t_names.is_empty() {
+                                if let Some(cids) =
+                                    self.active_swarm.tag_to_cid.get(&Tag(t_names.remove(0)))
+                                {
+                                    self.active_swarm
+                                        .tag_to_cid
+                                        .insert(tag.clone(), cids.clone());
+                                }
+                            }
                             if self.active_swarm.manifest.update_tag(tag_id, tag) {
                                 // Now our manifest is out of sync with swarm
                                 // we need to sync it with swarm.
@@ -2000,6 +2009,13 @@ impl CatalogLogic {
                                         let data_res = Data::new(bytes);
                                         if let Ok(data) = data_res {
                                             if let Some(c_id) = c_context.content_id() {
+                                                //DONE: remove this cid from every occurance in active_swarm.tag_to_cid
+                                                self.remove_from_tag_to_cid(c_id);
+                                                let _ =
+                                                    self.to_tui.send(ToCatalogView::HideContent(
+                                                        c_id,
+                                                        self.active_swarm.tag_ring[0].clone(),
+                                                    ));
                                                 let _ = self
                                                     .to_app_mgr_send
                                                     .send(ToAppMgr::UpdateData(
@@ -2633,6 +2649,20 @@ impl CatalogLogic {
         ));
     }
 
+    fn remove_from_tag_to_cid(&mut self, c_id: ContentID) {
+        for cids in self.active_swarm.tag_to_cid.values_mut() {
+            let mut to_remove = None;
+            for (d_id, c, text) in cids.iter() {
+                if *c == c_id {
+                    to_remove = Some((*d_id, *c, text.clone()));
+                    break;
+                }
+            }
+            if let Some(tuple) = to_remove.take() {
+                cids.remove(&tuple);
+            }
+        }
+    }
     fn update_active_content_tags(
         &mut self,
         s_id: SwarmID,
@@ -3488,6 +3518,36 @@ impl CatalogLogic {
             ));
         }
         return_opt
+    }
+    fn street_names_with_content(&mut self, take_from_front: bool) -> Vec<Tag> {
+        let mut street_names = if take_from_front {
+            let prev_names = self.active_swarm.tag_ring.remove(0);
+            self.active_swarm.tag_ring.push(prev_names);
+            self.active_swarm.tag_ring[0].clone()
+        } else {
+            let popped = self.active_swarm.tag_ring.pop().unwrap();
+            self.active_swarm.tag_ring.insert(0, popped.clone());
+            popped
+        };
+        // TODO: present a no-tag street only if it has contents
+        eprintln!("Selected Street names: {street_names:?}");
+        if street_names.len() == 1 && street_names[0].is_empty() {
+            eprintln!("im in");
+            let get_res = self.active_swarm.tag_to_cid.get(&Tag::empty());
+
+            if get_res.is_none_or(|untagged| untagged.is_empty()) {
+                if take_from_front {
+                    let prev_names = self.active_swarm.tag_ring.remove(0);
+                    self.active_swarm.tag_ring.push(prev_names);
+                    street_names = self.active_swarm.tag_ring[0].clone();
+                } else {
+                    let popped = self.active_swarm.tag_ring.pop().unwrap();
+                    self.active_swarm.tag_ring.insert(0, popped.clone());
+                    street_names = popped;
+                }
+            }
+        }
+        street_names
     }
 }
 // fn read_tags_and_header(d_type: DataType, data: Data) -> (Vec<u8>, String) {
