@@ -1,4 +1,7 @@
-use dapp_lib::prelude::{load_content_from_disk, read_datastore_from_disk, GnomeId, StoragePolicy};
+use dapp_lib::prelude::{
+    load_content_from_disk, load_first_pages_from_disk, read_datastore_from_disk, GnomeId,
+    StoragePolicy,
+};
 use dapp_lib::prelude::{DataType, NetworkSettings};
 use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader};
@@ -57,7 +60,10 @@ impl Configuration {
             if zero_hash == 0 {
                 continue;
             }
-            if let Some(c_zero) = load_content_from_disk(sswarm, 0, zero_type, zero_hash).await {
+            let first_pages = load_first_pages_from_disk(&sswarm).await;
+            if let Some(c_zero) =
+                load_content_from_disk(sswarm, 0, zero_type, zero_hash, &first_pages).await
+            {
                 let c_len = c_zero.len();
                 let mut data_vec = Vec::with_capacity(c_len as usize);
                 for i in 0..c_len {
