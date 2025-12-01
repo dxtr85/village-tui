@@ -170,7 +170,7 @@ enum TuiState {
     ChooseActionForTag(u8, String),
     AddSearch,
     ListSearches(Vec<(String, usize)>),
-    SearchResults(Vec<(SwarmName, ContentID)>),
+    SearchResults(String, bool, Vec<(SwarmName, ContentID)>),
     AddDType,
     RemovePage(ContentID),
     AppendData(ContentID),
@@ -516,20 +516,28 @@ impl CatalogLogic {
                             ));
                             self.state = TuiState::ListSearches(phrases);
                         }
-                        ToApp::SearchResults(phrase, hits) => {
-                            if hits.is_empty() {
-                                eprintln!(" No results for {}", phrase);
-                                continue;
-                            }
+                        ToApp::SearchResults(phrase, is_permanent, hits) => {
+                            // if hits.is_empty() {
+                            //     eprintln!(" No results for {}", phrase);
+                            //     continue;
+                            // }
+                            // TODO: create an element in links to toggle between
+                            // permanent and volatile search.
+                            // every time we change this value, search engine should
+                            // be notified
                             let mut links = Vec::with_capacity(hits.len());
                             let mut texts = Vec::with_capacity(hits.len());
+                            texts.push(format!("Is permanent: {}", is_permanent));
+                            links.push((SwarmName::new(GnomeId::any(), String::new()).unwrap(), 0));
                             for Hit(s_name, c_id, score) in &hits {
                                 texts.push(format!("{}-{}: {}", s_name, c_id, score));
                                 links.push((s_name.clone(), *c_id));
                             }
                             let _ = self.to_tui.send(ToCatalogView::DisplayIndexer(texts));
-                            self.state = TuiState::SearchResults(links);
+                            // TODO: SearchResults should contain an id of search in order
+                            // to easily send a notification to Search engine
                             eprintln!("Search results for {}{:?}", phrase, hits);
+                            self.state = TuiState::SearchResults(phrase, is_permanent, links);
                         }
                         ToApp::AllNeighborsGone => {
                             self.home_swarm_enforced = false;
@@ -2272,8 +2280,24 @@ impl CatalogLogic {
                                         eprintln!("No search item selected.");
                                     }
                                 }
-                                TuiState::SearchResults(links) => {
+                                TuiState::SearchResults(phrase, is_permanent, links) => {
                                     if let Some(idx) = i_result {
+                                        if idx == 0 {
+                                            eprintln!(
+                                                "we should set '{phrase}' is_permanent flag to {}",
+                                                !is_permanent
+                                            );
+                                            let _ = self
+                                                .to_app_mgr_send
+                                                .send(ToAppMgr::FromApp(
+                                                    LibRequest::SetSearchPermanentFlag(
+                                                        phrase.clone(),
+                                                        !is_permanent,
+                                                    ),
+                                                ))
+                                                .await;
+                                            continue;
+                                        }
                                         eprintln!("Supposed to open Content@{:?}", idx);
                                         if let Some((s_name, c_id)) = links.get(idx) {
                                             new_state = Some(TuiState::ReadLinkToFollow(

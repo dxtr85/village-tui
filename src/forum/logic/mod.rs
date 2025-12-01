@@ -634,8 +634,8 @@ impl ForumLogic {
             ToApp::PolicyNotMet(s_id, sm_type, data) => {
                 self.sync_request_rejected(s_id, sm_type, data).await;
             }
-            ToApp::SearchResults(query, hits) => {
-                self.process_search_results(query, hits).await;
+            ToApp::SearchResults(query, is_permanent, hits) => {
+                self.process_search_results(query, is_permanent, hits).await;
             }
             _other => {
                 eprintln!("InternalMsg::User {:?}", _other);
@@ -3495,7 +3495,7 @@ impl ForumLogic {
         }
     }
 
-    async fn process_search_results(&mut self, query: String, hits: Vec<Hit>) {
+    async fn process_search_results(&mut self, query: String, is_permanent: bool, hits: Vec<Hit>) {
         //TODO
         eprintln!(
             "in process_search_results {} have {} hits",
