@@ -55,6 +55,12 @@ but I really do not have time for that.
 - export COLUMNS=$(tput cols)
 - export LINES=$(tput lines)
 - cargo run <config dir> 2> /path/to/logfile/or/dev/null
+(or append following lines to /home/dxtr/.bashrc file
+and later use a single letter command 'v' to run this app:
+export LINES=$(tput lines)
+export COLUMNS=$(tput cols)
+alias v='cd /home/dxtr/projects/village-tui; cargo run ~/.village 2> log'
+)
 
 REQUIRED: You will need some neighbors defined, so under <config dir>
 create neigh.conf and fill it with known neighbors like following:

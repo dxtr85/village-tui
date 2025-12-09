@@ -114,7 +114,7 @@ impl ButtonsLogic {
         //
         // 6. 7. unocuppied
         // (in options +Category)
-        let button_1 = Button::new((10, 3), 2, (1, 0), " CatFltr", None, tui_mgr);
+        let button_1 = Button::new((10, 3), 2, (1, 0), "Category", None, tui_mgr);
         button_1.show(tui_mgr);
         button_1.select(tui_mgr, false);
         let button_2 = Button::new((10, 3), 2, (12, 0), "Filter", None, tui_mgr);

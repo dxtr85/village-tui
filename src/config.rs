@@ -46,7 +46,7 @@ impl Configuration {
                 let app_data = read_datastore_from_disk(
                     sswarm.clone(),
                     false,
-                    StoragePolicy::Discard, // app_data_send.clone(),
+                    StoragePolicy::Forget, // app_data_send.clone(),
                 )
                 .await;
                 if let Ok((dtype, hash)) = app_data.content_root_hash(0) {

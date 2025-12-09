@@ -192,6 +192,8 @@ enum TuiState {
         Vec<String>,
     ),
     ShowActiveSwarms(Vec<(SwarmName, Option<AppType>, SwarmID)>),
+    SettingsMenu,
+    StorageRulesMenu(Option<usize>, bool),
 }
 
 impl TuiState {
@@ -354,7 +356,7 @@ pub struct CatalogLogic {
     home_swarm_enforced: bool,
     buffered_from_tui: Vec<FromCatalogView>,
     clipboard: Option<(SwarmName, ContentID)>,
-    // waiting_for: (SwarmName, ContentID),
+    storage_rules: Vec<(StorageCondition, StoragePolicy)>,
 }
 impl CatalogLogic {
     pub fn new(
@@ -414,7 +416,9 @@ impl CatalogLogic {
             buffered_from_tui: vec![],
             notification_sender,
             clipboard: None,
-            // waiting_for: (SwarmName::new(GnomeId::any(), "".to_string()).unwrap(), 0),
+            storage_rules: vec![(StorageCondition::Default, StoragePolicy::Forget)],
+            //TODO: read storage_rules from config file
+            // rule with index 0 is always there as a template for adding new rules
         }
     }
     pub async fn run(
@@ -437,6 +441,11 @@ impl CatalogLogic {
     )> {
         if clipboard_opt.is_some() {
             self.clipboard = clipboard_opt;
+        }
+        let storage_rules_file_path = config_dir.join("storage.rules");
+        if self.storage_rules.len() == 1 && storage_rules_file_path.exists() {
+            let mut datastore_rules = read_storage_rules_from_file(storage_rules_file_path);
+            self.storage_rules.append(&mut datastore_rules);
         }
         let (mut tui_mgr, config, e_opt, c_opt, s_opt, i_opt, _pe_opt) = toolset.unfold();
         let mut return_val = None;
@@ -939,7 +948,8 @@ impl CatalogLogic {
                             match tile {
                                 TileType::Home(g_id) => {
                                     if g_id == self.my_name.founder {
-                                        self.run_creator();
+                                        self.open_config_panel();
+                                        // self.run_creator();
                                     }
                                 }
                                 TileType::Neighbor(g_id) => {
@@ -1583,6 +1593,32 @@ impl CatalogLogic {
                                         }
                                     }
                                 }
+                                TuiState::StorageRulesMenu(rule_id_opt, is_condition) => {
+                                    if let Some(rule_id) = rule_id_opt {
+                                        if *is_condition {
+                                            // if indices.len()==1
+                                            // get cond
+                                            // and update indexed rule
+                                            if indices.len() == 1 {
+                                                let cond = StorageCondition::get(indices[0]);
+                                                if self.storage_rules.get(*rule_id).is_some() {
+                                                    self.storage_rules[*rule_id].0 = cond;
+                                                }
+                                            }
+                                        } else {
+                                            if indices.len() == 1 {
+                                                let pol = StoragePolicy::get(indices[0]);
+                                                if self.storage_rules.get(*rule_id).is_some() {
+                                                    self.storage_rules[*rule_id].1 = pol;
+                                                }
+                                            }
+                                        }
+                                        eprintln!("ns= StorageRulesMenu");
+                                        new_state =
+                                            TuiState::StorageRulesMenu(*rule_id_opt, *is_condition);
+                                        self.run_storage_rules_creator(*rule_id);
+                                    }
+                                }
                                 other => {
                                     eprintln!("{:?} got Selected indices", other);
                                 }
@@ -1769,6 +1805,13 @@ impl CatalogLogic {
                                             .await;
                                     }
                                 }
+                                TuiState::StorageRulesMenu(r_id_opt, _c_or_p) => {
+                                    new_state = TuiState::StorageRulesMenu(r_id_opt, _c_or_p);
+                                    if let EditorResult::Text(text) = e_result {
+                                        self.define_parameters_for_storage_rule(r_id_opt, text)
+                                            .await;
+                                    }
+                                }
                                 _other => {
                                     eprintln!("Unexpected EditResult {:?}", _other);
                                 }
@@ -1852,6 +1895,15 @@ impl CatalogLogic {
                                                 );
                                             }
                                         }
+                                        TuiState::StorageRulesMenu(rule_id_opt, _cond_or_pol) => {
+                                            self.select_condition_for_storage_rule(*rule_id_opt)
+                                                .await;
+                                            new_state =
+                                                TuiState::StorageRulesMenu(*rule_id_opt, true);
+                                            // if let Some(rule_id) = rule_id_opt {
+                                            //     self.run_storage_rules_creator(*rule_id);
+                                            // }
+                                        }
                                         other => {
                                             eprintln!(
                                             "{:?}: Unexpected state for CreatorResult::SelectDType",
@@ -1901,6 +1953,14 @@ impl CatalogLogic {
                                                     long_ids,
                                                 ));
                                         }
+                                        TuiState::StorageRulesMenu(rule_id_opt, _c_or_p) => {
+                                            self.select_policy_for_storage_rule(*rule_id_opt).await;
+                                            new_state =
+                                                TuiState::StorageRulesMenu(*rule_id_opt, false);
+                                            // if let Some(rule_id) = rule_id_opt {
+                                            //     self.run_storage_rules_creator(*rule_id);
+                                            // }
+                                        }
                                         other => {
                                             eprintln!(
                                                 "Unexpected state for CreatorResult::SelectDType"
@@ -1935,6 +1995,29 @@ impl CatalogLogic {
                                     true,
                                     Some(128),
                                     ));
+                                        }
+                                        TuiState::StorageRulesMenu(rule_id_opt, c_or_p) => {
+                                            // TODO: here we should open Editor
+                                            let text = r#"GID-ABCDEF0123456789
+SwarmName(max 32 bytes)
+
+First line should be a Founder (a GnomeId).
+Second line should be a 32-byte-max SwarmName (without Founder).
+Consecutive lines are ignored.
+
+Upon writing a Swarm to disk rules are checked top to bottom, first match wins.
+For now, if you want to reorder rules,
+you should edit 'storage.rules' text file in config dir."#
+                                                .to_string();
+                                            let _ = self.to_tui.send(ToCatalogView::DisplayEditor(
+                    (false, true),
+                    " Line#1: GnomeId  Line#2: SwarmName(opt, max: 32 bytes) (TAB to finish)".to_string(),
+                    Some(text),
+                    true,
+                    None,
+                ));
+                                            new_state =
+                                                TuiState::StorageRulesMenu(*rule_id_opt, *c_or_p);
                                         }
                                         other => {
                                             eprintln!(
@@ -2054,10 +2137,17 @@ impl CatalogLogic {
                                             );
                                         }
                                     } else {
-                                        eprintln!(
-                                            "Got TUI Create request when in {:?}",
+                                        if let TuiState::StorageRulesMenu(rule_id_opt, _c_or_p) =
                                             self.state
-                                        );
+                                        {
+                                            self.update_storage_rules(rule_id_opt, &config_dir)
+                                                .await;
+                                        } else {
+                                            eprintln!(
+                                                "Got TUI Create request when in {:?}",
+                                                self.state
+                                            );
+                                        }
                                     }
                                     self.state = TuiState::MainSt;
                                 }
@@ -2325,6 +2415,34 @@ impl CatalogLogic {
                                         }
                                     } else {
                                         eprintln!("No search item selected.");
+                                    }
+                                }
+                                TuiState::SettingsMenu => {
+                                    if let Some(page_id) = i_result {
+                                        eprintln!("Got Indexing in Settings Menu {page_id}");
+                                        match page_id {
+                                            0 => {
+                                                // TODO
+                                                eprintln!("We should open a Storage rules menu");
+                                                self.open_storage_rules_panel();
+                                            }
+                                            1 => {
+                                                // TODO
+                                                eprintln!("Cancel selected");
+                                                self.state = TuiState::MainSt;
+                                            }
+                                            other => {
+                                                eprintln!("Unhandled option in Settings: {other}");
+                                                self.state = TuiState::MainSt;
+                                            }
+                                        }
+                                    }
+                                }
+                                TuiState::StorageRulesMenu(_rule_id_opt, _c_or_p) => {
+                                    if let Some(page_id) = i_result {
+                                        self.run_storage_rules_creator(page_id);
+                                    } else {
+                                        self.state = TuiState::MainSt;
                                     }
                                 }
                                 other => {
@@ -2745,6 +2863,154 @@ impl CatalogLogic {
             }
         }
     }
+
+    fn open_config_panel(&mut self) {
+        // eprintln!("We should open Configuration panel");
+        let options = vec!["Disk storage rules".to_string(), "Cancel".to_string()];
+        let _ = self.to_tui.send(ToCatalogView::DisplayIndexer(options));
+        self.state = TuiState::SettingsMenu;
+    }
+
+    fn open_storage_rules_panel(&mut self) {
+        // TODO: we should have those settings read from disk and held for reference.
+        // eprintln!("We should open Configuration panel");
+        let mut options = vec!["Append new rule...".to_string()];
+        for i in 1..self.storage_rules.len() {
+            if let Some((cond, pol)) = self.storage_rules.get(i) {
+                options.push(format!("{} => {}", cond.get_string(), pol.get_string()));
+            }
+        }
+        let _ = self.to_tui.send(ToCatalogView::DisplayIndexer(options));
+        self.state = TuiState::StorageRulesMenu(None, true);
+    }
+
+    fn run_storage_rules_creator(&mut self, idx: usize) {
+        self.state = TuiState::StorageRulesMenu(Some(idx), true);
+
+        let read_only = false;
+        let (d_type, tags) = if let Some((cond, pol)) = self.storage_rules.get(idx) {
+            (cond.get_string(), pol.get_string())
+        } else {
+            ("Rule condition".to_string(), "Rule params".to_string())
+        };
+        let description = String::new();
+        let _ = self.to_tui.send(ToCatalogView::DisplayCreator(
+            read_only,
+            d_type,
+            description,
+            tags,
+        ));
+    }
+
+    async fn select_condition_for_storage_rule(&self, rule_id_opt: Option<usize>) {
+        if let Some(_rule_id) = rule_id_opt {
+            if let Some((cond, _pol)) = self.storage_rules.get(_rule_id) {
+                //TODO: open Selector and allow to pick one option
+                // We can select from following options:
+                // - IamFounder
+                // - FounderIs
+                // - SwarmName
+                // - CatalogApp
+                // - ForumApp
+                // - SearchMatch
+                // - Default
+                eprintln!("Should select Condition when editing Storage rules");
+                let _ = self.to_tui.send(ToCatalogView::DisplaySelector(
+                    true,
+                    "Select condition for Storage rule".to_string(),
+                    StorageCondition::string_vec(),
+                    vec![cond.get_id()],
+                ));
+            }
+        }
+    }
+    async fn select_policy_for_storage_rule(&self, rule_id_opt: Option<usize>) {
+        if let Some(_rule_id) = rule_id_opt {
+            if let Some((_cond, pol)) = self.storage_rules.get(_rule_id) {
+                //TODO: open Selector and allow to pick one option
+                // We can select from following options:
+                // - All
+                // - Manifest
+                // - FirstPages
+                // - Forget
+                //
+                // if Condition = SearchMatch we append:
+                // - Matching(rest: FirstPages)
+                // - Matching(rest: Forget)
+                // - Matching+Manifest(rest: FirstPages)
+                // - Matching+Manifest(rest: Forget)
+                eprintln!("Should select Policy when editing Storage rules");
+                let _ = self.to_tui.send(ToCatalogView::DisplaySelector(
+                    true,
+                    "Select policy for Storage rule".to_string(),
+                    StoragePolicy::string_vec(),
+                    vec![pol.get_id()],
+                ));
+            }
+        }
+    }
+    async fn define_parameters_for_storage_rule(
+        &mut self,
+        rule_id_opt: Option<usize>,
+        text: String,
+    ) {
+        if let Some(r_id) = rule_id_opt {
+            let mut lines = text.lines();
+            let mut g_id = None;
+            let mut sn_text = None;
+            if let Some(g_text) = lines.next() {
+                // parse first line as FounderID
+                eprintln!("Line#1: {g_text}");
+                let trimmed = g_text.trim();
+                if let Some(gid) = GnomeId::from_string(trimmed.to_string()) {
+                    g_id = Some(gid);
+                    eprintln!("GnomeId: {gid}");
+                }
+            }
+            if let Some(name) = lines.next() {
+                // parse optional second line as SName text
+                eprintln!("Line#2: {name}");
+                let trimmed = name.trim();
+                if trimmed.len() <= 32 {
+                    eprintln!("len OK");
+                    sn_text = Some(trimmed.to_string());
+                }
+            }
+            if let Some((cond, _pol)) = self.storage_rules.get(r_id) {
+                let updated_cond = cond.update(g_id, sn_text);
+                self.storage_rules[r_id].0 = updated_cond;
+                eprintln!("Rule found & updated");
+            }
+            self.run_storage_rules_creator(r_id);
+        }
+    }
+
+    async fn update_storage_rules(&mut self, rule_id_opt: Option<usize>, config_dir: &PathBuf) {
+        if let Some(rule_id) = rule_id_opt {
+            // eprintln!("in update_storage_rules {rule_id}");
+
+            // If rule_id = 0 create new rule and append to rules
+            if rule_id == 0 {
+                let new_rule = std::mem::replace(
+                    &mut self.storage_rules[0],
+                    (StorageCondition::Default, StoragePolicy::Forget),
+                );
+                self.storage_rules.push(new_rule);
+                // eprintln!("New rule added.");
+            }
+            // eprintln!("TODO: we need to save rules to disk!");
+            let mut rules_to_save = self.storage_rules.clone();
+            rules_to_save.remove(0);
+            let _ = self
+                .to_app_mgr_send
+                .send(ToAppMgr::FromApp(LibRequest::NewStoragePolicy(
+                    rules_to_save.clone(),
+                )))
+                .await;
+            write_storage_rules_to_file(&rules_to_save, config_dir.join("storage.rules"));
+        }
+    }
+
     fn run_creator(&mut self) {
         let c_context = CreatorContext::Data {
             c_id: None,
@@ -2765,6 +3031,7 @@ impl CatalogLogic {
             description,
         ));
     }
+
     fn run_link_creator(
         &mut self,
         c_id: Option<ContentID>,
