@@ -42,39 +42,42 @@ For now you will have to learn everything on your own.
 Maybe someone is willing to maintain a Wiki page,
 but I really do not have time for that.
 
-- download & install rust toolchain from https://rustup.rs
+- download & install rust toolchain from `https://rustup.rs`
 - add a user with login: dxtr and log-in as that user
-- mkdir /home/dxtr/projects ; cd /home/dxtr/projects
-- git clone https://github.com/dxtr85/animaterm.git
-- git clone https://github.com/dxtr85/village-tui.git
-(or from SF: git clone git://git.code.sf.net/p/village-tui/code village-tui)
-- git clone https://github.com/dxtr85/dapp-lib.git
-- git clone https://github.com/dxtr85/gnome.git
-- git clone https://github.com/dxtr85/swarm-consensus.git
-- cd /home/dxtr/projects/village-tui
-- export COLUMNS=$(tput cols)
-- export LINES=$(tput lines)
-- cargo run <config dir> 2> /path/to/logfile/or/dev/null
-(or append following lines to /home/dxtr/.bashrc file
+- `mkdir /home/dxtr/projects ; cd /home/dxtr/projects`
+- `git clone https://github.com/dxtr85/animaterm.git`
+- `git clone https://github.com/dxtr85/village-tui.git`
+(or from SF: `git clone git://git.code.sf.net/p/village-tui/code village-tui`)
+- `git clone https://github.com/dxtr85/dapp-lib.git`
+- `git clone https://github.com/dxtr85/gnome.git`
+- `git clone https://github.com/dxtr85/swarm-consensus.git`
+- `cd /home/dxtr/projects/village-tui`
+- `export COLUMNS=$(tput cols)`
+- `export LINES=$(tput lines)`
+- `cargo run /config/dir/ 2> /path/to/logfile/or/dev/null`
+(or append following lines to `/home/dxtr/.bashrc` file
 and later use a single letter command 'v' to run this app:
+```
 export LINES=$(tput lines)
 export COLUMNS=$(tput cols)
 alias v='cd /home/dxtr/projects/village-tui; cargo run ~/.village 2> log'
+```
 )
 
-REQUIRED: You will need some neighbors defined, so under <config dir>
+REQUIRED: You will need some neighbors defined, so under /config/dir/
 create neigh.conf and fill it with known neighbors like following:
+```
 # IPv4 or v6  PORT  NAT PORTALLOC TRANSPORT
 192.168.0.103 62552 0 0 1
-
+````
 You can discover your PORT by 'less /path/to/logfile'
 and searching for '- - - - -' string ...
 You can keep last three numbers as above, I guess,
-or dig into source code config.rs to understand it.
-(Not sure if the order of last three columns is right.)
+or dig into source code to understand it
+( dapp-lib/src/config.rs has more details under `fn parse_neighbors`).
 
 If you are willing to run a public gnome instance, lemme know,
-I will post it on https://sourceforge.net/p/village-tui/wiki/Home/
+I will post it on `https://sourceforge.net/p/village-tui/wiki/Home/`
  page for others to join your swarm.
 
 
