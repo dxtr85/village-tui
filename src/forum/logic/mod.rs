@@ -13,7 +13,7 @@ use async_std::task::spawn;
 use async_std::task::spawn_blocking;
 use async_std::task::yield_now;
 use dapp_lib::prelude::ByteSet;
-use dapp_lib::prelude::CapabiliTree;
+use dapp_lib::prelude::CapabiLeaf;
 use dapp_lib::prelude::Capabilities;
 use dapp_lib::prelude::ContentID;
 use dapp_lib::prelude::DataType;
@@ -1697,7 +1697,7 @@ impl ForumLogic {
     async fn store_action(&mut self, _id: usize) {
         match &self.presentation_state {
             PresentationState::Capability(cap, gnome_ids) => {
-                let mut c_tree = CapabiliTree::create();
+                let mut c_tree = CapabiLeaf::create();
                 for gnome_id in gnome_ids {
                     eprintln!("adding {} to cap", gnome_id);
                     c_tree.insert(*gnome_id);
