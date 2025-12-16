@@ -6,12 +6,13 @@ use crate::common::poledit::decompose;
 use crate::common::poledit::PolAction;
 use crate::common::poledit::ReqTree;
 use crate::forum::tui::EditorParams;
-use async_std::channel::Receiver as AReceiver;
-use async_std::channel::Sender as ASender;
-use async_std::task::sleep;
-use async_std::task::spawn;
-use async_std::task::spawn_blocking;
-use async_std::task::yield_now;
+// use async_std::channel::Receiver as AReceiver;
+use smol::channel::Receiver as AReceiver;
+// use async_std::channel::Sender as ASender;
+// use async_std::task::sleep;
+// use async_std::task::spawn;
+// use async_std::task::spawn_blocking;
+// use async_std::task::yield_now;
 use dapp_lib::prelude::ByteSet;
 use dapp_lib::prelude::CapabiLeaf;
 use dapp_lib::prelude::Capabilities;
@@ -30,6 +31,11 @@ use dapp_lib::Data;
 use dapp_lib::ToApp;
 use dapp_lib::ToAppMgr;
 use message::ForumSyncMessage;
+use smol::channel::Sender as ASender;
+use smol::future::yield_now;
+use smol::spawn;
+use smol::unblock;
+use smol::Timer;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt::Debug;
@@ -277,7 +283,8 @@ impl ForumLogic {
             from_tui_recv,
             to_user_send.clone(),
             // wrapped_sender.clone(),
-        ));
+        ))
+        .detach();
         let shell = SwarmShell::new(dapp_lib::prelude::SwarmID(0), swarm_name, AppType::Forum);
         ForumLogic {
             presentation_state: PresentationState::MainLobby(Some(0)),
@@ -319,7 +326,7 @@ impl ForumLogic {
         self.clipboard = clipboard_opt;
         let from_presentation_msg_send = self.from_tui_send.take().unwrap();
         let to_presentation_msg_recv = self.to_tui_recv.take().unwrap();
-        let tui_join = spawn_blocking(move || {
+        let tui_join = unblock(move || {
             serve_forum_tui(
                 founder,
                 toolset,
@@ -426,7 +433,8 @@ impl ForumLogic {
                         self.to_app_mgr_send.clone(),
                         message,
                         Duration::from_secs(3),
-                    ));
+                    ))
+                    .detach();
                     eprintln!("Try again in 3 sec…)");
                 }
             }
@@ -3597,7 +3605,10 @@ pub async fn from_forum_tui_adapter(
             Ok(from_tui) => {
                 let _ = wrapped_sender.send(InternalMsg::Forum(from_tui)).await;
             }
-            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => sleep(timeout).await,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                // sleep(timeout).await
+                Timer::after(timeout).await;
+            }
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
                 break;
             }
@@ -3607,7 +3618,8 @@ pub async fn from_forum_tui_adapter(
 }
 pub async fn start_a_timer(sender: ASender<ToAppMgr>, message: ToAppMgr, timeout: Duration) {
     // let timeout = Duration::from_secs(5);
-    sleep(timeout).await;
+    // sleep(timeout).await;
+    Timer::after(timeout).await;
     eprintln!("Timeout {:?} is over, sending message…", timeout);
     let _ = sender.send(message).await;
 }

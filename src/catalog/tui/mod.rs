@@ -1,6 +1,8 @@
 use animaterm::prelude::*;
-use async_std::channel::Sender as ASender;
-use async_std::task::sleep;
+// use async_std::channel::Sender as ASender;
+// use async_std::task::sleep;
+use smol::channel::Sender as ASender;
+use smol::Timer;
 // use async_std::channel;
 // use animaterm::utilities::message_box;
 pub use content_creator::Creator;
@@ -1071,7 +1073,10 @@ pub async fn from_catalog_tui_adapter(
             Ok(from_tui) => {
                 let _ = wrapped_sender.send(InternalMsg::Catalog(from_tui)).await;
             }
-            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => sleep(timeout).await,
+            // Err(std::sync::mpsc::RecvTimeoutError::Timeout) => sleep(timeout).await,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                Timer::after(timeout).await;
+            }
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
                 break;
             }

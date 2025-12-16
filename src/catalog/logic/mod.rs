@@ -2,10 +2,14 @@ use crate::catalog::tui::{from_catalog_tui_adapter, Notifier};
 use crate::catalog::tui::{serve_catalog_tui, EditorResult};
 // use crate::config::Configuration;
 use animaterm::prelude::*;
-use async_std::channel::Receiver as AReceiver;
-use async_std::channel::Sender as ASender;
-use async_std::channel::{self as achannel};
-use async_std::task::{spawn, spawn_blocking};
+// use async_std::channel::Receiver as AReceiver;
+// use async_std::channel::Sender as ASender;
+use smol::channel::Sender as ASender;
+// use async_std::channel::{self as achannel};
+// use async_std::task::{spawn, spawn_blocking};
+use smol::channel as achannel;
+use smol::channel::Receiver as AReceiver;
+use smol::{spawn, unblock};
 use std::sync::mpsc::channel;
 use std::sync::mpsc::Receiver;
 // use async_std::path::Path;
@@ -378,7 +382,8 @@ impl CatalogLogic {
             from_tui_recv,
             to_user_send.clone(),
             // wrapped_sender.clone(),
-        ));
+        ))
+        .detach();
         let (notification_sender, notification_receiver) = achannel::unbounded();
         let s_size = tui_mgr.screen_size();
         let display_id = tui_mgr.new_display(true);
@@ -388,7 +393,7 @@ impl CatalogLogic {
             (notification_sender.clone(), notification_receiver),
             to_tui_send.clone(),
         );
-        spawn(notifier.serve());
+        spawn(notifier.serve()).detach();
         CatalogLogic {
             my_name,
             display_id,
@@ -483,7 +488,11 @@ impl CatalogLogic {
         tui_mgr.restore_display(self.display_id, true);
         let from_tui_send = self.from_tui_send.clone();
         let to_tui_recv = self.to_tui_recv.take().unwrap();
-        let tui_join = spawn_blocking(move || {
+        // let tui_join = spawn_blocking(move || {
+        // let tui_join = spawn(unblock(move || {
+        let tui_join = unblock(move || {
+            // let tui_join = smol::future::block_on(async {
+            // move || {
             serve_catalog_tui(
                 self.display_id,
                 res.unwrap(),
@@ -497,6 +506,7 @@ impl CatalogLogic {
                 selector,
                 indexer,
             )
+            // }
         });
 
         // TODO: move above inside CatalogLogic::new

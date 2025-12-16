@@ -50,6 +50,7 @@ but I really do not have time for that.
 (or from SF: `git clone git://git.code.sf.net/p/village-tui/code village-tui`)
 - `git clone https://github.com/dxtr85/dapp-lib.git`
 - `git clone https://github.com/dxtr85/gnome.git`
+- `git clone https://dxtr@git.code.sf.net/p/a-swarm-consensus/code a-swarm-consensus-code`
 - `git clone https://github.com/dxtr85/swarm-consensus.git`
 - `cd /home/dxtr/projects/village-tui`
 - `export COLUMNS=$(tput cols)`

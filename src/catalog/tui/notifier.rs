@@ -4,10 +4,14 @@ use std::time::Duration;
 use animaterm::Glyph;
 use animaterm::Graphic;
 use animaterm::Manager;
-use async_std::channel::Receiver;
-use async_std::channel::Sender;
-use async_std::task::sleep;
-use async_std::task::spawn;
+// use async_std::channel::Receiver;
+use smol::channel::Receiver;
+// use async_std::channel::Sender;
+use smol::channel::Sender;
+use smol::Timer;
+// use async_std::task::sleep;
+// use async_std::task::spawn;
+use smol::spawn;
 use std::sync::mpsc::Sender as SyncSender;
 
 use super::ToCatalogView;
@@ -85,7 +89,7 @@ impl Notifier {
                         NotifierState::OffScreen => {
                             self.state = NotifierState::SlidingIn(self.cols as u8);
                             let note_frame = self.prepare_note(new_note);
-                            spawn(timer(self.sender.clone(), self.cols));
+                            spawn(timer(self.sender.clone(), self.cols)).detach();
                             // eprintln!("Timer spawned");
                             let _res = self
                                 .tui_sender
@@ -165,13 +169,16 @@ impl Notifier {
 async fn timer(sender: Sender<Option<String>>, counter: usize) {
     let step = Duration::from_millis(500 / counter as u64);
     for _i in 0..counter {
-        sleep(step).await;
+        // sleep(step).await;
+        Timer::after(step).await;
         let _ = sender.send(None).await;
     }
-    sleep(Duration::from_secs(3)).await;
+    // sleep(Duration::from_secs(3)).await;
+    Timer::after(Duration::from_secs(3)).await;
     let _ = sender.send(None).await;
     for _i in 0..counter {
-        sleep(step).await;
+        // sleep(step).await;
+        Timer::after(step).await;
         let _ = sender.send(None).await;
     }
 }

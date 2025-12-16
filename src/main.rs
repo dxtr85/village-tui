@@ -1,9 +1,13 @@
 use animaterm::Manager;
-use async_std::channel::{self as achannel, Receiver as AReceiver, Sender};
-use async_std::task::spawn;
+// use async_std::channel::{self as achannel, Receiver as AReceiver, Sender};
+// use async_std::task::spawn;
 use dapp_lib::prelude::*;
+use dapp_lib::ToAppMgr;
+use smol::block_on;
+use smol::LocalExecutor;
 use std::env::args;
 use std::path::PathBuf;
+use std::sync::Arc;
 mod catalog;
 mod common;
 mod config;
@@ -16,6 +20,8 @@ pub use catalog::tui::Selector;
 use catalog::tui::{instantiate_tui_mgr, FromCatalogView};
 use config::Configuration;
 use forum::logic::ForumLogic;
+use smol::channel as achannel;
+// use smol_macros::main;
 
 use crate::common::poledit::PolicyEditor;
 use crate::forum::tui::FromForumView;
@@ -184,8 +190,17 @@ impl Toolset {
     }
 }
 
-#[async_std::main]
-async fn main() {
+// #[async_std::main]
+// main! {
+// async fn main() {
+//
+//use async_channel::unbounded;
+use easy_parallel::Parallel;
+use smol::future;
+// use futures_lite::future;
+use smol::Executor;
+
+fn main() -> smol::io::Result<()> {
     let dir = if let Some(arg) = args().nth(1) {
         let args = arg.to_string();
         PathBuf::new().join(args)
@@ -193,26 +208,87 @@ async fn main() {
         PathBuf::new()
     };
 
+    block_on(run(dir))
+}
+
+async fn run(dir: PathBuf) -> smol::io::Result<()> {
     let (to_application_send, to_application_recv) = achannel::unbounded();
     let (wrapped_sender, wrapped_receiver) = achannel::unbounded();
     let (to_app_mgr_send, to_app_mgr_recv) = achannel::unbounded();
+    let (my_name_send, my_name_recv) = achannel::bounded(1);
     let mut config = Configuration::new(&dir).await;
     let storage_neighbors = if config.storage_neighbors.is_empty() {
         vec![]
     } else {
         std::mem::replace(&mut config.storage_neighbors, vec![])
     };
-    let my_name = initialize(
-        to_application_send,
-        to_app_mgr_send.clone(),
-        to_app_mgr_recv,
-        dir.clone(),
-        storage_neighbors,
-    )
-    .await;
 
-    spawn(to_user_adapter(to_application_recv, wrapped_sender.clone()));
+    let local_ex = LocalExecutor::new();
+    local_ex
+        .spawn(to_user_adapter(to_application_recv, wrapped_sender.clone()))
+        .detach();
+    // local_ex
+    //     .run(run_app(
+    //         dir.clone(),
+    //         my_name_recv,
+    //         config,
+    //         to_app_mgr_send.clone(),
+    //         wrapped_sender,
+    //         wrapped_receiver,
+    //     ))
+    //     .await;
+
+    // TODO: create an executor for entire dapp-lib and all of it's subtasks
+    // TODO: spawn each and every dapp-lib's (sub)task using that executor
+    let ex = Arc::new(Executor::new());
+    let (signal, shutdown) = achannel::unbounded::<()>();
+
+    let s_ex2 = ex.clone();
+
+    let t_am_s = to_app_mgr_send.clone();
+    let d_clone = dir.clone();
+    Parallel::new()
+        .each(0..4, |_| future::block_on(ex.run(shutdown.recv())))
+        // Run the main future on the current thread.
+        .finish(|| {
+            ex.spawn(initialize(
+                my_name_send,
+                s_ex2,
+                signal,
+                to_application_send,
+                t_am_s,
+                to_app_mgr_recv,
+                d_clone,
+                storage_neighbors,
+            ))
+            .detach();
+            future::block_on(async move {
+                local_ex
+                    .run(run_app(
+                        dir.clone(),
+                        my_name_recv,
+                        config,
+                        to_app_mgr_send.clone(),
+                        wrapped_sender,
+                        wrapped_receiver,
+                    ))
+                    .await;
+            })
+        });
+
+    Ok(())
+}
+
+async fn run_app(
+    dir: PathBuf,
+    my_name_recv: achannel::Receiver<SwarmName>,
+    config: Configuration,
+    to_app_mgr_send: achannel::Sender<ToAppMgr>,
+    wrapped_sender: achannel::Sender<InternalMsg>,
+    wrapped_receiver: achannel::Receiver<InternalMsg>,
+) {
     let tui_mgr = instantiate_tui_mgr();
+    eprintln!("Tui manager instantiated");
     let mut toolbox = Toolbox::empty();
     // TODO: When logic.run() is done, it returns Option<AppType>,
     //       and if that option is Some, another logic is started
@@ -223,6 +299,8 @@ async fn main() {
     //       Also new from_tui_adapter should be spawned,
     //       old one should self-terminate on error receiving FromPresentation.
     // TODO: InternalMessage should serve every defined AppType, and Notification
+    let my_name = my_name_recv.recv().await.unwrap();
+    eprintln!("Got my name: {}", my_name);
     let toolset = Toolset::fold(tui_mgr, config, None, None, None, None, None);
     let mut next_app = Some((
         Some(AppType::Catalog),
@@ -313,7 +391,12 @@ async fn main() {
     eprintln!("Main loop is done.");
 }
 
-async fn to_user_adapter(to_user: AReceiver<ToApp>, wrapped_sender: Sender<InternalMsg>) {
+// async fn to_user_adapter(to_user: AReceiver<ToApp>, wrapped_sender: Sender<InternalMsg>) {
+async fn to_user_adapter(
+    to_user: achannel::Receiver<ToApp>,
+    wrapped_sender: achannel::Sender<InternalMsg>,
+) {
+    eprintln!("User adapter started");
     while let Ok(to_app) = to_user.recv().await {
         let _ = wrapped_sender.send(InternalMsg::User(to_app)).await;
     }
