@@ -4,10 +4,12 @@ use animaterm::Manager;
 use dapp_lib::prelude::*;
 use dapp_lib::ToAppMgr;
 use smol::block_on;
+use smol::channel::Receiver;
 use smol::LocalExecutor;
 use std::env::args;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::thread;
 mod catalog;
 mod common;
 mod config;
@@ -245,6 +247,12 @@ async fn run(dir: PathBuf) -> smol::io::Result<()> {
 
     let s_ex2 = ex.clone();
 
+    let io_ex = Arc::new(Executor::new());
+    let (io_signal, io_shutdown) = achannel::unbounded::<()>();
+
+    let cl_io_ex = io_ex.clone();
+    thread::spawn(move || run_io_executor(cl_io_ex, io_shutdown));
+
     let t_am_s = to_app_mgr_send.clone();
     let d_clone = dir.clone();
     Parallel::new()
@@ -254,6 +262,7 @@ async fn run(dir: PathBuf) -> smol::io::Result<()> {
             ex.spawn(initialize(
                 my_name_send,
                 s_ex2,
+                io_ex,
                 signal,
                 to_application_send,
                 t_am_s,
@@ -391,6 +400,16 @@ async fn run_app(
     eprintln!("Main loop is done.");
 }
 
+fn run_io_executor(io_executor: Arc<Executor<'_>>, shutdown: Receiver<()>) {
+    Parallel::new()
+        .each(0..2, |_| future::block_on(io_executor.run(shutdown.recv())))
+        // Run the main future on the current thread.
+        .finish(|| {
+            // TODO
+            eprintln!("In run io_executor");
+        });
+}
+
 // async fn to_user_adapter(to_user: AReceiver<ToApp>, wrapped_sender: Sender<InternalMsg>) {
 async fn to_user_adapter(
     to_user: achannel::Receiver<ToApp>,
@@ -400,4 +419,5 @@ async fn to_user_adapter(
     while let Ok(to_app) = to_user.recv().await {
         let _ = wrapped_sender.send(InternalMsg::User(to_app)).await;
     }
+    eprintln!("User adapter is done.");
 }
