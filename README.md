@@ -69,10 +69,12 @@ REQUIRED: You will need some neighbors defined, so under /config/dir/
 create neigh.conf and fill it with known neighbors like following:
 ```
 # IPv4 or v6  PORT  NAT PORTALLOC TRANSPORT
-192.168.0.103 62552 0 0 1
+192.168.0.103 62552 1 0 0
 ````
 You can discover your PORT by 'less /path/to/logfile'
 and searching for '- - - - -' string ...
+NAT set to 1 = no nat.
+TRANSPORT set to 0 = UDP.
 You can keep last three numbers as above, I guess,
 or dig into source code to understand it
 ( dapp-lib/src/config.rs has more details under `fn parse_neighbors`).

@@ -402,7 +402,7 @@ async fn run_app(
 
 fn run_io_executor(io_executor: Arc<Executor<'_>>, shutdown: Receiver<()>) {
     Parallel::new()
-        .each(0..2, |_| future::block_on(io_executor.run(shutdown.recv())))
+        .each(0..3, |_| future::block_on(io_executor.run(shutdown.recv())))
         // Run the main future on the current thread.
         .finish(|| {
             // TODO
