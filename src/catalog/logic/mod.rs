@@ -939,6 +939,56 @@ impl CatalogLogic {
                             //TODO
                             eprintln!("Catalog: CustomNeighborResponse({resp_id})");
                         }
+                        ToApp::BCastOrigin(s_id, c_id, _s, _r) => {
+                            //TODO
+                            eprintln!("BCastOrigin({s_id}, {c_id:?}) ");
+                            let _ = _s.send(CastData::new(vec![0, 1, 2]).unwrap()).await;
+                            let data = _r.recv_blocking();
+                            if let Ok(d) = data {
+                                eprintln!("BCO recv data: {d:?}");
+                            }
+                        }
+                        ToApp::BCast(s_id, c_id, _r) => {
+                            //TODO
+                            eprintln!("BCast({s_id}, {c_id:?}) ");
+                            let data = _r.recv_blocking();
+                            if let Ok(d) = data {
+                                eprintln!("BC recv data: {d:?}");
+                            }
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::UnsubscribeBroadcast(s_id, c_id))
+                                .await;
+                        }
+                        // ToApp::BCastData(s_id, c_id, _c_data) => {
+                        //     //TODO
+                        //     eprintln!("BCastData({s_id}, {c_id:?}) ");
+                        // }
+                        ToApp::MCastOrigin(s_id, c_id, _s, _r) => {
+                            //TODO
+                            eprintln!("MCastOrigin({s_id}, {c_id:?}) ");
+                            let _ = _s.send(CastData::new(vec![10, 11, 12]).unwrap()).await;
+                            let data = _r.recv_blocking();
+                            if let Ok(d) = data {
+                                eprintln!("MCO recv data: {d:?}");
+                            }
+                        }
+                        ToApp::MCast(s_id, c_id, _r) => {
+                            //TODO
+                            eprintln!("MCast({s_id}, {c_id:?}) ");
+                            let data = _r.recv_blocking();
+                            if let Ok(d) = data {
+                                eprintln!("MC recv data: {d:?}");
+                            }
+                            let data = _r.recv_blocking();
+                            if let Ok(d) = data {
+                                eprintln!("MC recv data2: {d:?}");
+                            }
+                        }
+                        // ToApp::MCastData(s_id, c_id, _c_data) => {
+                        //     //TODO
+                        //     eprintln!("MCastData({s_id}, {c_id:?}) ");
+                        // }
                         ToApp::Quit => {
                             eprintln!("Done serving ApplicationLogic");
                             break 'outer;
@@ -3478,6 +3528,7 @@ you should edit 'storage.rules' text file in config dir."#
                 let _ = self
                     .to_app_mgr_send
                     .send(ToAppMgr::BroadcastSend(
+                        self.active_swarm.swarm_id,
                         CastID(0),
                         CastData::new(vec![0, 1, 0, 2, 0, 3]).unwrap(),
                     ))
@@ -3509,14 +3560,20 @@ you should edit 'storage.rules' text file in config dir."#
             }
             Key::ShiftB => {
                 eprintln!("ShiftB");
-                let _ = self.to_app_mgr_send.send(ToAppMgr::EndBroadcast).await;
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::EndBroadcast(CastID(0)))
+                    .await;
                 // let res = service_request.send(Request::StartBroadcast);
                 // b_req_sent = res.is_ok();
             }
             Key::CtrlB => {
                 let _ = self
                     .to_app_mgr_send
-                    .send(ToAppMgr::UnsubscribeBroadcast)
+                    .send(ToAppMgr::UnsubscribeBroadcast(
+                        self.active_swarm.swarm_id,
+                        CastID(0),
+                    ))
                     .await;
             }
             Key::M => {
@@ -3530,6 +3587,7 @@ you should edit 'storage.rules' text file in config dir."#
                 let _ = self
                     .to_app_mgr_send
                     .send(ToAppMgr::MulticastSend(
+                        self.active_swarm.swarm_id,
                         CastID(0),
                         CastData::new(vec![5, 5, 5, 5, 5, 5]).unwrap(),
                     ))
@@ -3537,7 +3595,10 @@ you should edit 'storage.rules' text file in config dir."#
             }
             Key::ShiftM => {
                 eprintln!("ShiftM: End Multicast");
-                let _ = self.to_app_mgr_send.send(ToAppMgr::EndMulticast).await;
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::EndMulticast(CastID(0)))
+                    .await;
                 // let res = service_request.send(Request::StartBroadcast);
                 // b_req_sent = res.is_ok();
             }
@@ -3545,14 +3606,20 @@ you should edit 'storage.rules' text file in config dir."#
                 eprintln!("Key::O: UnsubscribeMulticast");
                 let _ = self
                     .to_app_mgr_send
-                    .send(ToAppMgr::UnsubscribeMulticast)
+                    .send(ToAppMgr::UnsubscribeMulticast(
+                        self.active_swarm.swarm_id,
+                        CastID(0),
+                    ))
                     .await;
             }
             Key::ShiftO => {
                 eprintln!("Key::ShiftO: SubscribeMulticast");
                 let _ = self
                     .to_app_mgr_send
-                    .send(ToAppMgr::SubscribeMulticast)
+                    .send(ToAppMgr::SubscribeMulticast(
+                        self.active_swarm.swarm_id,
+                        CastID(0),
+                    ))
                     .await;
             }
             Key::ShiftN => {
