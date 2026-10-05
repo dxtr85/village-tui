@@ -194,7 +194,7 @@ impl Indexer {
                         self.cursor_position = self.visible_buttons - 1;
                         self.buttons[self.cursor_position].select(mgr, false);
                     }
-                    Key::Tab => break,
+                    Key::Tab | Key::Escape => break,
                     Key::Enter => {
                         // eprintln!(
                         //     "chunk_idx: {}, but len: {}, cursor pos: {}",

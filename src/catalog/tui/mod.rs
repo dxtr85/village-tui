@@ -690,7 +690,7 @@ pub fn serve_catalog_tui(
     // let mut manifest_req: u8 = 0;
     loop {
         if let Some(key) = mgr.read_key() {
-            let terminate = key == Key::Q || key == Key::ShiftQ;
+            let terminate = key == Key::ShiftQ;
             match key {
                 Key::AltEnter | Key::Space => {
                     // TODO: minimize logic in tui - simply send a Selected message to logic

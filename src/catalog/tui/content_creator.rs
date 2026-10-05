@@ -211,6 +211,7 @@ impl Creator {
                 match key {
                     animaterm::Key::Escape => {
                         available_buttons[selected_button].deselect(mgr, read_only);
+                        mgr.restore_display(main_display, true);
                         return CreatorResult::Cancel;
                     }
                     animaterm::Key::Down | animaterm::Key::CtrlN => {

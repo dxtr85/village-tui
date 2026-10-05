@@ -693,6 +693,8 @@ impl Editor {
                         // Do nothing
                     } else if !self.read_only {
                         self.insert(mgr, ch);
+                    } else if ch == '\u{1b}' {
+                        return EditorResult::Close;
                     }
                 }
             }
