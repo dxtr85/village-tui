@@ -2050,7 +2050,7 @@ impl CatalogLogic {
                                             );
                                             let _ = self.to_tui.send(ToCatalogView::DisplayEditor(
                                             (c_context.is_read_only(),self.my_name ==self.active_swarm.swarm_name),
-                                    " Max size: 128  Multiline  Content Description    (TAB to finish)".to_string(),
+                                    " Max size: 128  Multiline  Content Description    (TAB to finish) ".to_string(),
                                     Some(c_context.description().text()),
                                     true,
                                     Some(128),
@@ -2089,6 +2089,7 @@ you should edit 'storage.rules' text file in config dir."#
                                     self.state = new_state;
                                 }
                                 CreatorResult::Cancel => {
+                                    // TODO: Handle this message differently when Creator was invoked from Indexer
                                     self.state = TuiState::MainSt;
                                     // TODO send request to presentation to show village
                                     eprintln!("Cancel ");
@@ -3722,7 +3723,48 @@ you should edit 'storage.rules' text file in config dir."#
             Key::ShiftU => {
                 let _ = self.to_app_mgr_send.send(ToAppMgr::StartUnicast).await;
             }
-            _ => eprintln!(),
+            Key::A => {
+                eprintln!("Request to autoforward App defined msgs.");
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::FromApp(LibRequest::SetHeapAutoForward(
+                        self.active_swarm.swarm_id,
+                        true,
+                    )))
+                    .await;
+            }
+            Key::ShiftP => {
+                eprintln!("TODO: Send some app defined msg...");
+                let app_msg = AppDefinedMsg::new(11, 10, 9, Data::empty(0)).unwrap();
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::AppDefined(self.active_swarm.swarm_id, app_msg))
+                    .await;
+            }
+            Key::P => {
+                eprintln!("Pop heap request");
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::FromApp(LibRequest::PopHeap(
+                        self.active_swarm.swarm_id,
+                    )))
+                    .await;
+            }
+            Key::One => {
+                eprintln!("send SetPinned (true)");
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::FromApp(LibRequest::SetPinned(SwarmID(1), true)))
+                    .await;
+            }
+            Key::Two => {
+                eprintln!("send SetPinned (false)");
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::FromApp(LibRequest::SetPinned(SwarmID(1), false)))
+                    .await;
+            }
+            other => eprintln!("Unexpected Key press: {}", other),
         }
         false
     }
