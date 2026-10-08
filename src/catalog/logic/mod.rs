@@ -2,6 +2,9 @@ use crate::catalog::tui::{from_catalog_tui_adapter, Notifier};
 use crate::catalog::tui::{serve_catalog_tui, EditorResult};
 // use crate::config::Configuration;
 use animaterm::prelude::*;
+use smol::channel::unbounded;
+// use smol::channel::Receiver;
+// use smol::channel::Sender;
 // use async_std::channel::Receiver as AReceiver;
 // use async_std::channel::Sender as ASender;
 use smol::channel::Sender as ASender;
@@ -3524,6 +3527,58 @@ you should edit 'storage.rules' text file in config dir."#
 
     async fn handle_key(&self, key: Key) -> bool {
         match key {
+            // TODO: fix F2 key mapping in animaterm
+            Key::F3 => {
+                eprintln!("Here we will try to apply chopper's logic");
+                let chopper =
+                    // Chopper::new(PathBuf::new().join("/home/dxtr/Downloads/testfile")).unwrap();
+                // Chopper::new(PathBuf::new().join("/home/dxtr/Downloads/README.md")).unwrap();
+                Chopper::new(PathBuf::new().join("/home/dxtr/Downloads/szybaW.jpg")).unwrap();
+                // Chopper::new(PathBuf::new().join("/home/dxtr/Downloads/pompka.mp4")).unwrap();
+                // Chopper::new(PathBuf::new().join("/home/dxtr/Downloads/Mira-latest.AppImage")).unwrap();
+                // TODO: Test it out with a file that is at least 7.3 GB large
+                //       (after everything is moved to separate async tasks).
+                eprint!("Now we apply chop_it(ASender):");
+                let (send, _recv) = unbounded();
+
+                // TODO: Reading from file should also be done from a separate task.
+                let chops = chopper.chop_it(send).await;
+                // TODO: handle resulting chops: put root_hashes in SyncMultipleContents.
+                // TODO: decide what to do with leaf hashes - maybe we should send
+                //       them in a separate BCast?
+                // TODO: should leaf hashes be sent using a pair: (empty Data containing
+                //       actual Data's index, actual Data)? This way Gnomes that join
+                //       a BCast in the middle of transmission will be able to gather
+                //       at least some of the hashes.
+                //       Probably more efficient is to send a bunch of preamble
+                //       Data::empty(33), Data::empty(22), Data::empty(11),
+                //       Data::empyt(c_no),
+                //       Data::empty(3), Data::empty(2), Data::empty(1),
+                //       up to 512 Data blocks with Leaf Hashes for c_no
+                //       Data::empty(0), Data::empty(0), Data::empty(0),
+                //       And then repeat for next content, increasing c_no += 1.
+                //       This broadcast could repeat this transmission in a loop
+                //       for some time, so that everyone is eventually synced.
+                eprintln!(
+                    "And we got: {}, {} ",
+                    chops.len(),
+                    // chops[0].root_hashes,
+                    chops[0].leaf_hashes.len()
+                );
+
+                // TODO: start a broadcasting channel and push file Data there
+                //       (preferably as a separate async task)
+                // TODO: Data will be broadcasted before CID placeholders are
+                // synced in Datastore, so we need a way to store them somewhere
+                while let Ok(data) = _recv.try_recv() {
+                    if data.is_empty() {
+                        eprintln!("Empty data: {}", data.get_hash());
+                    } else {
+                        eprintln!("Data: {}", data.get_hash());
+                    }
+                }
+                // eprintln!("And we got: {:?}", chops);
+            }
             Key::U => {
                 eprintln!("Keyboard request UploadData");
                 let _ = self

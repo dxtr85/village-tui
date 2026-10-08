@@ -3500,6 +3500,9 @@ impl ForumLogic {
                 //TODO: here if a msg got rejected and we are out of options
                 // we could send User a notification, that his request can not be fullfilled
             }
+            SyncMessageType::AppendMultipleContents => {
+                //TODO
+            }
         }
     }
 
