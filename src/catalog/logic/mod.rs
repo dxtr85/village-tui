@@ -1,6 +1,7 @@
 use crate::catalog::tui::{from_catalog_tui_adapter, Notifier};
 use crate::catalog::tui::{serve_catalog_tui, EditorResult};
 // use crate::config::Configuration;
+use crate::common::handle_bcast;
 use animaterm::prelude::*;
 // use smol::channel::Receiver;
 // use smol::channel::Sender;
@@ -11,7 +12,7 @@ use smol::channel::Sender as ASender;
 // use async_std::task::{spawn, spawn_blocking};
 use smol::channel as achannel;
 use smol::channel::Receiver as AReceiver;
-use smol::{spawn, unblock};
+use smol::{spawn, unblock, Executor};
 use std::sync::mpsc::channel;
 use std::sync::mpsc::Receiver;
 // use async_std::path::Path;
@@ -945,18 +946,23 @@ impl CatalogLogic {
                             //TODO
                             eprintln!("BCastOrigin({s_id}, {c_id:?}) ");
                             let _ = _s.send(CastData::new(vec![0, 1, 2]).unwrap()).await;
-                            let data = _r.recv_blocking();
-                            if let Ok(d) = data {
-                                eprintln!("BCO recv data: {d:?}");
-                            }
+                            // let ex = Executor::new();
+                            spawn(handle_bcast(_r)).detach();
+                            // eprintln!("After handle_bcast");
+                            // let data = _r.recv_blocking();
+                            // if let Ok(d) = data {
+                            //     eprintln!("BCO recv data: {d:?}");
+                            // }
                         }
                         ToApp::BCast(s_id, c_id, _r) => {
                             //TODO
+                            // let ex = Executor::new();
+                            spawn(handle_bcast(_r)).detach();
                             eprintln!("BCast({s_id}, {c_id:?}) ");
-                            let data = _r.recv_blocking();
-                            if let Ok(d) = data {
-                                eprintln!("BC recv data: {d:?}");
-                            }
+                            // let data = _r.recv_blocking();
+                            // if let Ok(d) = data {
+                            //     eprintln!("BC recv data: {d:?}");
+                            // }
                             // let _ = self
                             //     .to_app_mgr_send
                             //     .send(ToAppMgr::UnsubscribeBroadcast(s_id, c_id))
