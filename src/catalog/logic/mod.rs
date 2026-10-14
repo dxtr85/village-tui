@@ -947,7 +947,7 @@ impl CatalogLogic {
                             eprintln!("BCastOrigin({s_id}, {c_id:?}) ");
                             let _ = _s.send(CastData::new(vec![0, 1, 2]).unwrap()).await;
                             // let ex = Executor::new();
-                            spawn(handle_bcast(_r)).detach();
+                            spawn(handle_bcast(s_id, _r, self.to_app_mgr_send.clone())).detach();
                             // eprintln!("After handle_bcast");
                             // let data = _r.recv_blocking();
                             // if let Ok(d) = data {
@@ -957,7 +957,7 @@ impl CatalogLogic {
                         ToApp::BCast(s_id, c_id, _r) => {
                             //TODO
                             // let ex = Executor::new();
-                            spawn(handle_bcast(_r)).detach();
+                            spawn(handle_bcast(s_id, _r, self.to_app_mgr_send.clone())).detach();
                             eprintln!("BCast({s_id}, {c_id:?}) ");
                             // let data = _r.recv_blocking();
                             // if let Ok(d) = data {
@@ -993,7 +993,7 @@ impl CatalogLogic {
                                 eprintln!("MC recv data2: {d:?}");
                             }
                         }
-                        ToApp::ChoppingDone(s_id, d_cst_id, h_cst_id, pairs) => {
+                        ToApp::ChoppingDone(s_id, d_cst_id, h_cst_id, mut pairs) => {
                             // TODO: AppendContent / AppendMultipleContents
                             // TODO: build logic for storing Data/Hashes
                             //       sent through BCasts:
@@ -1003,6 +1003,23 @@ impl CatalogLogic {
                             //       If a user does not have given position on his shelf,
                             //       leave DataStore untouched.
                             eprintln!("File chopping finished {}", pairs.len());
+                            if pairs.len() == 1 {
+                                let (ch_nr, ct_nr, root_hash) = pairs.pop().unwrap();
+                                eprintln!(
+                                    "Appending single Content {} {} {}",
+                                    ch_nr, ct_nr, root_hash
+                                );
+                                let d_type = DataType::Data(1);
+                                let data = Data::empty(root_hash);
+                                let _ = self
+                                    .to_app_mgr_send
+                                    .send(ToAppMgr::AppendContent(
+                                        self.active_swarm.swarm_id,
+                                        d_type,
+                                        data,
+                                    ))
+                                    .await;
+                            }
                         }
                         // ToApp::MCastData(s_id, c_id, _c_data) => {
                         //     //TODO
