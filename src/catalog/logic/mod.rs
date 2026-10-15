@@ -993,33 +993,35 @@ impl CatalogLogic {
                                 eprintln!("MC recv data2: {d:?}");
                             }
                         }
-                        ToApp::ChoppingDone(s_id, d_cst_id, h_cst_id, mut pairs) => {
+                        ToApp::ChoppingDone(s_id, _d_cst_id, _h_cst_id, pairs) => {
                             // TODO: AppendContent / AppendMultipleContents
-                            // TODO: build logic for storing Data/Hashes
-                            //       sent through BCasts:
-                            //       Implement a "shelf" indexed by CastID for ease of
-                            //       data retrieval.
-                            // TODO: build logic for DataStore unfolding
-                            //       If a user does not have given position on his shelf,
-                            //       leave DataStore untouched.
                             eprintln!("File chopping finished {}", pairs.len());
-                            if pairs.len() == 1 {
-                                let (ch_nr, ct_nr, root_hash) = pairs.pop().unwrap();
-                                eprintln!(
-                                    "Appending single Content {} {} {}",
-                                    ch_nr, ct_nr, root_hash
-                                );
-                                let d_type = DataType::Data(1);
-                                let data = Data::empty(root_hash);
-                                let _ = self
-                                    .to_app_mgr_send
-                                    .send(ToAppMgr::AppendContent(
-                                        self.active_swarm.swarm_id,
-                                        d_type,
-                                        data,
-                                    ))
-                                    .await;
+                            // if pairs.len() == 1 {
+                            //     let (ch_nr, ct_nr, root_hash) = pairs.pop().unwrap();
+                            //     eprintln!(
+                            //         "Appending single Content {} {} {}",
+                            //         ch_nr, ct_nr, root_hash
+                            //     );
+                            //     let d_type = DataType::Data(1);
+                            //     let data = Data::empty(root_hash);
+                            //     let _ = self
+                            //         .to_app_mgr_send
+                            //         .send(ToAppMgr::AppendContent(
+                            //             self.active_swarm.swarm_id,
+                            //             d_type,
+                            //             data,
+                            //         ))
+                            //         .await;
+                            // }
+                            let mut tch_pairs = Vec::with_capacity(pairs.len());
+                            for (_ch, _c, hash) in pairs {
+                                tch_pairs.push((DataType::Data(1), hash));
                             }
+                            let _res = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::AppendMultipleContents(s_id, tch_pairs))
+                                .await;
+                            eprintln!("Send AppendMultipleContents: {:?}", _res);
                         }
                         // ToApp::MCastData(s_id, c_id, _c_data) => {
                         //     //TODO
@@ -3566,7 +3568,8 @@ you should edit 'storage.rules' text file in config dir."#
                     .to_app_mgr_send
                     .send(ToAppMgr::FromApp(LibRequest::ChopFile(
                         self.active_swarm.swarm_id,
-                        PathBuf::new().join("/home/dxtr/Downloads/szybaW.jpg"),
+                        // PathBuf::new().join("/home/dxtr/Downloads/szybaW.jpg"),
+                        PathBuf::new().join("/home/dxtr/Downloads/Mira-latest.AppImage"),
                         CastID(0),
                         CastID(1),
                     )))
@@ -3612,6 +3615,10 @@ you should edit 'storage.rules' text file in config dir."#
                 let _ = self
                     .to_app_mgr_send
                     .send(ToAppMgr::EndBroadcast(CastID(0)))
+                    .await;
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::EndBroadcast(CastID(1)))
                     .await;
                 // let res = service_request.send(Request::StartBroadcast);
                 // b_req_sent = res.is_ok();

@@ -25,7 +25,7 @@ pub async fn handle_bcast(
     loop {
         if let Ok(msg) = recv.recv().await {
             let ext_res = extract_chop_data(msg);
-            eprintln!("BCast, ");
+            // eprintln!("BCast, ");
             if let Ok(chop) = ext_res {
                 if chop.is_hashes() {
                     let last_hash = chop.is_last_hash();
