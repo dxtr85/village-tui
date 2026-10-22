@@ -256,7 +256,7 @@ async fn run(dir: PathBuf) -> smol::io::Result<()> {
     let t_am_s = to_app_mgr_send.clone();
     let d_clone = dir.clone();
     Parallel::new()
-        .each(0..4, |_| future::block_on(ex.run(shutdown.recv())))
+        .each(0..5, |_| future::block_on(ex.run(shutdown.recv())))
         // Run the main future on the current thread.
         .finish(|| {
             ex.spawn(initialize(

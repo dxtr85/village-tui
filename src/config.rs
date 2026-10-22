@@ -62,7 +62,7 @@ impl Configuration {
             }
             let first_pages = load_first_pages_from_disk(&sswarm).await;
             if let Some(c_zero) =
-                load_content_from_disk(sswarm, 0, zero_type, zero_hash, &first_pages).await
+                load_content_from_disk(sswarm, 0, zero_type, zero_hash, false, (0,u16::MAX), &first_pages).await
             {
                 let c_len = c_zero.len();
                 let mut data_vec = Vec::with_capacity(c_len as usize);

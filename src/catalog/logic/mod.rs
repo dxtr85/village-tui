@@ -2607,10 +2607,10 @@ you should edit 'storage.rules' text file in config dir."#
     ) -> Option<(AppType, SwarmName)> {
         let mut new_state = None;
         if c_id == 0 && start_page == 0 {
-            // eprintln!(
-            //     "Sending Manifest d_vec.len: {} to Presentation",
-            //     d_vec.len()
-            // );
+            eprintln!(
+                "Sending Manifest d_vec.len: {} to Presentation",
+                d_vec.len()
+            );
             let manifest = Manifest::from(d_vec);
             eprintln!("Process data manifest tags: {:?}", manifest.tags);
             // let mut streets_left_to_present = self.visible_streets.0;
@@ -2740,11 +2740,14 @@ you should edit 'storage.rules' text file in config dir."#
                         all_headers.push(header);
                         // then each data is a note
                         for data in d_vec {
-                            let text = String::from_utf8(data.bytes()).unwrap();
+                            let text_res = String::from_utf8(data.bytes());
                             let mut header = String::new();
-                            if !text.is_empty() {
-                                for c in text.lines().next().unwrap().chars() {
-                                    header.push(c);
+                            if let Ok(text) = text_res {
+                                if !text.is_empty() {
+                                    for c in text.lines().next().unwrap().chars() {
+                                        header.push(c);
+                                    }
+                                    all_notes.push(text);
                                 }
                             }
                             if header.is_empty() {
@@ -2752,7 +2755,6 @@ you should edit 'storage.rules' text file in config dir."#
                             }
                             // eprintln!("Pushing '{}' to all_headers", header);
                             all_headers.push(header);
-                            all_notes.push(text);
                         }
                         // when done, request TUI to DisplayIndexer with given options
                         // eprintln!("Done pushing to all_headers");
@@ -3568,8 +3570,9 @@ you should edit 'storage.rules' text file in config dir."#
                     .to_app_mgr_send
                     .send(ToAppMgr::FromApp(LibRequest::ChopFile(
                         self.active_swarm.swarm_id,
-                        // PathBuf::new().join("/home/dxtr/Downloads/szybaW.jpg"),
-                        PathBuf::new().join("/home/dxtr/Downloads/Mira-latest.AppImage"),
+                        PathBuf::new().join("/home/dxtr/Downloads/E8.zip"),
+                        // PathBuf::new().join("/home/dxtr/Downloads/wiesiek22.pkg"),
+                        // PathBuf::new().join("/home/dxtr/Downloads/Mira-latest.AppImage"),
                         CastID(0),
                         CastID(1),
                     )))
