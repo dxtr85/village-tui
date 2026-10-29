@@ -1,7 +1,7 @@
 use crate::catalog::tui::{from_catalog_tui_adapter, Notifier};
 use crate::catalog::tui::{serve_catalog_tui, EditorResult};
 // use crate::config::Configuration;
-use crate::common::handle_bcast;
+// use crate::common::handle_bcast;
 use animaterm::prelude::*;
 // use smol::channel::Receiver;
 // use smol::channel::Sender;
@@ -357,7 +357,7 @@ pub struct CatalogLogic {
     to_app: AReceiver<InternalMsg>,
     notification_sender: ASender<Option<String>>,
     pending_notifications: HashMap<SwarmID, Vec<ToApp>>, //TODO: clear pending
-    // when given SwarmID was disconnected
+    cast_senders: Vec<ASender<CastData>>,
     visible_streets: (usize, Vec<Tag>), // (how many streets visible at once, visible street names),
     tiles_on_screen: usize,
     home_swarm_enforced: bool,
@@ -375,7 +375,8 @@ impl CatalogLogic {
         // from_tui_send: Sender<FromPresentation>,
         // from_tui_recv: Receiver<FromCatalogView>,
         // to_user_send: Sender<ToApp>,
-        // to_user_recv: Receiver<ToApp>,
+        // data_send: ASender<CastData>,
+        // hash_send: ASender<CastData>,
         to_user_send: ASender<InternalMsg>,
         to_user_recv: AReceiver<InternalMsg>,
     ) -> Self {
@@ -425,6 +426,7 @@ impl CatalogLogic {
             notification_sender,
             clipboard: None,
             storage_rules: vec![(StorageCondition::Default, StoragePolicy::Forget)],
+            cast_senders: vec![],
             //TODO: read storage_rules from config file
             // rule with index 0 is always there as a template for adding new rules
         }
@@ -947,7 +949,12 @@ impl CatalogLogic {
                             eprintln!("BCastOrigin({s_id}, {c_id:?}) ");
                             let _ = _s.send(CastData::new(vec![0, 1, 2]).unwrap()).await;
                             // let ex = Executor::new();
-                            spawn(handle_bcast(s_id, _r, self.to_app_mgr_send.clone())).detach();
+                            self.cast_senders.push(_s);
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::FromApp(LibRequest::HandleChopCast(s_id, _r)))
+                                .await;
+                            // spawn(handle_bcast(s_id, _r, self.to_app_mgr_send.clone())).detach();
                             // eprintln!("After handle_bcast");
                             // let data = _r.recv_blocking();
                             // if let Ok(d) = data {
@@ -955,18 +962,27 @@ impl CatalogLogic {
                             // }
                         }
                         ToApp::BCast(s_id, c_id, _r) => {
-                            //TODO
-                            // let ex = Executor::new();
-                            spawn(handle_bcast(s_id, _r, self.to_app_mgr_send.clone())).detach();
-                            eprintln!("BCast({s_id}, {c_id:?}) ");
+                            //TODO: add a way of returning back _r (CastData receiver) to App,
+                            // so that it can be passed to dapp-lib's internal AppData for
+                            // handling ChopData on it's own.
+                            // Once passed to AppData, given broadcast can not be passed back to
+                            // App. Originator has to terminate it and later optionally start it again.
+                            // Then we will be able to have the same logic handle CastData from
+                            // various sources: BCast, MCast, UCast.
+                            // So I guess in theory you can have 768 chopping tasks running at once.
+                            // But this will be possible after multiple optimization passes,
+                            // and we haven't moved to that stage of development yet.
+
+                            let _ = self
+                                .to_app_mgr_send
+                                .send(ToAppMgr::FromApp(LibRequest::HandleChopCast(s_id, _r)))
+                                .await;
+                            // spawn(handle_bcast(s_id, _r, self.to_app_mgr_send.clone())).detach();
+                            // eprintln!("BCast({s_id}, {c_id:?}) ");
                             // let data = _r.recv_blocking();
                             // if let Ok(d) = data {
                             //     eprintln!("BC recv data: {d:?}");
                             // }
-                            // let _ = self
-                            //     .to_app_mgr_send
-                            //     .send(ToAppMgr::UnsubscribeBroadcast(s_id, c_id))
-                            //     .await;
                         }
                         // ToApp::BCastData(s_id, c_id, _c_data) => {
                         //     //TODO
@@ -3570,11 +3586,47 @@ you should edit 'storage.rules' text file in config dir."#
                     .to_app_mgr_send
                     .send(ToAppMgr::FromApp(LibRequest::ChopFile(
                         self.active_swarm.swarm_id,
-                        PathBuf::new().join("/home/dxtr/Downloads/E8.zip"),
-                        // PathBuf::new().join("/home/dxtr/Downloads/wiesiek22.pkg"),
+                        // PathBuf::new().join("/home/dxtr/Downloads/E8.zip"),
                         // PathBuf::new().join("/home/dxtr/Downloads/Mira-latest.AppImage"),
-                        CastID(0),
+                        PathBuf::new().join("/home/dxtr/Downloads/szybaW.jpg"),
+                        self.cast_senders[0].clone(),
+                        self.cast_senders[1].clone(),
                         CastID(1),
+                        CastID(0),
+                    )))
+                    .await;
+            }
+            Key::F4 => {
+                eprintln!("Here we will try to apply chopper's logic");
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::FromApp(LibRequest::ChopFile(
+                        self.active_swarm.swarm_id,
+                        // PathBuf::new().join("/home/dxtr/Downloads/E8.zip"),
+                        // PathBuf::new().join("/home/dxtr/Downloads/Mira-latest.AppImage"),
+                        PathBuf::new().join("/home/dxtr/Downloads/szybaZ.jpg"),
+                        self.cast_senders[0].clone(),
+                        self.cast_senders[1].clone(),
+                        CastID(1),
+                        // CastID(2),
+                        CastID(0),
+                    )))
+                    .await;
+            }
+            Key::F5 => {
+                eprintln!("Here we will try to apply chopper's logic");
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::FromApp(LibRequest::ChopFile(
+                        self.active_swarm.swarm_id,
+                        // PathBuf::new().join("/home/dxtr/Downloads/E8.zip"),
+                        // PathBuf::new().join("/home/dxtr/Downloads/Mira-latest.AppImage"),
+                        PathBuf::new().join("/home/dxtr/Downloads/szybaW2.jpg"),
+                        self.cast_senders[0].clone(),
+                        self.cast_senders[1].clone(),
+                        CastID(1),
+                        // CastID(2),
+                        CastID(0),
                     )))
                     .await;
             }
@@ -3622,6 +3674,10 @@ you should edit 'storage.rules' text file in config dir."#
                 let _ = self
                     .to_app_mgr_send
                     .send(ToAppMgr::EndBroadcast(CastID(1)))
+                    .await;
+                let _ = self
+                    .to_app_mgr_send
+                    .send(ToAppMgr::EndBroadcast(CastID(2)))
                     .await;
                 // let res = service_request.send(Request::StartBroadcast);
                 // b_req_sent = res.is_ok();
